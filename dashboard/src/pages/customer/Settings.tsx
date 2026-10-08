@@ -17,6 +17,7 @@ interface ApiKeyInfo {
   label: string;
   scopes: string[];
   isActive: boolean;
+  status?: 'active' | 'revoked' | 'expired';
   lastUsedAt: string | null;
   createdAt: string;
 }
@@ -368,6 +369,7 @@ export default function Settings() {
                 scopes={k.scopes}
                 lastUsedAt={k.lastUsedAt}
                 createdAt={k.createdAt}
+                expired={k.status === 'expired'}
                 onRevoke={() => setPendingRevoke(k)}
               />
             ))}
