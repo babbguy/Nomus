@@ -63,3 +63,13 @@ describe('benchmark runs', () => {
     expect(list.json.runs[0].resultsByPrinciple.fairness.score).toBe(90);
   });
 });
+
+describe('benchmark summary', () => {
+  it('serves the fields the Benchmarks page renders', async () => {
+    const s = (await call('GET', '/api/v1/benchmarks/summary')).json;
+    expect(s.modelsTested).toBe(1);
+    expect(s.averageScore).toBe(86.5);
+    expect(s.bestPrinciple).toEqual({ principle: 'fairness', avgScore: 90 });
+    expect(s.worstPrinciple.principle).toBe('fairness');
+  });
+});

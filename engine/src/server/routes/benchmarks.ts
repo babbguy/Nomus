@@ -263,7 +263,7 @@ benchmarkRoutes.get('/summary', (c) => {
   return c.json({
     modelsTested: modelsTested.length,
     models: modelsTested,
-    averageScore: avgResult?.avgScore ? Math.round(avgResult.avgScore * 100) / 100 : null,
+    averageScore: avgResult?.avgScore != null ? Math.round(avgResult.avgScore * 100) / 100 : null,
     totalRuns,
     recentRunCount: recentRuns.length,
     bestPrinciple,
