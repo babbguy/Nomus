@@ -35,6 +35,7 @@
     "test:mcp-server": "npm run test -w packages/mcp-server",
     "test:extensions": "npm run test:scanner && npm run test:github-action && npm run test:vscode-extension && npm run test:mcp-server",
     "test:engine": "npm run test -w engine",
+    "test:dashboard": "npm run test -w dashboard",
     "lint": "npm run lint --workspaces --if-present"
   },
   "devDependencies": {
