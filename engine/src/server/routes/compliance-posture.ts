@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { computeCurrentStateHash } from '../../core/state-hasher.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
@@ -207,7 +208,8 @@ function calculateScore(orgId: string): {
     count: sql<number>`count(*)`,
   })
     .from(scanFindings)
-    .leftJoin(policyRules, eq(scanFindings.ruleId, policyRules.id))
+    // Uploaded findings carry the rule key (rule_id is not set by uploads).
+    .leftJoin(policyRules, eq(scanFindings.ruleKey, policyRules.ruleKey))
     .where(and(eq(scanFindings.orgId, orgId), eq(scanFindings.status, 'open')))
     .groupBy(sql`coalesce(${policyRules.jurisdiction}, 'unknown')`, scanFindings.severity)
     .all();
@@ -243,7 +245,8 @@ function calculateScore(orgId: string): {
     count: sql<number>`count(*)`,
   })
     .from(scanFindings)
-    .leftJoin(policyRules, eq(scanFindings.ruleId, policyRules.id))
+    // Uploaded findings carry the rule key (rule_id is not set by uploads).
+    .leftJoin(policyRules, eq(scanFindings.ruleKey, policyRules.ruleKey))
     .where(and(eq(scanFindings.orgId, orgId), eq(scanFindings.status, 'open')))
     .groupBy(sql`coalesce(${policyRules.category}, 'uncategorized')`, scanFindings.severity)
     .all();
@@ -271,15 +274,9 @@ function calculateScore(orgId: string): {
     scoresByCategory[cat] = Math.max(0, Math.min(100, 100 - deduction));
   }
 
-  // Compute policy state hash for audit trail using SQL-fetched rule IDs
-  const ruleIdsForHash = db.select({ id: policyRules.id })
-    .from(policyRules)
-    .where(eq(policyRules.isActive, true))
-    .all()
-    .map((r) => r.id)
-    .sort()
-    .join(',');
-  const policyStateHash = createHash('sha256').update(ruleIdsForHash).digest('hex').slice(0, 16);
+  // The corpus state hash the rest of the API reports (it was a truncated
+  // hash of rule ids here, which matched nothing a customer could check).
+  const policyStateHash = computeCurrentStateHash().hash;
 
   return {
     overallScore: Math.round(score * 100) / 100,
