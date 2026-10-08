@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runScan, isNomusApiError } from './scan.js';
 import { formatConsoleReport, formatJsonReport } from './output/reporter.js';
+import { parseCliArgs, USAGE } from './cli-args.js';
 
 /**
  * Exit codes:
@@ -17,8 +18,6 @@ const EXIT_FINDINGS = 1;
 const EXIT_ERROR = 2;
 const EXIT_API_UNAVAILABLE = 3;
 
-const FAIL_ON_LEVELS = ['critical', 'high', 'medium', 'low'];
-
 function getVersion(): string {
   try {
     const dir = typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
@@ -30,23 +29,23 @@ function getVersion(): string {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
-  // --fail-on accepts both `--fail-on=high` and `--fail-on high`.
-  let failOn = 'critical';
-  const positional: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a.startsWith('--fail-on=')) failOn = a.slice('--fail-on='.length);
-    else if (a === '--fail-on') failOn = args[++i] ?? '';
-    else if (!a.startsWith('--')) positional.push(a);
+  const parsed = parseCliArgs(process.argv.slice(2));
+  if (parsed.kind === 'help') {
+    console.log(USAGE);
+    return;
   }
-  if (!FAIL_ON_LEVELS.includes(failOn)) {
-    console.error(`Invalid --fail-on value "${failOn}". Use one of: ${FAIL_ON_LEVELS.join(', ')}.`);
+  if (parsed.kind === 'version') {
+    console.log(getVersion());
+    return;
+  }
+  if (parsed.kind === 'error') {
+    console.error(`${parsed.message}
+
+${USAGE}`);
     process.exit(EXIT_ERROR);
   }
-  // The scan root is the first positional argument; flags may come in any order.
-  const rootDir = resolve(positional[0] ?? '.');
-  const outputFormat = args.includes('--json') ? 'json' : args.includes('--sarif') ? 'sarif' : 'console';
+  const { failOn, outputFormat } = parsed;
+  const rootDir = resolve(parsed.rootArg);
 
   if (outputFormat === 'console') {
     console.log(`🛡️  Nomus Regulatory Applicability Engine v${getVersion()}`);

@@ -23,7 +23,7 @@ node packages/scanner/dist/index.js ./src --sarif      # SARIF output (for CI in
 node packages/scanner/dist/index.js . --fail-on=high   # Fail on high+ severity findings
 ```
 
-The path must be the first argument; flags go after it. Exit codes: `0` pass, `1` findings at or above `--fail-on` (default `critical`), `2` unexpected error (for example a missing `.nomus.yml`), `3` Nomus API unreachable or unusable. A scan that detects no AI SDK usage passes without contacting the engine.
+The path and flags may come in any order; `--help` prints usage and `--version` the version. Exit codes: `0` pass, `1` findings at or above `--fail-on` (default `critical`), `2` usage or configuration error (an unknown flag, or a missing `.nomus.yml`), `3` Nomus API unreachable or unusable. A scan that detects no AI SDK usage passes without contacting the engine.
 
 A `.nomus.yml` (see below) is required in the scanned directory.
 
