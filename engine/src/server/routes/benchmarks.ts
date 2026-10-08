@@ -18,7 +18,7 @@ const startBenchmarkSchema = z.object({
 });
 
 const uploadResultsSchema = z.object({
-  overallScore: z.number(),
+  overallScore: z.number().min(0).max(100),
   resultsByPrinciple: z.record(z.unknown()).optional(),
   rawResults: z.array(z.unknown()).optional(),
   benchmarksPassed: z.number().int().optional(),

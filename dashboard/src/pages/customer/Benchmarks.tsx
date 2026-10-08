@@ -191,7 +191,9 @@ export default function Benchmarks() {
           </div>
           {startError && <ErrorState compact message={startError} />}
           <p className="text-xs text-text-muted mt-3">
-            Benchmarks run on your infrastructure using your API keys. Nomus does not execute LLM calls — the @nomus/benchmark package does.
+            Nomus records the run; it never calls a model. Run the benchmarks with your own evaluation harness, then upload the
+            scores to the run with <code className="font-mono">PATCH /api/v1/benchmarks/runs/&lt;run id&gt;/results</code> (an API key with
+            the read:policies scope). The run stays pending until results arrive.
           </p>
         </div>
       )}
@@ -256,6 +258,12 @@ export default function Benchmarks() {
                       {expandedRun === run.id ? <ChevronUp size={14} className="text-text-muted" /> : <ChevronDown size={14} className="text-text-muted" />}
                     </div>
                   </div>
+                  {expandedRun === run.id && run.status !== 'completed' && (
+                    <p className="mt-3 text-xs text-text-muted">
+                      Awaiting results. Upload them with{' '}
+                      <code className="font-mono text-text-secondary">PATCH /api/v1/benchmarks/runs/{run.id}/results</code>
+                    </p>
+                  )}
                   {expandedRun === run.id && run.resultsByPrinciple && (
                     <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
                       {Object.entries(run.resultsByPrinciple).map(([principle, data]) => (
