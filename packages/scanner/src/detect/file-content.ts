@@ -40,13 +40,35 @@ export function offsetToLine(content: string, offset: number): number {
 }
 
 /**
+ * Express `file` relative to `rootDir` using POSIX separators.
+ * Relative inputs (in-memory paths) are returned as-is; absolute paths outside
+ * the root fall back to the full normalised path.
+ */
+function toRootRelative(file: string, rootDir?: string): string {
+  const posixFile = file.replace(/\\/g, '/');
+  if (!rootDir) return posixFile;
+  const posixRoot = rootDir.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (posixRoot === '') return posixFile;
+  const windowsStyle = /^[a-z]:/i.test(posixRoot);
+  const f = windowsStyle ? posixFile.toLowerCase() : posixFile;
+  const r = windowsStyle ? posixRoot.toLowerCase() : posixRoot;
+  if (f.startsWith(r + '/')) return posixFile.slice(posixRoot.length + 1);
+  return posixFile;
+}
+
+/**
  * Detect whether a file is a test file (best-effort).
  * Used by detectors to suppress false positives in test fixtures.
+ *
+ * When `rootDir` is given, only the part of the path below the scan root is
+ * inspected, so a repository checked out under a directory that happens to be
+ * called `tests` or `fixtures` is not mistaken for test code.
  */
-export function isTestFile(file: string): boolean {
-  return /[\/\\](?:tests?|__tests__|spec|specs|fixtures|__fixtures__|mocks|__mocks__)[\/\\]/i.test(file)
-    || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|py|java|go)$/i.test(file)
-    || /[\/\\]\.env\.example$/i.test(file);
+export function isTestFile(file: string, rootDir?: string): boolean {
+  const path = '/' + toRootRelative(file, rootDir).replace(/^\/+/, '');
+  return /\/(?:tests?|__tests__|spec|specs|fixtures|__fixtures__|mocks|__mocks__)\//i.test(path)
+    || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|py|java|go)$/i.test(path)
+    || /\/\.env\.example$/i.test(path);
 }
 
 /**

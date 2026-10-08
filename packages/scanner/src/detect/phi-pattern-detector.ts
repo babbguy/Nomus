@@ -260,7 +260,7 @@ export class PhiPatternDetector implements DetectorPlugin {
     const signals: DetectorSignal[] = [];
 
     for (const { file, content } of iterFiles(ctx)) {
-      if (isTestFile(file)) continue;
+      if (isTestFile(file, ctx.rootDir)) continue;
 
       // Strip comments to suppress findings buried in example documentation
       const stripped = stripComments(file, content);

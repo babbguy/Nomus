@@ -337,7 +337,6 @@ export async function runScoutCycle(): Promise<ScoutCycleResult> {
 
         // Broadcast to connected dashboards
         broadcastEvent({
-          id: signalId,
           type: 'scout.auto_promoted',
           data: { signalId, title: signal.title },
           jurisdiction: signal.jurisdiction,

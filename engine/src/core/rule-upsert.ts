@@ -13,7 +13,7 @@ import { env } from '../config/env.js';
 import { logger } from '../logger.js';
 import { signRule } from './rule-signing.js';
 import { canonicalJSON } from './policy-compiler.js';
-import type { DbHandle } from './rule-management.js';
+import type { DbHandle, PendingRuleEvent } from './rule-management.js';
 
 export interface ExtractedRule {
   ruleKey: string;
@@ -63,10 +63,17 @@ function sameAsStored(existing: typeof policyRules.$inferSelect, rule: Extracted
     && (existing.industryNotes ?? '') === (rule.industryNotes ?? '');
 }
 
+/**
+ * Upsert one rule inside the caller's transaction. When `pending` is given,
+ * the policy event written for a created/updated rule is appended to it so the
+ * caller can `publishRuleEvents` AFTER the transaction commits (never inside
+ * it: a rollback must not leave subscribers told about rules that don't exist).
+ */
 export function upsertExtractedRule(
   tx: DbHandle,
   ctx: { sourceId: string; now: string; nextSequence: () => number },
   rule: ExtractedRule,
+  pending?: PendingRuleEvent[],
 ): UpsertOutcome {
   const existing = tx.select().from(policyRules)
     .where(eq(policyRules.ruleKey, rule.ruleKey))
@@ -108,15 +115,18 @@ export function upsertExtractedRule(
       updatedAt: ctx.now,
     }).where(eq(policyRules.id, existing.id)).run();
 
+    const sequence = ctx.nextSequence();
+    const payload = { ...rule, version: newVersion };
     tx.insert(policyEvents).values({
       id: randomUUID(),
       eventType: 'policy.updated',
       ruleId: existing.id,
-      payload: JSON.stringify({ ...rule, version: newVersion }),
+      payload: JSON.stringify(payload),
       payloadSignature: signature,
-      sequence: ctx.nextSequence(),
+      sequence,
       createdAt: ctx.now,
     }).run();
+    pending?.push({ sequence, eventType: 'policy.updated', jurisdiction: rule.jurisdiction, payload });
     return 'updated';
   }
 
@@ -145,14 +155,17 @@ export function upsertExtractedRule(
     updatedAt: ctx.now,
   }).run();
 
+  const sequence = ctx.nextSequence();
+  const payload = { ...rule, version: 1 };
   tx.insert(policyEvents).values({
     id: randomUUID(),
     eventType: 'policy.created',
     ruleId,
-    payload: JSON.stringify({ ...rule, version: 1 }),
+    payload: JSON.stringify(payload),
     payloadSignature: signature,
-    sequence: ctx.nextSequence(),
+    sequence,
     createdAt: ctx.now,
   }).run();
+  pending?.push({ sequence, eventType: 'policy.created', jurisdiction: rule.jurisdiction, payload });
   return 'created';
 }

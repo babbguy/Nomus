@@ -20,7 +20,7 @@ import { buildFeedbackContext } from '../feedback/refiner.js';
 import { broadcastEvent } from '../sse/manager.js';
 import { env } from '../config/env.js';
 import { upsertExtractedRule } from '../core/rule-upsert.js';
-import { policyBundleCache } from '../core/policy-cache.js';
+import { publishRuleEvents, type PendingRuleEvent } from '../core/rule-management.js';
 import { logger } from '../logger.js';
 import { scoreDocumentQuality, diagnoseQualityFailure } from './quality-scorer.js';
 import { healContent } from './scrape-healer.js';
@@ -118,7 +118,6 @@ function announcePipelineEnd(sourceId: string, result: PipelineResult): void {
     : result.status === 'error' ? 'error'
     : 'no_change';
   broadcastEvent({
-    id: randomUUID(),
     type: 'pipeline.progress',
     data: {
       sourceId,
@@ -188,7 +187,6 @@ async function runPipelineSteps(sourceId: string): Promise<PipelineResult> {
 
     const progress = (step: number, stepName: string, detail?: Record<string, unknown>) => {
       broadcastEvent({
-        id: randomUUID(),
         type: 'pipeline.progress',
         data: { sourceId, sourceName: source.name, step, stepName, ...detail },
         jurisdiction: source.jurisdiction,
@@ -1247,7 +1245,6 @@ async function resumeFromStaged(
           `${failedChunks.length}/${extractions.length} chunks failed extraction (${failRate}% failure rate)`);
 
         broadcastEvent({
-          id: randomUUID(),
           type: 'pipeline.progress',
           data: {
             sourceId: source.id,
@@ -1435,6 +1432,7 @@ async function resumeFromStaged(
     const promoteNow = now();
 
     // TRANSACTIONAL PROMOTION: snapshot + rules + source hash update
+    const pendingEvents: PendingRuleEvent[] = [];
     db.transaction((tx) => {
       // 1. Write to rawSnapshots (store verified clean text, not raw HTML)
       const snapshotId = randomUUID();
@@ -1487,6 +1485,7 @@ async function resumeFromStaged(
           tx,
           { sourceId: source.id, now: promoteNow, nextSequence: () => nextSequence++ },
           rule,
+          pendingEvents,
         );
         if (outcome === 'created') rulesCreated++;
         else if (outcome === 'updated') rulesUpdated++;
@@ -1510,8 +1509,9 @@ async function resumeFromStaged(
       }).where(eq(stagedContent.id, staged.id)).run();
     }); // end transaction
 
-    // Invalidate policy cache
-    policyBundleCache.invalidate();
+    // Tell live subscribers about every rule the transaction wrote (also
+    // invalidates the policy cache). Runs after commit, never inside it.
+    publishRuleEvents(pendingEvents);
 
     // ─── Delta Card: Auto-create Radar signal + broadcast ─────
     if (rulesCreated > 0 || rulesUpdated > 0) {
@@ -1531,7 +1531,6 @@ async function resumeFromStaged(
       }).run();
 
       broadcastEvent({
-        id: randomUUID(),
         type: 'regulation.changed',
         data: {
           source: source.name,

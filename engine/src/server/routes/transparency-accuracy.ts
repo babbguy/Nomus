@@ -60,7 +60,7 @@ const METHODOLOGY = {
     'small-sample calibration is statistical noise, and an honest empty state beats a misleading chart.',
   verification:
     'Every outcome row is Ed25519-signed over the canonical JSON of the record minus its signature field. ' +
-    'The public key is served at /.well-known/nomus-public-key.',
+    'The public key is served at /.well-known/nomus-keys.',
 } as const;
 
 // ─── GET / — latest calibration snapshot ───────────────────────

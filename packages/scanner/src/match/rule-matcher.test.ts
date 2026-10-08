@@ -20,6 +20,7 @@ import {
   isNomusApiError,
   type MatchedRule,
 } from './rule-matcher.js';
+import { generateSuggestions } from '../fix/suggestions.js';
 import type { DetectorSignal } from '../detect/detector.js';
 import type { NomusConfig } from '../config/schema.js';
 
@@ -249,5 +250,86 @@ describe('matchRulesToSignals — end-to-end audit regressions', () => {
     mockedPost.mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 401'), { response: { status: 401 } }));
     await expect(matchRulesToSignals([makeSignal()], ['text_generation'], makeConfig()))
       .rejects.toThrow(/API key was rejected \(401\)/);
+  });
+});
+
+describe('matchRulesToSignals — SDK attribution in multi-SDK files', () => {
+  beforeEach(() => mockedPost.mockReset());
+
+  const FILE = 'src/api/chat.ts';
+  const sdkSignals = (): DetectorSignal[] => [
+    makeSignal({ source: 'import-detector', file: FILE, line: 1, target: 'openai', capabilities: [] }),
+    makeSignal({ source: 'import-detector', file: FILE, line: 2, target: '@anthropic-ai/sdk', capabilities: [] }),
+    makeSignal({
+      source: 'sdk-usage-detector', file: FILE, line: 11, target: 'openai.chat.completions.create',
+      capabilities: ['text_generation'], metadata: { sdk: 'openai' },
+    }),
+    makeSignal({
+      source: 'sdk-usage-detector', file: FILE, line: 19, target: 'anthropic.messages.create',
+      capabilities: ['text_generation'], metadata: { sdk: 'anthropic' },
+    }),
+  ];
+
+  const rules = () => ({
+    data: {
+      markets: {
+        EU: {
+          rules: [
+            makeRule({ ruleKey: 'eu_ai_act.art50.2.synthetic_content_marking', matchedOn: ['capability: synthetic_content'] }),
+            makeRule({ ruleKey: 'hipaa.phi_in_ai_call', effect: 'deny', matchedOn: ['capability: phi_in_ai_call'] }),
+          ],
+        },
+      },
+    },
+  });
+
+  it('names the SDK of the nearest call, not the last SDK call in the file', async () => {
+    mockedPost.mockResolvedValueOnce(rules());
+    const findings = await matchRulesToSignals([
+      ...sdkSignals(),
+      makeSignal({ source: 'transparency-detector', file: FILE, line: 11, target: 'unmarked_output', capabilities: ['synthetic_content'] }),
+      makeSignal({ source: 'phi-pattern-detector', file: FILE, line: 10, target: 'phi_var', capabilities: ['phi_in_ai_call'] }),
+    ], ['text_generation', 'synthetic_content', 'phi_in_ai_call'], makeConfig());
+
+    expect(findings.find((f) => f.rule.ruleKey.includes('art50'))?.sdk).toBe('openai');
+    expect(findings.find((f) => f.rule.ruleKey.startsWith('hipaa'))?.sdk).toBe('openai');
+
+    const art50 = generateSuggestions(findings).find((f) => f.rule.ruleKey.includes('art50'));
+    expect(art50?.suggestion).toContain('responses from this openai call');
+    expect(art50?.suggestion).not.toContain('anthropic');
+  });
+
+  it('attributes a signal on the second call to the second SDK', async () => {
+    mockedPost.mockResolvedValueOnce(rules());
+    const findings = await matchRulesToSignals([
+      ...sdkSignals(),
+      makeSignal({ source: 'transparency-detector', file: FILE, line: 19, target: 'unmarked_output', capabilities: ['synthetic_content'] }),
+    ], ['text_generation', 'synthetic_content'], makeConfig());
+    expect(findings.find((f) => f.rule.ruleKey.includes('art50'))?.sdk).toBe('anthropic');
+  });
+
+  it('breaks distance ties toward the earlier line', async () => {
+    mockedPost.mockResolvedValueOnce(rules());
+    const tie = await matchRulesToSignals([
+      ...sdkSignals(),
+      makeSignal({ source: 'transparency-detector', file: FILE, line: 15, target: 'x', capabilities: ['synthetic_content'] }),
+    ], ['synthetic_content'], makeConfig());
+    expect(tie.find((f) => f.rule.ruleKey.includes('art50'))?.sdk).toBe('openai'); // 4 lines from both calls
+  });
+
+  it('falls back to imports only when the file has no SDK-usage signal, then to unknown', async () => {
+    mockedPost.mockResolvedValueOnce(rules());
+    const importsOnly = await matchRulesToSignals([
+      makeSignal({ source: 'import-detector', file: FILE, line: 1, target: 'openai', capabilities: [] }),
+      makeSignal({ source: 'import-detector', file: FILE, line: 30, target: 'cohere', capabilities: [] }),
+      makeSignal({ source: 'transparency-detector', file: FILE, line: 25, target: 'x', capabilities: ['synthetic_content'] }),
+    ], ['synthetic_content'], makeConfig());
+    expect(importsOnly.find((f) => f.rule.ruleKey.includes('art50'))?.sdk).toBe('cohere');
+
+    mockedPost.mockResolvedValueOnce(rules());
+    const none = await matchRulesToSignals([
+      makeSignal({ source: 'transparency-detector', file: FILE, line: 25, target: 'x', capabilities: ['synthetic_content'] }),
+    ], ['synthetic_content'], makeConfig());
+    expect(none.find((f) => f.rule.ruleKey.includes('art50'))?.sdk).toBe('unknown');
   });
 });

@@ -129,7 +129,6 @@ async function runWorker(workerId: number): Promise<boolean> {
 
       // Notify success
       broadcastEvent({
-        id: randomUUID(),
         type: 'forge.completed',
         jurisdiction: job.jurisdiction,
         data: {
@@ -154,7 +153,6 @@ async function runWorker(workerId: number): Promise<boolean> {
       failJob(job.id, result.errorMessage ?? 'Unknown error', result.errorCategory ?? 'unknown');
 
       broadcastEvent({
-        id: randomUUID(),
         type: 'forge.error',
         jurisdiction: job.jurisdiction,
         data: {
@@ -234,7 +232,6 @@ async function runWorkerPool(concurrency: number): Promise<void> {
 
     // Broadcast status update
     broadcastEvent({
-      id: randomUUID(),
       type: 'forge.status',
       jurisdiction: 'global',
       data: getStatus(),
@@ -284,7 +281,6 @@ export async function startForge(opts?: {
     }
 
     broadcastEvent({
-      id: randomUUID(),
       type: 'forge.started',
       jurisdiction: 'global',
       data: {
@@ -308,7 +304,6 @@ export async function startForge(opts?: {
     _state = 'idle';
 
     broadcastEvent({
-      id: randomUUID(),
       type: 'forge.finished',
       jurisdiction: 'global',
       data: {
@@ -336,7 +331,6 @@ export async function startForge(opts?: {
     sendSlack(`*Forge CRASHED*\n${errorMsg}`, 'Forge — Error').catch(() => {});
 
     broadcastEvent({
-      id: randomUUID(),
       type: 'forge.error',
       jurisdiction: 'global',
       data: { error: errorMsg, phase: 'orchestrator' },
@@ -360,7 +354,6 @@ export function stopForge(): void {
   logger.info('Forge stop requested — finishing current jobs');
 
   broadcastEvent({
-    id: randomUUID(),
     type: 'forge.stopping',
     jurisdiction: 'global',
     data: { message: 'Graceful stop requested — finishing current jobs' },
