@@ -93,7 +93,7 @@ List stored findings for your organization, newest first.
 |-------|---------|-------|
 | `repo` | all | Exact match |
 | `severity` | all | `critical`, `high`, `medium`, `low` |
-| `status` | `open` | `open`, `resolved`, `dismissed` |
+| `status` | `open` | `open`, `resolved`, `dismissed`, or `all` |
 | `limit` | 100 | Max 500 |
 
 ```json

@@ -161,7 +161,8 @@ scanRoutes.get('/findings', (c) => {
   const conditions = [eq(scanFindings.orgId, orgId)];
   if (repo) conditions.push(eq(scanFindings.repo, repo));
   if (severity) conditions.push(eq(scanFindings.severity, severity as 'critical' | 'high' | 'medium' | 'low'));
-  if (status) conditions.push(eq(scanFindings.status, status as 'open' | 'resolved' | 'dismissed'));
+  // status=all lists every status (the default is open findings only).
+  if (status !== 'all') conditions.push(eq(scanFindings.status, status as 'open' | 'resolved' | 'dismissed'));
 
   const findings = db.select().from(scanFindings)
     .where(and(...conditions))
@@ -194,6 +195,7 @@ scanRoutes.get('/repos', (c) => {
     .from(scanFindings)
     .where(eq(scanFindings.orgId, orgId))
     .groupBy(scanFindings.repo)
+    .orderBy(desc(sql`max(scanned_at)`))
     .all();
 
   return c.json({ count: repos.length, repos });

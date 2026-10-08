@@ -84,7 +84,7 @@ export default function ScanRepo() {
           <option value="open">Open</option>
           <option value="dismissed">Dismissed</option>
           <option value="resolved">Resolved</option>
-          <option value="">All</option>
+          <option value="all">All</option>
         </select>
       </div>
 

@@ -142,3 +142,12 @@ function randomUUIDOrg(): string {
   }).run();
   return id;
 }
+
+describe('GET /api/v1/scan/findings?status=all', () => {
+  it('lists every status, while the default stays open-only', async () => {
+    const all = await call('GET', `/api/v1/scan/findings?repo=${encodeURIComponent('acme/status')}&status=all`);
+    const open = await call('GET', `/api/v1/scan/findings?repo=${encodeURIComponent('acme/status')}`);
+    expect(all.json.findings.map((f: any) => f.status).sort()).toEqual(['dismissed', 'open']);
+    expect(open.json.findings.every((f: any) => f.status === 'open')).toBe(true);
+  });
+});
