@@ -23,6 +23,7 @@ const app = new Hono<AppEnv>();
 app.route('/api/v1/simulations', simulationRoutes);
 const KEY = 'nk_test_simulations_key_0000000000';
 let signalId = '';
+const EMPTY_KEY = 'nk_test_simulations_empty_key_000000';
 
 beforeAll(() => {
   runMigrations();
@@ -38,6 +39,12 @@ beforeAll(() => {
     id: randomUUID(), orgId, name: 'OpenAI (acme/app)', description: '', systemType: 'model', provider: 'OpenAI', modelName: '', version: '',
     purpose: 'chat', capabilities: '[]', dataFlows: '[]', jurisdictions: JSON.stringify(['EU']), riskClassification: 'limited',
     regulatoryTags: '[]', deploymentType: 'development', detectedFrom: 'scanner', scanFindingIds: '[]', isActive: true, metadata: '{}', createdAt: now, updatedAt: now,
+  }).run();
+  const emptyOrgId = randomUUID();
+  db.insert(organizations).values({ id: emptyOrgId, name: 'Empty Sim Org', slug: `sim-${emptyOrgId.slice(0, 8)}`, jurisdictionAccess: '[]', isActive: true, createdAt: now, updatedAt: now }).run();
+  db.insert(apiKeys).values({
+    id: randomUUID(), orgId: emptyOrgId, keyHash: createHash('sha256').update(EMPTY_KEY).digest('hex'), keyPrefix: EMPTY_KEY.slice(0, 12),
+    label: 'sim empty', scopes: JSON.stringify(['read:policies']), rateLimitRpm: 100000, isActive: true, createdAt: now,
   }).run();
   signalId = randomUUID();
   db.insert(regulatorySignals).values({
@@ -61,5 +68,30 @@ describe('GET /api/v1/simulations', () => {
     expect(sim.impactDetails[0]).toMatchObject({ impact: 'medium', estimatedCost: '1500.00000000' });
     expect(typeof sim.impactDetails[0].reason).toBe('string');
     expect(sim.estimatedRemediationCost).toBe('1500.00000000');
+  });
+});
+
+describe('POST /api/v1/simulations/run', () => {
+  const run = (key: string) => app.request('/api/v1/simulations/run', {
+    method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signalId }),
+  });
+
+  it('an organization with no systems gets the same response shape, including overallRiskLevel', async () => {
+    const empty = await run(EMPTY_KEY);
+    expect(empty.status).toBe(201);
+    const emptyBody = await empty.json() as any;
+    expect(emptyBody).toMatchObject({
+      status: 'completed', systemsAnalyzed: 0, systemsImpacted: 0,
+      overallRiskLevel: 'none', estimatedRemediationCost: '0.00000000',
+    });
+
+    const withSystems = await (await run(KEY)).json() as any;
+    expect(Object.keys(emptyBody).sort()).toEqual(Object.keys(withSystems).sort());
+
+    // The response agrees with what is stored and served by GET /:id.
+    const stored = await (await app.request(`/api/v1/simulations/${emptyBody.id}`, { headers: { Authorization: `Bearer ${EMPTY_KEY}` } })).json() as any;
+    expect(stored.overallRiskLevel).toBe(emptyBody.overallRiskLevel);
+    expect(stored.estimatedRemediationCost).toBe(emptyBody.estimatedRemediationCost);
   });
 });

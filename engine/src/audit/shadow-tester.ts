@@ -176,6 +176,7 @@ export function runShadowTests(): {
       const matched = ruleMatchesContext(
         JSON.parse(rule.conditions) as Record<string, string>,
         { region: fixture.jurisdiction, ...fixture.context },
+        rule.industries,
       );
 
       if (matched && (effectRank[rule.effect] ?? 0) > (effectRank[matchedEffect] ?? 0)) {
