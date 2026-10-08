@@ -141,3 +141,23 @@ describe('POST /api/v1/ai-bom/generate — systems from earlier versions', () =>
     expect([legacyTs, legacyPy]).toContain(active.find((s: any) => s.name === 'Anthropic (acme/legacy)').id);
   });
 });
+
+describe('AI-BOM create and edit, as the AI-BOM page sends them', () => {
+  it('creates with the page defaults, edits with PATCH, and rejects values outside the enums', async () => {
+    const form = {
+      name: 'Support bot', description: '', systemType: 'model', provider: 'OpenAI', modelName: 'gpt-4o', version: '',
+      purpose: 'customer support', capabilities: ['text_generation'], jurisdictions: ['EU', 'US-FED'],
+      riskClassification: 'unclassified', euAiActCategory: '', deploymentType: 'development',
+    };
+    const created = await call('POST', '/api/v1/ai-bom', form);
+    expect(created.status).toBe(201);
+    const id = created.json.id;
+
+    const edited = await call('PATCH', `/api/v1/ai-bom/${id}`, { ...form, deploymentType: 'production', riskClassification: 'limited' });
+    expect(edited.status).toBe(200);
+    expect(edited.json).toMatchObject({ deploymentType: 'production', riskClassification: 'limited' });
+
+    expect((await call('POST', '/api/v1/ai-bom', { ...form, deploymentType: 'cloud' })).status).toBe(400);
+    expect((await call('PATCH', `/api/v1/ai-bom/${id}`, { systemType: 'integration' })).status).toBe(400);
+  });
+});

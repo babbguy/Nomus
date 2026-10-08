@@ -544,7 +544,11 @@ aiBomRoutes.post('/', async (c) => {
   if (!validTypes.includes(body.systemType)) {
     return c.json({ error: `Invalid systemType. Must be one of: ${validTypes.join(', ')}` }, 400);
   }
-
+  // Same enums PATCH enforces (POST stored any value, outside the schema enum).
+  const validDeployments = ['production', 'staging', 'development', 'retired'];
+  if (body.deploymentType !== undefined && !validDeployments.includes(body.deploymentType)) {
+    return c.json({ error: `Invalid deploymentType. Must be one of: ${validDeployments.join(', ')}` }, 400);
+  }
   const capabilities = Array.isArray(body.capabilities) ? body.capabilities : [];
   const dataFlows = Array.isArray(body.dataFlows) ? body.dataFlows : [];
   const jurisdictions = Array.isArray(body.jurisdictions) ? body.jurisdictions : [];

@@ -13,14 +13,15 @@ import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import DataFreshness from '../../components/ui/DataFreshness';
 import { apiErrorMessage } from '../../lib/errors';
+import { JURISDICTIONS as JURISDICTION_NAMES } from '@nomus/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
 type RiskLevel = 'unacceptable' | 'high' | 'limited' | 'minimal' | 'unclassified';
-type DeploymentType = 'cloud' | 'on-premise' | 'hybrid' | 'edge';
-type SystemType = 'model' | 'agent' | 'pipeline' | 'integration' | 'other';
+type DeploymentType = 'production' | 'staging' | 'development' | 'retired';
+type SystemType = 'model' | 'agent' | 'pipeline' | 'embedding' | 'fine_tune' | 'other';
 
 interface AiSystem {
   id: string;
@@ -66,7 +67,7 @@ const EMPTY_FORM: Omit<AiSystem, 'id' | 'createdAt' | 'updatedAt' | 'dataFlows' 
   jurisdictions: [],
   riskClassification: 'unclassified',
   euAiActCategory: '',
-  deploymentType: 'cloud',
+  deploymentType: 'development',
 };
 
 /* ------------------------------------------------------------------ */
@@ -85,20 +86,21 @@ const SYSTEM_TYPE_ICONS: Record<SystemType, React.ReactNode> = {
   model: <Brain size={14} />,
   agent: <Bot size={14} />,
   pipeline: <Server size={14} />,
-  integration: <Globe size={14} />,
+  embedding: <Globe size={14} />,
+  fine_tune: <Brain size={14} />,
   other: <Cpu size={14} />,
 };
 
-const JURISDICTIONS = [
-  'EU', 'US', 'UK', 'Canada', 'Australia', 'Japan', 'South Korea',
-  'Singapore', 'Brazil', 'India', 'China', 'Global',
-];
+// Jurisdiction codes, as rules, scans and simulations use them ('US' and
+// 'Canada' never matched a signal's 'US-FED' / 'CA').
+const JURISDICTIONS = Object.keys(JURISDICTION_NAMES);
 
 const SYSTEM_TYPES: { value: SystemType; label: string }[] = [
   { value: 'model', label: 'Model' },
   { value: 'agent', label: 'Agent' },
   { value: 'pipeline', label: 'Pipeline' },
-  { value: 'integration', label: 'Integration' },
+  { value: 'embedding', label: 'Embedding' },
+  { value: 'fine_tune', label: 'Fine-tune' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -111,10 +113,10 @@ const RISK_LEVELS: { value: RiskLevel; label: string }[] = [
 ];
 
 const DEPLOYMENT_TYPES: { value: DeploymentType; label: string }[] = [
-  { value: 'cloud', label: 'Cloud' },
-  { value: 'on-premise', label: 'On-Premise' },
-  { value: 'hybrid', label: 'Hybrid' },
-  { value: 'edge', label: 'Edge' },
+  { value: 'development', label: 'Development' },
+  { value: 'staging', label: 'Staging' },
+  { value: 'production', label: 'Production' },
+  { value: 'retired', label: 'Retired' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -200,7 +202,7 @@ export default function AiBom() {
     setFormError(null);
     try {
       if (editingId) {
-        await api.put(`/ai-bom/${editingId}`, form);
+        await api.patch(`/ai-bom/${editingId}`, form);
       } else {
         await api.post('/ai-bom', form);
       }
