@@ -252,7 +252,9 @@ After any successful source or rule change above:
 - `GET /api/v1/policies`, `/policies/bundle` (cache invalidated) and `/policies/hash` reflect it
   immediately; only active rules are served, and `ruleCount` and `stateHash` change.
 - `POST /api/v1/evaluate` evaluates against the current active rules for the requested
-  jurisdiction (exact match).
+  jurisdiction (exact match). A rule applies when every one of its conditions equals the
+  request context; the jurisdiction supplies `region` when the context does not set it, and
+  `sector` / `data_type` accept the same aliases as `/simulate` (`fintech`, `phi`, `pii`).
 - Rule events are appended to `policy_events` with the next sequence number and broadcast to
   `GET /api/v1/stream` subscribers (`policy.created`, `policy.updated`, `policy.revoked`); clients
   reconnecting with `Last-Event-ID` receive the ones they missed. The payload includes `actor`

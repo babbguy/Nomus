@@ -6,6 +6,14 @@ import { signData } from './signing.js';
 import { canonicalJSON } from './policy-compiler.js';
 import { ATTESTATION_SCHEMA_VERSION } from './attestation-lifecycle.js';
 import type { PolicyConditions } from '@nomus/shared';
+import { normalizeDataType, normalizeSector } from './applicability.js';
+
+function conditionHolds(key: string, required: string, actual: string | undefined): boolean {
+  if (actual === undefined) return false;
+  if (key === 'sector') return normalizeSector(actual) === normalizeSector(required);
+  if (key === 'data_type') return normalizeDataType(actual) === normalizeDataType(required);
+  return actual === required;
+}
 
 export interface EvaluationResult {
   id: string;
@@ -35,11 +43,19 @@ export interface EvaluationResult {
  */
 export function evaluateCompliance(
   orgId: string,
-  actionContext: PolicyConditions,
+  requestedContext: PolicyConditions,
   jurisdiction: string,
   options?: { expiresAt?: string | null },
 ): EvaluationResult {
   const db = getDb();
+
+  // The jurisdiction being evaluated IS the region. Rules carry a region
+  // condition, so a context that did not repeat it matched nothing and was
+  // signed as 'compliant' — e.g. PHI sent to an AI model under US-FED. The defaulted
+  // region is part of the signed context.
+  const actionContext: PolicyConditions = requestedContext.region
+    ? requestedContext
+    : { ...requestedContext, region: jurisdiction };
 
   // Get all active rules for the jurisdiction
   const rules = db.select().from(policyRules)
@@ -62,9 +78,10 @@ export function evaluateCompliance(
     const conditions = JSON.parse(rule.conditions) as Record<string, string>;
     let matched = true;
 
-    // Check if the action context matches the rule conditions
+    // Check if the action context matches the rule conditions. Sector and
+    // data type accept the same aliases as /simulate (fintech, phi, pii, ...).
     for (const [key, value] of Object.entries(conditions)) {
-      if (value && actionContext[key] !== value) {
+      if (value && !conditionHolds(key, value, actionContext[key])) {
         matched = false;
         break;
       }
