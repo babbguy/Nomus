@@ -4,6 +4,7 @@ import { runScan, isNomusApiError, type ScanResult } from '@nomus/scanner';
 import { uploadSarif } from './sarif-upload.js';
 import { postSummaryComment, postInlineComments } from './pr-comments.js';
 import { createCheckRun } from './check-run.js';
+import { repoRoot, toRepoPath } from './findings.js';
 import axios from 'axios';
 
 async function run(): Promise<void> {
@@ -16,6 +17,7 @@ async function run(): Promise<void> {
     const uploadSarifEnabled = core.getBooleanInput('upload-sarif');
     const postPrComment = core.getBooleanInput('post-pr-comment');
     const badgeEmbed = core.getBooleanInput('badge-embed');
+    const badgeOrg = core.getInput('badge-org');
 
     // GitHub context
     const { context } = github;
@@ -24,6 +26,10 @@ async function run(): Promise<void> {
     const repo = context.repo;
     const sha = context.sha;
     const prNumber = context.payload.pull_request?.number;
+    // On pull_request events context.sha is the synthetic merge commit. Check
+    // runs and review comments must target the PR head commit to show up on
+    // the PR (GitHub rejects review comments on a commit outside the PR).
+    const headSha: string = context.payload.pull_request?.head?.sha ?? sha;
 
     core.info('🛡️  Nomus Regulatory Scan');
     core.info(`   Repository: ${repo.owner}/${repo.repo}`);
@@ -51,12 +57,12 @@ async function run(): Promise<void> {
     core.setOutput('status', result.status);
 
     // Upload findings to Nomus API
-    if (result.findings.length > 0) {
-      await uploadFindings(result, apiKey, apiUrl, repo, prNumber, sha);
-    }
+    const uploaded = result.findings.length > 0
+      ? await uploadFindings(result, apiKey, apiUrl, repo, prNumber, headSha)
+      : true;
 
     // Fetch compliance score (reflects uploaded findings + existing org findings)
-    const complianceScore = await fetchComplianceScore(apiKey, apiUrl, result);
+    const complianceScore = await fetchComplianceScore(apiKey, apiUrl, result, uploaded);
     core.setOutput('compliance-score', complianceScore.score);
     core.setOutput('compliance-label', complianceScore.label);
     core.info(`   Regulatory exposure score: ${complianceScore.score}% (${complianceScore.label})`);
@@ -65,18 +71,19 @@ async function run(): Promise<void> {
     if (octokit) {
       // SARIF upload for Code Scanning tab
       if (uploadSarifEnabled && result.findings.length > 0) {
-        const sarifPath = await uploadSarif(result, octokit, repo, sha, workingDir, context.ref);
+        const sarifPath = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
         if (sarifPath) core.setOutput('sarif-file', sarifPath);
       }
 
       // PR comments (only on pull requests)
       if (postPrComment && prNumber) {
-        await postInlineComments(result, octokit, repo, prNumber, sha);
-        await postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeEmbed, complianceScore);
+        await postInlineComments(result, octokit, repo, prNumber, headSha);
+        const badgeSlug = badgeEmbed ? await resolveBadgeSlug(apiUrl, badgeOrg || repo.owner) : null;
+        await postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeSlug, complianceScore);
       }
 
       // Check Run
-      await createCheckRun(result, octokit, repo, sha, complianceScore);
+      await createCheckRun(result, octokit, repo, headSha, complianceScore);
     } else {
       core.warning('No github-token provided — skipping PR comments, SARIF upload, and check run.');
     }
@@ -106,9 +113,12 @@ export type { ComplianceScoreResult } from './types.js';
 import type { ComplianceScoreResult } from './types.js';
 
 /**
- * Fetch the compliance score from the Nomus API, then apply local scan
- * finding deductions to ensure the reported score reflects ALL known issues
- * (same logic as the VS Code extension).
+ * Fetch the compliance score from the Nomus API.
+ *
+ * When this run's findings were uploaded, the engine's score already counts
+ * them (it deducts every open finding), so it is used as is. Only when the
+ * upload failed are this scan's findings deducted locally — deducting them on
+ * top of an engine score that includes them counted every finding twice.
  *
  * Severity weights: critical = -5, high = -3, medium = -1, low = 0.
  */
@@ -116,6 +126,7 @@ async function fetchComplianceScore(
   apiKey: string,
   apiUrl: string,
   result: ScanResult,
+  findingsUploaded: boolean,
 ): Promise<ComplianceScoreResult> {
   let backendScore = 100;
 
@@ -130,7 +141,7 @@ async function fetchComplianceScore(
   }
 
   // Apply local finding deductions (same weights as engine + VS Code extension)
-  const deductions =
+  const deductions = findingsUploaded ? 0 :
     result.counts.critical * 5 +
     result.counts.high * 3 +
     result.counts.medium * 1;
@@ -145,6 +156,12 @@ async function fetchComplianceScore(
   return { score, label };
 }
 
+/**
+ * Store this scan's findings in Nomus (dashboard Scans page). Paths are sent
+ * repository-relative, optional fields are omitted rather than sent as null,
+ * and a failure is reported with its cause. Returns whether the upload stored
+ * the findings.
+ */
 async function uploadFindings(
   result: ScanResult,
   apiKey: string,
@@ -152,31 +169,54 @@ async function uploadFindings(
   repo: { owner: string; repo: string },
   prNumber: number | undefined,
   sha: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await axios.post(`${apiUrl}/api/v1/scan/findings`, {
+    const resp = await axios.post(`${apiUrl}/api/v1/scan/findings`, {
+      repo: `${repo.owner}/${repo.repo}`,
+      commitSha: sha,
+      ...(prNumber ? { prNumber } : {}),
       findings: result.findings.map((f) => ({
-        repo: `${repo.owner}/${repo.repo}`,
-        prNumber: prNumber ?? null,
-        commitSha: sha,
-        file: f.file,
+        file: toRepoPath(f.file),
         line: f.line,
         ruleKey: f.rule.ruleKey,
         severity: f.rule.severity,
         effect: f.rule.effect,
         sdk: f.sdk,
         summary: f.rule.humanSummary,
-        suggestion: f.suggestion ?? null,
-        detectorSource: f.detectorSource ?? null,
-        legalReference: f.rule.legalReference ?? null,
+        ...(f.suggestion ? { suggestion: f.suggestion } : {}),
+        ...(f.detectorSource ? { detectorSource: f.detectorSource } : {}),
+        ...(f.rule.legalReference ? { legalReference: f.rule.legalReference } : {}),
       })),
     }, {
       headers: { Authorization: `Bearer ${apiKey}` },
       timeout: 15000,
     });
-    core.info('   Obligations uploaded to Nomus dashboard');
+    const created = resp.data?.created ?? 0;
+    const updated = resp.data?.updated ?? 0;
+    core.info(`   Obligations stored in Nomus: ${created} new, ${updated} updated`);
+    return true;
+  } catch (err) {
+    const status = (err as { response?: { status?: number; data?: unknown } }).response?.status;
+    const detail = status
+      ? `HTTP ${status} ${JSON.stringify((err as { response?: { data?: unknown } }).response?.data ?? '').slice(0, 300)}`
+      : (err instanceof Error ? err.message : String(err));
+    core.warning(`Failed to upload findings to Nomus API (non-fatal): ${detail}`);
+    return false;
+  }
+}
+
+/**
+ * The Nomus organization slug whose public badge can be embedded, or null.
+ * The badge is served only for an existing organization with a public badge;
+ * embedding anything else renders a broken image in the PR comment.
+ */
+async function resolveBadgeSlug(apiUrl: string, slug: string): Promise<string | null> {
+  try {
+    await axios.get(`${apiUrl}/api/v1/badge/${encodeURIComponent(slug)}`, { timeout: 10000 });
+    return slug;
   } catch {
-    core.warning('Failed to upload findings to Nomus API (non-fatal)');
+    core.info(`   No public Nomus badge for organization "${slug}" — badge not embedded (set badge-org to your Nomus organization slug and enable its public badge)`);
+    return null;
   }
 }
 

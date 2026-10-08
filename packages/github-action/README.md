@@ -51,7 +51,8 @@ The repository you scan needs a `.nomus.yml` (see [Configuration](#configuration
 | `working-directory` | Directory to scan | No | `.` |
 | `upload-sarif` | Upload SARIF to Code Scanning | No | `true` |
 | `post-pr-comment` | Post obligations on PRs | No | `true` |
-| `badge-embed` | Include badge in PR comment | No | `true` |
+| `badge-embed` | Include the public Nomus badge in the PR comment (skipped when the organization has no public badge) | No | `true` |
+| `badge-org` | Slug of your Nomus organization, for the badge | No | repository owner |
 
 ## Outputs
 

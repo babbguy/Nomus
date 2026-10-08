@@ -1,3 +1,8 @@
+/* nomus: CommonJS globals for bundled CJS code */
+import { fileURLToPath as __nomusFileURLToPath } from 'node:url';
+import { dirname as __nomusDirname } from 'node:path';
+const __filename = __nomusFileURLToPath(import.meta.url);
+const __dirname = __nomusDirname(__filename);
 import { createRequire as __WEBPACK_EXTERNAL_createRequire } from "module";
 /******/ var __webpack_modules__ = ({
 
@@ -263766,6 +263771,25 @@ const DETECTOR_PRIORITY = {
     'risk-classifier': 2,
     'import-detector': 1,
 };
+/**
+ * The import detector names SDKs by package (`@anthropic-ai/sdk`,
+ * `google.generativeai`, `cohere`); the SDK-usage detector by SDK family.
+ * Map both to one key so the two can be compared.
+ */
+const SDK_FAMILY = {
+    '@anthropic-ai/sdk': 'anthropic',
+    'com.anthropic': 'anthropic',
+    'anthropic-sdk-go': 'anthropic',
+    'com.openai': 'openai',
+    'openai-go': 'openai',
+    'google.generativeai': '@google/generative-ai',
+    'cohere': 'cohere-ai',
+    'boto3-bedrock': '@aws-sdk/client-bedrock-runtime',
+    'aws-bedrock': '@aws-sdk/client-bedrock-runtime',
+};
+function canonicalSdk(sdk) {
+    return SDK_FAMILY[sdk] ?? sdk;
+}
 function priorityOf(source) {
     return DETECTOR_PRIORITY[source] ?? 0;
 }
@@ -263777,6 +263801,21 @@ function priorityOf(source) {
 function detector_mergeSignals(signals) {
     const allCaps = new Set();
     const signalsByFile = new Map();
+    // The import detector reports every capability an SDK *could* provide
+    // (an `openai` import implies image generation, speech, vision, ...). Where
+    // the SDK-usage detector found the actual calls for that SDK in the same
+    // file, those calls are the evidence: the speculative import signal is
+    // dropped so it cannot widen the capability set.
+    const usedSdksByFile = new Set();
+    for (const signal of signals) {
+        if (signal.source !== 'sdk-usage-detector')
+            continue;
+        const sdk = signal.metadata?.sdk;
+        if (typeof sdk === 'string')
+            usedSdksByFile.add(`${signal.file}::${canonicalSdk(sdk)}`);
+    }
+    signals = signals.filter((signal) => signal.source !== 'import-detector' ||
+        !usedSdksByFile.has(`${signal.file}::${canonicalSdk(signal.target)}`));
     // Dedup key = file + line + capability
     // Value = winning signal
     const winnerByKey = new Map();
@@ -264317,7 +264356,7 @@ const SDK_SPECS = [
     {
         sdk: 'openai',
         modules: ['openai'],
-        classNames: ['OpenAI', 'AzureOpenAI'],
+        classNames: ['OpenAI', 'AzureOpenAI', 'AsyncOpenAI', 'AsyncAzureOpenAI'],
         rootNames: ['openai'],
         methods: {
             'chat.completions.create': ['text_generation'],
@@ -264335,7 +264374,7 @@ const SDK_SPECS = [
     {
         sdk: 'anthropic',
         modules: ['@anthropic-ai/sdk'],
-        classNames: ['Anthropic'],
+        classNames: ['Anthropic', 'AsyncAnthropic'],
         rootNames: ['anthropic'],
         methods: {
             'messages.create': ['text_generation'],
@@ -264781,24 +264820,58 @@ const REGEX_MAPPINGS = SDK_SPECS.map((spec) => ({
 }));
 // Dynamic / indirect call: sdkName[var](...)
 const DYNAMIC_RE = /\b(openai|anthropic|cohere|bedrock|genai|generativeai)\s*\[\s*[a-zA-Z_]/g;
+// Client construction in non-JS files: `client = OpenAI(...)`,
+// `client = anthropic.Anthropic()`, `model = genai.GenerativeModel(...)`,
+// `client: AsyncOpenAI = AsyncOpenAI()`. Captures (variable, class).
+const INSTANCE_ASSIGN_RE = /\b([A-Za-z_]\w*)\s*(?::\s*[\w.[\]]+\s*)?(?::=|=)\s*(?:await\s+)?(?:new\s+)?(?:[A-Za-z_]\w*\.)?([A-Za-z_]\w*)\s*\(/g;
+/** Variables bound to an SDK client by constructor call (regex engine). */
+function collectRegexInstances(content) {
+    const instances = new Map();
+    INSTANCE_ASSIGN_RE.lastIndex = 0;
+    let m;
+    while ((m = INSTANCE_ASSIGN_RE.exec(content)) !== null) {
+        const spec = CLASS_INDEX.get(m[2]);
+        if (spec)
+            instances.set(m[1], spec);
+    }
+    return instances;
+}
 function findCallsRegex(content) {
     const hits = [];
-    for (const map of REGEX_MAPPINGS) {
-        map.pattern.lastIndex = 0;
+    const seen = new Set();
+    const push = (hit) => {
+        const key = `${hit.line}::${hit.sdk}::${hit.method ?? ''}`;
+        if (seen.has(key))
+            return;
+        seen.add(key);
+        hits.push(hit);
+    };
+    const scan = (sdk, pattern, methods, defaults) => {
+        pattern.lastIndex = 0;
         let m;
-        while ((m = map.pattern.exec(content)) !== null) {
+        while ((m = pattern.exec(content)) !== null) {
             const method = m[1];
-            const known = map.methods[method];
-            hits.push({
-                sdk: map.sdk,
+            // `anthropic.Anthropic()` constructs a client — it is not an AI call.
+            if (CLASS_INDEX.has(method))
+                continue;
+            const known = methods[method];
+            push({
+                sdk,
                 method,
-                capabilities: known ?? map.defaultCapabilities,
+                capabilities: known ?? defaults,
                 confidence: known ? 0.95 : 0.6,
                 line: offsetToLine(content, m.index),
                 evidence: content.slice(m.index, Math.min(m.index + 200, content.length)).split('\n')[0],
                 binding: 'name-heuristic',
             });
         }
+    };
+    // Calls on client variables: client = OpenAI(); client.chat.completions.create(...)
+    for (const [name, spec] of collectRegexInstances(content)) {
+        scan(spec.sdk, new RegExp(`\\b${name}\\.([a-zA-Z_][\\w.]*)\\s*\\(`, 'g'), spec.methods, spec.defaultCapabilities);
+    }
+    for (const map of REGEX_MAPPINGS) {
+        scan(map.sdk, map.pattern, map.methods, map.defaultCapabilities);
     }
     DYNAMIC_RE.lastIndex = 0;
     let dm;
@@ -273368,6 +273441,18 @@ class NomusApiError extends Error {
 function isNomusApiError(err) {
     return err instanceof Error && err.name === 'NomusApiError';
 }
+/** The engine's generic action condition — satisfied by any AI capability. */
+const GENERIC_AI_ACTION = 'ai_operation';
+/** The SDK a signal is about, or undefined for signals that describe data, not an SDK. */
+function sdkOfSignal(signal) {
+    if (signal.source === 'import-detector')
+        return signal.target;
+    if (signal.source === 'sdk-usage-detector') {
+        const sdk = signal.metadata?.sdk;
+        return typeof sdk === 'string' ? sdk : signal.target.split('.')[0];
+    }
+    return undefined;
+}
 /**
  * Query the Nomus API with detected capabilities to get matching rules,
  * then map them back to the specific code locations using detector signals.
@@ -273397,49 +273482,78 @@ async function rule_matcher_matchRulesToSignals(signals, capabilities, config) {
         }));
     }
     catch (err) {
-        throw new NomusApiError(`Nomus API request failed: ${err.message}`, err);
+        const status = err.response?.status;
+        const reason = status === 401
+            ? 'the API key was rejected (401) — check NOMUS_API_KEY / api_key'
+            : status === 403
+                ? 'the API key lacks the "evaluate" scope (403)'
+                : status
+                    ? `the engine returned HTTP ${status}`
+                    : `the engine at ${apiUrl} could not be reached (${err.message})`;
+        throw new NomusApiError(`Nomus API request failed: ${reason}`, err);
     }
     if (!data || typeof data !== 'object' || !data.markets || typeof data.markets !== 'object') {
         throw new NomusApiError('Nomus API returned an unexpected response shape (missing "markets" object)', data);
     }
     const marketRules = data.markets;
-    // Map rules back to code locations via signals
+    // Map rules back to code locations via signals.
+    // INTL rules are returned under every requested market, so the same rule can
+    // arrive more than once — report each (rule, file) pair once.
     const findings = [];
-    for (const [jurisdiction, market] of Object.entries(marketRules)) {
+    const reported = new Set();
+    // The SDK a finding is attributed to. PHI/transparency/risk signals name a
+    // data pattern ("pii_var"), not an SDK, so they borrow the SDK found in the
+    // same file; SDK-usage signals carry the SDK in metadata.
+    const sdkByFile = new Map();
+    for (const signal of signals) {
+        const sdk = sdkOfSignal(signal);
+        if (sdk && (!sdkByFile.has(signal.file) || signal.source === 'sdk-usage-detector')) {
+            sdkByFile.set(signal.file, sdk);
+        }
+    }
+    for (const market of Object.values(marketRules)) {
         for (const rule of market.rules) {
             // Compute confidence: how many of the rule's matched conditions align with detected capabilities
             // The engine emits matched conditions as `capability: ${cap}` (with a
             // space after the colon) — see engine/src/server/routes/simulate.ts.
             // Take everything after the first colon and trim, so both
             // 'capability:text_generation' and 'capability: text_generation' parse.
+            // `ai_operation` is the engine's generic action: any AI signal carries it.
             const relevantCaps = rule.matchedOn
                 .filter((m) => m.startsWith('capability:'))
-                .map((m) => m.split(':').slice(1).join(':').trim());
+                .map((m) => m.split(':').slice(1).join(':').trim())
+                .filter((cap) => cap !== GENERIC_AI_ACTION);
             const matchCount = relevantCaps.filter((cap) => capabilities.includes(cap)).length;
             const confidence = relevantCaps.length > 0
                 ? Math.round((matchCount / relevantCaps.length) * 100) / 100
                 : 0.5; // Default confidence when no capability matching possible
-            const ruleWithConfidence = { ...rule, confidence };
-            // Find which signals triggered this rule — use the highest-confidence signal per file
-            const seenFiles = new Set();
+            // Pick the highest-confidence signal per file that carries the capability.
+            const bestByFile = new Map();
             for (const signal of signals) {
-                if (seenFiles.has(signal.file))
-                    continue;
                 const signalMatchesCap = relevantCaps.length === 0 ||
                     relevantCaps.some((cap) => signal.capabilities.includes(cap));
-                if (signalMatchesCap) {
-                    // Factor signal confidence into rule confidence
-                    const combinedConfidence = Math.round(confidence * signal.confidence * 100) / 100;
-                    findings.push({
-                        file: signal.file,
-                        line: signal.line,
-                        sdk: signal.target,
-                        detectorSource: signal.source,
-                        evidence: signal.evidence,
-                        rule: { ...ruleWithConfidence, confidence: combinedConfidence },
-                    });
-                    seenFiles.add(signal.file);
+                if (!signalMatchesCap)
+                    continue;
+                const incumbent = bestByFile.get(signal.file);
+                if (!incumbent || signal.confidence > incumbent.confidence) {
+                    bestByFile.set(signal.file, signal);
                 }
+            }
+            for (const [file, signal] of bestByFile) {
+                const key = `${rule.ruleKey}::${file}`;
+                if (reported.has(key))
+                    continue;
+                reported.add(key);
+                // Factor signal confidence into rule confidence
+                const combinedConfidence = Math.round(confidence * signal.confidence * 100) / 100;
+                findings.push({
+                    file: signal.file,
+                    line: signal.line,
+                    sdk: sdkOfSignal(signal) ?? sdkByFile.get(signal.file) ?? 'unknown',
+                    detectorSource: signal.source,
+                    evidence: signal.evidence,
+                    rule: { ...rule, confidence: combinedConfidence },
+                });
             }
         }
     }
@@ -273512,6 +273626,7 @@ function getSuggestionForEffect(effect, sdk, ruleKey) {
 function getCallExample(sdk) {
     const examples = {
         '@anthropic-ai/sdk': 'anthropic.messages.create({ ... })',
+        'anthropic': 'anthropic.messages.create({ ... })',
         'openai': 'openai.chat.completions.create({ ... })',
         '@google/generative-ai': 'model.generateContent({ ... })',
     };
@@ -273520,6 +273635,7 @@ function getCallExample(sdk) {
 function getModelExample(sdk) {
     const examples = {
         '@anthropic-ai/sdk': 'claude-sonnet',
+        'anthropic': 'claude-sonnet',
         'openai': 'gpt-4',
         '@google/generative-ai': 'gemini-pro',
     };
@@ -273857,7 +273973,7 @@ function formatSarifReport(findings, rootDir) {
                 }],
         };
         if (f.suggestion) {
-            result.fixes = [{ description: { text: f.suggestion } }];
+            result.properties = { suggestion: f.suggestion };
         }
         return result;
     });
@@ -273878,7 +273994,65 @@ function formatSarifReport(findings, rootDir) {
     };
 }
 //# sourceMappingURL=sarif.js.map
+;// CONCATENATED MODULE: ./src/findings.ts
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+const findings_SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
+/** The repository checkout root: GITHUB_WORKSPACE on a runner, else the cwd. */
+function repoRoot() {
+    return process.env.GITHUB_WORKSPACE || process.cwd();
+}
+/**
+ * A finding's file as a repository-relative POSIX path — the form GitHub
+ * (reviews, check annotations, Code Scanning) and the Nomus dashboard expect.
+ * The scanner reports absolute paths on the runner; uploading or commenting
+ * with those leaks the runner layout and never matches a diff path.
+ */
+function toRepoPath(file) {
+    const abs = (0,external_node_path_namespaceObject.isAbsolute)(file) ? file : (0,external_node_path_namespaceObject.resolve)(repoRoot(), file);
+    return (0,external_node_path_namespaceObject.relative)(repoRoot(), abs).replace(/\\/g, '/');
+}
+/** Findings ordered most severe first (stable within a severity). */
+function bySeverity(findings) {
+    return findings
+        .map((f, i) => ({ f, i }))
+        .sort((a, b) => (findings_SEVERITY_RANK[b.f.rule.severity] ?? 0) - (findings_SEVERITY_RANK[a.f.rule.severity] ?? 0) || a.i - b.i)
+        .map(({ f }) => f);
+}
+/**
+ * Right-side line numbers a review comment may target, from a unified-diff
+ * `patch` (as returned by pulls.listFiles). GitHub rejects the whole review
+ * with 422 when any comment points at a line outside the diff hunks.
+ * Returns null when the patch is absent (binary or too-large files).
+ */
+function commentableLines(patch) {
+    if (!patch)
+        return null;
+    const lines = new Set();
+    let next = 0;
+    let inHunk = false;
+    for (const raw of patch.split('\n')) {
+        const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+        if (hunk) {
+            next = Number(hunk[1]);
+            inHunk = true;
+            continue;
+        }
+        if (!inHunk)
+            continue;
+        if (raw.startsWith('-'))
+            continue; // removed: left side only
+        if (raw.startsWith('\\'))
+            continue; // "\ No newline at end of file"
+        lines.add(next); // added (+) or context ( ) line
+        next++;
+    }
+    return lines;
+}
+
 ;// CONCATENATED MODULE: ./src/sarif-upload.ts
+
 
 
 
@@ -273888,8 +274062,10 @@ function formatSarifReport(findings, rootDir) {
  * Generate SARIF report and upload to GitHub Code Scanning.
  * Returns the path to the SARIF file, or null if upload failed.
  */
-async function uploadSarif(result, octokit, repo, sha, rootDir, ref) {
+async function uploadSarif(result, octokit, repo, sha, rootDir = repoRoot(), ref) {
     try {
+        // Code Scanning resolves artifact URIs against the repository root, so
+        // paths must be repo-relative even when working-directory is a subfolder.
         const sarif = formatSarifReport(result.findings, rootDir);
         const sarifJson = JSON.stringify(sarif, null, 2);
         // Write to file for downstream use
@@ -273936,44 +274112,67 @@ const EFFECT_LABELS = {
     flag: 'FLAGGED',
 };
 const COMMENT_MARKER = '<!-- nomus-scan -->';
+const DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
+/** GitHub accepts a limited number of comments per review. */
+const MAX_INLINE_COMMENTS = 25;
+function findingBlock(f) {
+    const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
+    const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
+    let body = `${icon} **Nomus: ${f.rule.severity.toUpperCase()}** — ${effect}\n\n`;
+    body += `**${f.rule.ruleKey}**\n`;
+    body += `${f.rule.humanSummary}\n\n`;
+    body += `📜 ${f.rule.legalReference}\n`;
+    body += `🔧 SDK: \`${f.sdk}\`\n`;
+    if (f.suggestion) {
+        body += `\n<details><summary>💡 Suggested fix</summary>\n\n\`\`\`\n${f.suggestion}\n\`\`\`\n</details>\n`;
+    }
+    return body;
+}
 /**
  * Post inline review comments on lines with applicable regulatory obligations.
+ *
+ * Only lines inside the PR's diff hunks are commented (GitHub rejects the
+ * whole review otherwise), all obligations on one line share one comment, and
+ * the most severe lines are commented first.
  */
 async function postInlineComments(result, octokit, repo, prNumber, sha) {
     if (result.findings.length === 0)
         return;
     try {
-        // Get the PR diff to know which files/lines are in the diff
-        const { data: files } = await octokit.rest.pulls.listFiles({
+        const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
             ...repo,
             pull_number: prNumber,
+            per_page: 100,
         });
-        const diffFiles = new Set(files.map((f) => f.filename));
-        // Only comment on files that are in the PR diff
-        const comments = result.findings
-            .filter((f) => {
-            // Normalize path — strip leading ./ or absolute path prefix
-            const relPath = (0,external_node_path_namespaceObject.relative)(process.cwd(), f.file).replace(/\\/g, '/');
-            return diffFiles.has(relPath);
-        })
-            .slice(0, 25) // GitHub limits to ~30 comments per review
-            .map((f) => {
-            const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
-            const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
-            const relPath = (0,external_node_path_namespaceObject.relative)(process.cwd(), f.file).replace(/\\/g, '/');
-            let body = `${icon} **Nomus: ${f.rule.severity.toUpperCase()}** — ${effect}\n\n`;
-            body += `**${f.rule.ruleKey}**\n`;
-            body += `${f.rule.humanSummary}\n\n`;
-            body += `📜 ${f.rule.legalReference}\n`;
-            body += `🔧 SDK: \`${f.sdk}\`\n`;
-            if (f.suggestion) {
-                body += `\n<details><summary>💡 Suggested fix</summary>\n\n\`\`\`\n${f.suggestion}\n\`\`\`\n</details>\n`;
-            }
-            body += `\n---\n*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*`;
-            return { path: relPath, line: f.line, body };
-        });
-        if (comments.length === 0)
+        const diffLines = new Map();
+        for (const f of files)
+            diffLines.set(f.filename, commentableLines(f.patch));
+        // Group by (path, line), keeping severity order.
+        const byLocation = new Map();
+        for (const f of bySeverity(result.findings)) {
+            const path = toRepoPath(f.file);
+            if (!diffLines.has(path))
+                continue;
+            const lines = diffLines.get(path);
+            if (!lines || !lines.has(f.line))
+                continue;
+            const key = `${path}:${f.line}`;
+            const entry = byLocation.get(key) ?? { path, line: f.line, findings: [] };
+            entry.findings.push(f);
+            byLocation.set(key, entry);
+        }
+        const comments = [...byLocation.values()]
+            .slice(0, MAX_INLINE_COMMENTS)
+            .map(({ path, line, findings }) => ({
+            path,
+            line,
+            side: 'RIGHT',
+            body: `${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
+        }));
+        if (comments.length === 0) {
+            info('   No obligations on lines changed in this pull request — no inline comments');
             return;
+        }
         await octokit.rest.pulls.createReview({
             ...repo,
             pull_number: prNumber,
@@ -273990,12 +274189,15 @@ async function postInlineComments(result, octokit, repo, prNumber, sha) {
 /**
  * Post or update a single summary comment on the PR.
  * Uses a hidden marker to find and update existing comments.
+ *
+ * `badgeOrgSlug` is the Nomus organization whose public badge to embed, or
+ * null to embed none (the caller checks that the badge is actually served).
  */
-async function postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeEmbed, complianceScore) {
+async function postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeOrgSlug, complianceScore) {
     try {
-        const body = buildSummaryBody(result, repo, apiUrl, badgeEmbed, complianceScore);
+        const body = buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore);
         // Find existing Nomus comment
-        const { data: comments } = await octokit.rest.issues.listComments({
+        const comments = await octokit.paginate(octokit.rest.issues.listComments, {
             ...repo,
             issue_number: prNumber,
             per_page: 100,
@@ -274022,7 +274224,7 @@ async function postSummaryComment(result, octokit, repo, apiUrl, prNumber, badge
         warning(`Failed to post summary comment: ${err instanceof Error ? err.message : String(err)}`);
     }
 }
-function buildSummaryBody(result, repo, apiUrl, badgeEmbed, complianceScore) {
+function buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore) {
     const { counts, status, findings } = result;
     const statusIcon = status === 'pass' ? '✅' : '❌';
     const statusText = status === 'pass' ? 'PASSED' : 'FAILED';
@@ -274045,14 +274247,13 @@ function buildSummaryBody(result, repo, apiUrl, badgeEmbed, complianceScore) {
     body += `| **Total** | **${counts.total}** |\n\n`;
     // Files scanned
     body += `📁 ${result.fileCount} files scanned · ${result.importCount} AI SDK imports detected\n\n`;
-    // Top findings (max 10)
+    // Top findings (max 10), most severe first
     if (findings.length > 0) {
         body += `### Applicable Obligations\n\n`;
-        const top = findings.slice(0, 10);
+        const top = bySeverity(findings).slice(0, 10);
         for (const f of top) {
             const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
-            const relPath = (0,external_node_path_namespaceObject.relative)(process.cwd(), f.file).replace(/\\/g, '/');
-            body += `${icon} **${f.rule.ruleKey}** — \`${relPath}:${f.line}\`\n`;
+            body += `${icon} **${f.rule.ruleKey}** — \`${toRepoPath(f.file)}:${f.line}\`\n`;
             body += `   ${f.rule.humanSummary}\n\n`;
         }
         if (findings.length > 10) {
@@ -274060,12 +274261,13 @@ function buildSummaryBody(result, repo, apiUrl, badgeEmbed, complianceScore) {
         }
     }
     // Badge
-    if (badgeEmbed) {
+    if (badgeOrgSlug) {
+        const slug = encodeURIComponent(badgeOrgSlug);
         body += `---\n`;
-        body += `[![Nomus Regulatory](${apiUrl}/api/v1/badge/${repo.owner}/svg)](${apiUrl}/api/v1/badge/${repo.owner})\n\n`;
+        body += `[![Nomus Regulatory](${apiUrl}/api/v1/badge/${slug}/svg)](${apiUrl}/api/v1/badge/${slug})\n\n`;
     }
     body += `---\n`;
-    body += `*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*\n`;
+    body += `${DISCLAIMER}\n`;
     return body;
 }
 
@@ -274103,11 +274305,10 @@ async function createCheckRun(result, octokit, repo, sha, complianceScore) {
             '',
             '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*',
         ].join('\n');
-        // GitHub limits annotations to 50 per API call
-        const annotations = findings.slice(0, 50).map((f) => {
-            const relPath = (0,external_node_path_namespaceObject.relative)(process.cwd(), f.file).replace(/\\/g, '/');
+        // GitHub limits annotations to 50 per API call: annotate the most severe.
+        const annotations = bySeverity(findings).slice(0, 50).map((f) => {
             return {
-                path: relPath,
+                path: toRepoPath(f.file),
                 start_line: f.line,
                 end_line: f.line,
                 annotation_level: mapSeverityToAnnotation(f.rule.severity),
@@ -274154,6 +274355,7 @@ function mapSeverityToAnnotation(severity) {
 
 
 
+
 async function run() {
     try {
         // Read inputs
@@ -274164,6 +274366,7 @@ async function run() {
         const uploadSarifEnabled = getBooleanInput('upload-sarif');
         const postPrComment = getBooleanInput('post-pr-comment');
         const badgeEmbed = getBooleanInput('badge-embed');
+        const badgeOrg = getInput('badge-org');
         // GitHub context
         const { /* context */ "_": context } = github_namespaceObject;
         const token = getInput('github-token') || process.env.GITHUB_TOKEN || '';
@@ -274171,6 +274374,10 @@ async function run() {
         const repo = context.repo;
         const sha = context.sha;
         const prNumber = context.payload.pull_request?.number;
+        // On pull_request events context.sha is the synthetic merge commit. Check
+        // runs and review comments must target the PR head commit to show up on
+        // the PR (GitHub rejects review comments on a commit outside the PR).
+        const headSha = context.payload.pull_request?.head?.sha ?? sha;
         info('🛡️  Nomus Regulatory Scan');
         info(`   Repository: ${repo.owner}/${repo.repo}`);
         info(`   Commit: ${sha.slice(0, 8)}`);
@@ -274194,11 +274401,11 @@ async function run() {
         setOutput('low-count', result.counts.low);
         setOutput('status', result.status);
         // Upload findings to Nomus API
-        if (result.findings.length > 0) {
-            await uploadFindings(result, apiKey, apiUrl, repo, prNumber, sha);
-        }
+        const uploaded = result.findings.length > 0
+            ? await uploadFindings(result, apiKey, apiUrl, repo, prNumber, headSha)
+            : true;
         // Fetch compliance score (reflects uploaded findings + existing org findings)
-        const complianceScore = await fetchComplianceScore(apiKey, apiUrl, result);
+        const complianceScore = await fetchComplianceScore(apiKey, apiUrl, result, uploaded);
         setOutput('compliance-score', complianceScore.score);
         setOutput('compliance-label', complianceScore.label);
         info(`   Regulatory exposure score: ${complianceScore.score}% (${complianceScore.label})`);
@@ -274206,17 +274413,18 @@ async function run() {
         if (octokit) {
             // SARIF upload for Code Scanning tab
             if (uploadSarifEnabled && result.findings.length > 0) {
-                const sarifPath = await uploadSarif(result, octokit, repo, sha, workingDir, context.ref);
+                const sarifPath = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
                 if (sarifPath)
                     setOutput('sarif-file', sarifPath);
             }
             // PR comments (only on pull requests)
             if (postPrComment && prNumber) {
-                await postInlineComments(result, octokit, repo, prNumber, sha);
-                await postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeEmbed, complianceScore);
+                await postInlineComments(result, octokit, repo, prNumber, headSha);
+                const badgeSlug = badgeEmbed ? await resolveBadgeSlug(apiUrl, badgeOrg || repo.owner) : null;
+                await postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeSlug, complianceScore);
             }
             // Check Run
-            await createCheckRun(result, octokit, repo, sha, complianceScore);
+            await createCheckRun(result, octokit, repo, headSha, complianceScore);
         }
         else {
             warning('No github-token provided — skipping PR comments, SARIF upload, and check run.');
@@ -274239,13 +274447,16 @@ async function run() {
     }
 }
 /**
- * Fetch the compliance score from the Nomus API, then apply local scan
- * finding deductions to ensure the reported score reflects ALL known issues
- * (same logic as the VS Code extension).
+ * Fetch the compliance score from the Nomus API.
+ *
+ * When this run's findings were uploaded, the engine's score already counts
+ * them (it deducts every open finding), so it is used as is. Only when the
+ * upload failed are this scan's findings deducted locally — deducting them on
+ * top of an engine score that includes them counted every finding twice.
  *
  * Severity weights: critical = -5, high = -3, medium = -1, low = 0.
  */
-async function fetchComplianceScore(apiKey, apiUrl, result) {
+async function fetchComplianceScore(apiKey, apiUrl, result, findingsUploaded) {
     let backendScore = 100;
     try {
         const resp = await lib_axios.get(`${apiUrl}/api/v1/compliance/score`, {
@@ -274258,9 +274469,10 @@ async function fetchComplianceScore(apiKey, apiUrl, result) {
         warning('Could not fetch compliance score from Nomus API — computing from scan findings only');
     }
     // Apply local finding deductions (same weights as engine + VS Code extension)
-    const deductions = result.counts.critical * 5 +
-        result.counts.high * 3 +
-        result.counts.medium * 1;
+    const deductions = findingsUploaded ? 0 :
+        result.counts.critical * 5 +
+            result.counts.high * 3 +
+            result.counts.medium * 1;
     const score = Math.max(0, Math.min(100, backendScore - deductions));
     const label = score >= 90 ? 'Excellent'
         : score >= 80 ? 'Good'
@@ -274269,32 +274481,61 @@ async function fetchComplianceScore(apiKey, apiUrl, result) {
                     : 'Critical';
     return { score, label };
 }
+/**
+ * Store this scan's findings in Nomus (dashboard Scans page). Paths are sent
+ * repository-relative, optional fields are omitted rather than sent as null,
+ * and a failure is reported with its cause. Returns whether the upload stored
+ * the findings.
+ */
 async function uploadFindings(result, apiKey, apiUrl, repo, prNumber, sha) {
     try {
-        await lib_axios.post(`${apiUrl}/api/v1/scan/findings`, {
+        const resp = await lib_axios.post(`${apiUrl}/api/v1/scan/findings`, {
+            repo: `${repo.owner}/${repo.repo}`,
+            commitSha: sha,
+            ...(prNumber ? { prNumber } : {}),
             findings: result.findings.map((f) => ({
-                repo: `${repo.owner}/${repo.repo}`,
-                prNumber: prNumber ?? null,
-                commitSha: sha,
-                file: f.file,
+                file: toRepoPath(f.file),
                 line: f.line,
                 ruleKey: f.rule.ruleKey,
                 severity: f.rule.severity,
                 effect: f.rule.effect,
                 sdk: f.sdk,
                 summary: f.rule.humanSummary,
-                suggestion: f.suggestion ?? null,
-                detectorSource: f.detectorSource ?? null,
-                legalReference: f.rule.legalReference ?? null,
+                ...(f.suggestion ? { suggestion: f.suggestion } : {}),
+                ...(f.detectorSource ? { detectorSource: f.detectorSource } : {}),
+                ...(f.rule.legalReference ? { legalReference: f.rule.legalReference } : {}),
             })),
         }, {
             headers: { Authorization: `Bearer ${apiKey}` },
             timeout: 15000,
         });
-        info('   Obligations uploaded to Nomus dashboard');
+        const created = resp.data?.created ?? 0;
+        const updated = resp.data?.updated ?? 0;
+        info(`   Obligations stored in Nomus: ${created} new, ${updated} updated`);
+        return true;
+    }
+    catch (err) {
+        const status = err.response?.status;
+        const detail = status
+            ? `HTTP ${status} ${JSON.stringify(err.response?.data ?? '').slice(0, 300)}`
+            : (err instanceof Error ? err.message : String(err));
+        warning(`Failed to upload findings to Nomus API (non-fatal): ${detail}`);
+        return false;
+    }
+}
+/**
+ * The Nomus organization slug whose public badge can be embedded, or null.
+ * The badge is served only for an existing organization with a public badge;
+ * embedding anything else renders a broken image in the PR comment.
+ */
+async function resolveBadgeSlug(apiUrl, slug) {
+    try {
+        await lib_axios.get(`${apiUrl}/api/v1/badge/${encodeURIComponent(slug)}`, { timeout: 10000 });
+        return slug;
     }
     catch {
-        warning('Failed to upload findings to Nomus API (non-fatal)');
+        info(`   No public Nomus badge for organization "${slug}" — badge not embedded (set badge-org to your Nomus organization slug and enable its public badge)`);
+        return null;
     }
 }
 run();

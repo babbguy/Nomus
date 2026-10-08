@@ -26,7 +26,7 @@ describe('postSummaryComment', () => {
     });
     const spy = vi.spyOn(octokit.rest.issues, 'createComment');
 
-    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, null);
 
     expect(spy).toHaveBeenCalledOnce();
     const body = spy.mock.calls[0][0].body;
@@ -44,7 +44,7 @@ describe('postSummaryComment', () => {
     const updateSpy = vi.spyOn(octokit.rest.issues, 'updateComment');
     const createSpy = vi.spyOn(octokit.rest.issues, 'createComment');
 
-    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, null);
 
     expect(updateSpy).toHaveBeenCalledOnce();
     expect(updateSpy.mock.calls[0][0].comment_id).toBe(99);
@@ -58,7 +58,7 @@ describe('postSummaryComment', () => {
     });
     const spy = vi.spyOn(octokit.rest.issues, 'createComment');
 
-    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, null);
 
     expect(spy.mock.calls[0][0].body).toContain('FAILED');
   });
@@ -69,26 +69,26 @@ describe('postSummaryComment', () => {
     });
     const spy = vi.spyOn(octokit.rest.issues, 'createComment');
 
-    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, null);
 
     const body = spy.mock.calls[0][0].body;
     expect(body).toContain('Critical');
     expect(body).toContain('**10**');
   });
 
-  it('embeds badge when badgeEmbed is true', async () => {
+  it('embeds the badge for the given organization slug', async () => {
     const spy = vi.spyOn(octokit.rest.issues, 'createComment');
 
-    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, true);
+    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, 'testorg');
 
     const body = spy.mock.calls[0][0].body;
     expect(body).toContain('localhost:3100/api/v1/badge/testorg/svg');
   });
 
-  it('does not embed badge when badgeEmbed is false', async () => {
+  it('does not embed a badge without an organization slug', async () => {
     const spy = vi.spyOn(octokit.rest.issues, 'createComment');
 
-    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, null);
 
     const body = spy.mock.calls[0][0].body;
     expect(body).not.toContain('badge');
@@ -101,7 +101,7 @@ describe('postSummaryComment', () => {
     const result = makeScanResult({ findings, counts: { critical: 0, high: 15, medium: 0, low: 0, total: 15 } });
     const spy = vi.spyOn(octokit.rest.issues, 'createComment');
 
-    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(result, octokit as any, repo, 'http://localhost:3100', 42, null);
 
     const body = spy.mock.calls[0][0].body;
     expect(body).toContain('rule.0');
@@ -112,7 +112,7 @@ describe('postSummaryComment', () => {
 
   it('includes legal disclaimer', async () => {
     const spy = vi.spyOn(octokit.rest.issues, 'createComment');
-    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, null);
 
     expect(spy.mock.calls[0][0].body).toContain('does not provide legal advice');
   });
@@ -120,7 +120,7 @@ describe('postSummaryComment', () => {
   it('handles API errors gracefully', async () => {
     octokit.rest.issues.listComments = async () => { throw new Error('forbidden'); };
 
-    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, false);
+    await postSummaryComment(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, null);
 
     expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('forbidden'));
   });
@@ -138,7 +138,7 @@ describe('postInlineComments', () => {
 
   it('does nothing when no findings', async () => {
     const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
-    await postInlineComments(makeScanResult(), octokit as any, repo, 'http://localhost:3100', 42, sha);
+    await postInlineComments(makeScanResult(), octokit as any, repo, 42, sha);
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -149,7 +149,7 @@ describe('postInlineComments', () => {
     });
     const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
 
-    await postInlineComments(result, octokit as any, repo, 'http://localhost:3100', 42, sha);
+    await postInlineComments(result, octokit as any, repo, 42, sha);
 
     expect(spy).toHaveBeenCalledOnce();
     const comments = spy.mock.calls[0][0].comments;
@@ -165,7 +165,7 @@ describe('postInlineComments', () => {
     });
     const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
 
-    await postInlineComments(result, octokit as any, repo, 'http://localhost:3100', 42, sha);
+    await postInlineComments(result, octokit as any, repo, 42, sha);
 
     // Should not post because file isn't in diff
     expect(spy).not.toHaveBeenCalled();
@@ -178,7 +178,7 @@ describe('postInlineComments', () => {
     const result = makeScanResult({ findings });
     const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
 
-    await postInlineComments(result, octokit as any, repo, 'http://localhost:3100', 42, sha);
+    await postInlineComments(result, octokit as any, repo, 42, sha);
 
     const comments = spy.mock.calls[0][0].comments;
     expect(comments.length).toBeLessThanOrEqual(25);
@@ -190,7 +190,7 @@ describe('postInlineComments', () => {
     });
     const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
 
-    await postInlineComments(result, octokit as any, repo, 'http://localhost:3100', 42, sha);
+    await postInlineComments(result, octokit as any, repo, 42, sha);
 
     const body = spy.mock.calls[0][0].comments[0].body;
     expect(body).toContain('CRITICAL');
@@ -206,7 +206,7 @@ describe('postInlineComments', () => {
     });
     const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
 
-    await postInlineComments(result, octokit as any, repo, 'http://localhost:3100', 42, sha);
+    await postInlineComments(result, octokit as any, repo, 42, sha);
 
     const body = spy.mock.calls[0][0].comments[0].body;
     expect(body).toContain('Suggested fix');
@@ -217,7 +217,7 @@ describe('postInlineComments', () => {
     octokit.rest.pulls.listFiles = async () => { throw new Error('rate limit'); };
     const result = makeScanResult({ findings: [makeFinding()] });
 
-    await postInlineComments(result, octokit as any, repo, 'http://localhost:3100', 42, sha);
+    await postInlineComments(result, octokit as any, repo, 42, sha);
 
     expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('rate limit'));
   });

@@ -34,9 +34,13 @@ inputs:
     required: false
     default: 'true'
   badge-embed:
-    description: 'Include Nomus regulatory badge in PR summary comment'
+    description: 'Include Nomus regulatory badge in PR summary comment (only when the organization has a public badge)'
     required: false
     default: 'true'
+  badge-org:
+    description: 'Slug of your Nomus organization, used for the badge. Defaults to the repository owner.'
+    required: false
+    default: ''
 
 outputs:
   total-findings:
