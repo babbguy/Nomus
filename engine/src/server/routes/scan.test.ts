@@ -108,3 +108,37 @@ describe('POST /api/v1/scan/findings', () => {
     expect(after).toBe(Math.max(0, before - 5));
   });
 });
+
+describe('GET /api/v1/admin/scans/summary', () => {
+  it('counts every organization\'s findings, with the organization named', async () => {
+    const { adminRoutes } = await import('./admin.js');
+    const adminApp = new Hono<AppEnv>();
+    adminApp.route('/api/v1/admin', adminRoutes);
+    const ADMIN = 'nk_test_scan_admin_key_000000000000';
+    const db = getDb();
+    db.insert(apiKeys).values({
+      id: randomUUID(), orgId: randomUUIDOrg(), keyHash: createHash('sha256').update(ADMIN).digest('hex'),
+      keyPrefix: ADMIN.slice(0, 12), label: 'admin', scopes: JSON.stringify(['admin']), rateLimitRpm: 100000,
+      isActive: true, createdAt: new Date().toISOString(),
+    }).run();
+
+    const res = await adminApp.request('/api/v1/admin/scans/summary', { headers: { Authorization: `Bearer ${ADMIN}` } });
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    const own = db.select().from(scanFindings).all();
+    expect(body.totals.totalFindings).toBe(own.length);
+    expect(body.totals.openFindings).toBe(own.filter((f) => f.status === 'open').length);
+    expect(body.totals.criticalOpen).toBe(own.filter((f) => f.status === 'open' && f.severity === 'critical').length);
+    expect(body.repos.find((r: any) => r.repo === 'acme/rescan').orgName).toBe('Scan Upload Org');
+  });
+});
+
+/** An organization for the admin key (any org: admin scope is platform-wide). */
+function randomUUIDOrg(): string {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  getDb().insert(organizations).values({
+    id, name: 'Admin Org', slug: `admin-${id.slice(0, 8)}`, jurisdictionAccess: '[]', isActive: true, createdAt: now, updatedAt: now,
+  }).run();
+  return id;
+}

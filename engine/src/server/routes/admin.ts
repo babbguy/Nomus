@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
-import { regulatorySources, policyRules, stagedContent } from '../../db/schema.js';
+import { regulatorySources, policyRules, stagedContent, scanFindings, organizations } from '../../db/schema.js';
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { runPipeline } from '../../hunter/pipeline.js';
@@ -260,6 +260,58 @@ adminRoutes.post('/rotate-keys', (c) => {
   // In production, implement key versioning with kid
   const result = initSigningKeys();
   return c.json({ message: 'Signing keys rotated', publicKey: result.publicKey });
+});
+
+// ─── Scan findings across organizations ───────────────────────
+// The admin Scans page used the org-scoped /scan endpoints, so a platform
+// admin saw only the admin organization's (usually zero) findings under the
+// title "Scan Administration", and its "Critical" card counted only the 20
+// most recent findings.
+adminRoutes.get('/scans/summary', (c) => {
+  const db = getDb();
+  const repos = db.select({
+    orgId: scanFindings.orgId,
+    orgName: organizations.name,
+    repo: scanFindings.repo,
+    totalFindings: sql<number>`count(*)`,
+    openFindings: sql<number>`sum(case when ${scanFindings.status} = 'open' then 1 else 0 end)`,
+    criticalOpen: sql<number>`sum(case when ${scanFindings.status} = 'open' and ${scanFindings.severity} = 'critical' then 1 else 0 end)`,
+    lastScanned: sql<string>`max(${scanFindings.scannedAt})`,
+  })
+    .from(scanFindings)
+    .leftJoin(organizations, eq(scanFindings.orgId, organizations.id))
+    .groupBy(scanFindings.orgId, scanFindings.repo)
+    .orderBy(desc(sql`max(${scanFindings.scannedAt})`))
+    .all();
+
+  const recentFindings = db.select({
+    id: scanFindings.id,
+    orgName: organizations.name,
+    repo: scanFindings.repo,
+    filePath: scanFindings.filePath,
+    lineNumber: scanFindings.lineNumber,
+    ruleKey: scanFindings.ruleKey,
+    severity: scanFindings.severity,
+    scannedAt: scanFindings.scannedAt,
+  })
+    .from(scanFindings)
+    .leftJoin(organizations, eq(scanFindings.orgId, organizations.id))
+    .where(eq(scanFindings.status, 'open'))
+    .orderBy(desc(scanFindings.scannedAt))
+    .limit(20)
+    .all();
+
+  return c.json({
+    totals: {
+      organizations: new Set(repos.map((r) => r.orgId)).size,
+      repos: repos.length,
+      totalFindings: repos.reduce((s, r) => s + r.totalFindings, 0),
+      openFindings: repos.reduce((s, r) => s + (r.openFindings ?? 0), 0),
+      criticalOpen: repos.reduce((s, r) => s + (r.criticalOpen ?? 0), 0),
+    },
+    repos,
+    recentFindings,
+  });
 });
 
 // ─── Staged Content Management ─────────────────────────────────
