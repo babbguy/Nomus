@@ -70,6 +70,19 @@ const IMPLIED_DATA_TYPES: Record<string, string> = {
   handles_financial: 'financial',
 };
 
+/**
+ * Condition keys that describe a rule for people rather than constrain it.
+ * Rules extracted by the regulation pipeline carry the addressee ("who") and
+ * free-text applicability ("condition") alongside the machine conditions; no
+ * request context can equal that prose, so treating them as constraints made
+ * every pipeline-extracted rule unmatchable in /evaluate and /simulate.
+ */
+const DESCRIPTIVE_CONDITION_KEYS = new Set(['who', 'condition']);
+
+export function isDescriptiveConditionKey(key: string): boolean {
+  return DESCRIPTIVE_CONDITION_KEYS.has(key);
+}
+
 /** `ai_operation` is the generic action: any AI capability satisfies it. */
 const GENERIC_AI_ACTION = 'ai_operation';
 
@@ -129,7 +142,7 @@ export function matchRuleToProfile(
   }
 
   const entries = Object.entries(conditions).filter(
-    (e): e is [string, string] => typeof e[1] === 'string' && e[1].length > 0,
+    (e): e is [string, string] => typeof e[1] === 'string' && e[1].length > 0 && !isDescriptiveConditionKey(e[0]),
   );
   if (entries.length === 0) return ['general_applicability'];
 

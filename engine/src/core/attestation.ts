@@ -6,10 +6,13 @@ import { signData } from './signing.js';
 import { canonicalJSON } from './policy-compiler.js';
 import { ATTESTATION_SCHEMA_VERSION } from './attestation-lifecycle.js';
 import type { PolicyConditions } from '@nomus/shared';
-import { normalizeDataType, normalizeSector } from './applicability.js';
+import { isDescriptiveConditionKey, normalizeDataType, normalizeSector } from './applicability.js';
 
 function conditionHolds(key: string, required: string, actual: string | undefined): boolean {
   if (actual === undefined) return false;
+  // `ai_operation` is the generic action (the regulation pipeline extracts
+  // every rule with it): it covers any AI action, as it does in /simulate.
+  if (key === 'action' && required === 'ai_operation') return true;
   if (key === 'sector') return normalizeSector(actual) === normalizeSector(required);
   if (key === 'data_type') return normalizeDataType(actual) === normalizeDataType(required);
   return actual === required;
@@ -81,6 +84,7 @@ export function evaluateCompliance(
     // Check if the action context matches the rule conditions. Sector and
     // data type accept the same aliases as /simulate (fintech, phi, pii, ...).
     for (const [key, value] of Object.entries(conditions)) {
+      if (isDescriptiveConditionKey(key)) continue;
       if (value && !conditionHolds(key, value, actionContext[key])) {
         matched = false;
         break;

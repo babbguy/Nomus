@@ -158,3 +158,20 @@ describe('core/applicability', () => {
     expect(matchRuleToProfile({}, null, profile)).toEqual(['general_applicability']);
   });
 });
+
+describe('core/applicability — pipeline-extracted rules', () => {
+  // Shape written by the regulation pipeline (hunter/pipeline.ts).
+  const extracted = {
+    action: 'ai_operation', region: 'US-IL',
+    who: 'employers using AI analysis of video interviews', condition: 'positions based in Illinois',
+  };
+
+  it('ignores the descriptive who/condition keys', () => {
+    expect(matchRuleToProfile(extracted, '["all"]', { capabilities: ['text_generation'], dataTypes: [], market: 'US-IL' }))
+      .toEqual(['capability: ai_operation', 'region: US-IL']);
+  });
+
+  it('still requires the machine conditions', () => {
+    expect(matchRuleToProfile(extracted, '["all"]', { capabilities: ['text_generation'], dataTypes: [], market: 'EU' })).toBeNull();
+  });
+});
