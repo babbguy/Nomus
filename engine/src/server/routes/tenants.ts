@@ -145,7 +145,7 @@ tenantRoutes.post('/:id/api-keys', async (c) => {
 
   logger.info({ orgId, keyId: result.id, scopes: result.scopes, actor: actorOf(c) }, 'API key created');
 
-  // Return the raw key ONCE — it can never be retrieved again
+  // Return the raw key ONCE â€” it can never be retrieved again
   return c.json({
     id: result.id,
     key: result.key,
@@ -153,7 +153,7 @@ tenantRoutes.post('/:id/api-keys', async (c) => {
     label: result.label,
     scopes: result.scopes,
     rateLimitRpm: result.rateLimitRpm,
-    message: 'Store this key securely — it cannot be retrieved again.',
+    message: 'Store this key securely â€” it cannot be retrieved again.',
   }, 201);
 });
 
