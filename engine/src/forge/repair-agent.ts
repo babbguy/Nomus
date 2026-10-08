@@ -494,7 +494,6 @@ async function notifyUnrepairable(job: ForgeJob): Promise<void> {
 
   // SSE event for dashboard
   broadcastEvent({
-    id: randomUUID(),
     type: 'forge.escalation',
     jurisdiction: job.jurisdiction,
     data: {

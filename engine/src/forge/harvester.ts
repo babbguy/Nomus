@@ -593,7 +593,6 @@ async function harvestMultiPage(
       }
 
       broadcastEvent({
-        id: randomUUID(),
         type: 'forge.progress',
         data: {
           phase: 'harvest',
@@ -701,7 +700,6 @@ async function harvestGitHubRepo(
       }
 
       broadcastEvent({
-        id: randomUUID(),
         type: 'forge.progress',
         data: {
           phase: 'harvest',
@@ -874,7 +872,6 @@ export async function harvestAll(
     onProgress?.(i + 1, sources.length, result);
 
     broadcastEvent({
-      id: randomUUID(),
       type: 'forge.progress',
       data: {
         phase: 'harvest',

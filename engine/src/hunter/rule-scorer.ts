@@ -100,7 +100,6 @@ export async function scoreRules(
 
     // Broadcast scoring progress
     broadcastEvent({
-      id: randomUUID(),
       type: 'pipeline.progress',
       data: {
         sourceId: context?.sourceId,

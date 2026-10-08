@@ -68,7 +68,12 @@ export type BroadcastEventType = SSEEventType | OperationalSSEEventType;
  * `type` before reading `data`.
  */
 export interface BroadcastEvent {
-  id: string;
+  /**
+   * SSE event id (the client's Last-Event-ID). Set only for stored policy
+   * events, where it is the event's sequence number; every other event is
+   * ephemeral and carries no id.
+   */
+  id?: string;
   type: BroadcastEventType;
   data: unknown;
   jurisdiction: string;

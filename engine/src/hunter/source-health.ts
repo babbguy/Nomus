@@ -37,7 +37,6 @@ export function recordScrapeFailure(sourceId: string, error: string): void {
   // At threshold: recommend manual upload via SSE
   if (failures >= UPLOAD_RECOMMEND_THRESHOLD && failures < AUTO_DEACTIVATE_THRESHOLD) {
     broadcastEvent({
-      id: randomUUID(),
       type: 'source.failing',
       data: {
         sourceId,
@@ -70,7 +69,6 @@ export function recordScrapeFailure(sourceId: string, error: string): void {
     }).run();
 
     broadcastEvent({
-      id: randomUUID(),
       type: 'source.deactivated',
       data: {
         sourceId,
