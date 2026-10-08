@@ -56,7 +56,8 @@ export default function UserList() {
     setLoading(true);
     setLoadError(null);
     try {
-      const params: Record<string, string> = {};
+      // The API pages at 100 by default; ask for its maximum.
+      const params: Record<string, string> = { limit: '500' };
       if (filterOrg) params.orgId = filterOrg;
       const { data } = await api.get('/users', { params });
       setUsers(data.users);

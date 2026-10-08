@@ -31,7 +31,8 @@ export default function TenantList() {
   async function loadOrgs() {
     setLoadError(null);
     try {
-      const { data } = await api.get('/tenants');
+      // The API pages at 100 by default; ask for its maximum.
+      const { data } = await api.get('/tenants', { params: { limit: 500 } });
       setOrgs(data.tenants);
     } catch (err) {
       setLoadError(apiErrorMessage(err, 'Failed to load tenants'));

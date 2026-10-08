@@ -20,9 +20,11 @@ tenantRoutes.get('/', (c) => {
   const db = getDb();
   const limit = Math.min(safeParseInt(c.req.query('limit'), 100), 500);
   const offset = safeParseInt(c.req.query('offset'), 0);
-  const orgs = db.select().from(organizations).limit(limit).offset(offset).all();
+  const orgs = db.select().from(organizations).orderBy(organizations.name).limit(limit).offset(offset).all();
+  const total = db.select({ n: sql<number>`count(*)` }).from(organizations).get()?.n ?? orgs.length;
   return c.json({
     count: orgs.length,
+    total,
     tenants: orgs.map((o) => {
       let jurisdictionAccess: unknown;
       try { jurisdictionAccess = JSON.parse(o.jurisdictionAccess); } catch { jurisdictionAccess = []; }

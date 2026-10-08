@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { randomUUID, createHash } from 'node:crypto';
 import bcrypt from 'bcrypt';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
 import { users, organizations } from '../../db/schema.js';
 import { requireSession } from '../middleware/auth.js';
 import { env } from '../../config/env.js';
-import { safeJson } from '../utils.js';
+import { safeJson, safeParseInt } from '../utils.js';
 import { logger } from '../../logger.js';
 import { getResendApiKey } from '../../services/notifications.js';
 
@@ -38,8 +38,8 @@ userRoutes.use('*', requireSession('platform_admin'));
 // List all users (with optional org filter)
 userRoutes.get('/', (c) => {
   const db = getDb();
-  const limit = Math.min(parseInt(c.req.query('limit') || '100'), 500);
-  const offset = parseInt(c.req.query('offset') || '0');
+  const limit = Math.min(Math.max(safeParseInt(c.req.query('limit'), 100), 1), 500);
+  const offset = Math.max(safeParseInt(c.req.query('offset'), 0), 0);
   const orgFilter = c.req.query('orgId');
 
   const conditions = orgFilter ? eq(users.orgId, orgFilter) : undefined;
@@ -76,7 +76,9 @@ userRoutes.get('/', (c) => {
     orgSlug: orgMap.get(u.orgId)?.slug ?? '',
   }));
 
-  return c.json({ count: enriched.length, users: enriched });
+  // total: every matching user (count is this page).
+  const total = db.select({ n: sql<number>`count(*)` }).from(users).where(conditions).get()?.n ?? enriched.length;
+  return c.json({ count: enriched.length, total, users: enriched });
 });
 
 // Create / invite user
