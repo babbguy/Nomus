@@ -20,6 +20,7 @@ import { apiKeys, organizations, scanFindings } from '../../db/schema.js';
 import type { AppEnv } from '../app.js';
 import { scanRoutes } from './scan.js';
 import { compliancePostureRoutes } from './compliance-posture.js';
+import { adminRoutes } from './admin.js';
 
 const app = new Hono<AppEnv>();
 app.route('/api/v1/scan', scanRoutes);
@@ -111,7 +112,6 @@ describe('POST /api/v1/scan/findings', () => {
 
 describe('GET /api/v1/admin/scans/summary', () => {
   it('counts every organization\'s findings, with the organization named', async () => {
-    const { adminRoutes } = await import('./admin.js');
     const adminApp = new Hono<AppEnv>();
     adminApp.route('/api/v1/admin', adminRoutes);
     const ADMIN = 'nk_test_scan_admin_key_000000000000';

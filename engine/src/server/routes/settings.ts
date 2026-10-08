@@ -355,7 +355,13 @@ settingsRoutes.post('/notifications/test', async (c) => {
   }
 
   const ok = Object.values(results).every(Boolean);
-  return c.json({ ok, results });
+  // Name the failed channels (the page printed "Test failed: undefined").
+  const failed = Object.entries(results).filter(([, sent]) => !sent).map(([ch]) => ch);
+  return c.json({
+    ok,
+    results,
+    ...(ok ? {} : { error: `Sending failed for: ${failed.join(', ')}. Check the provider settings and the engine log.` }),
+  });
 });
 
 // ─── Helpers ─────────────────────────────────────────────────

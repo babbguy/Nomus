@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Cpu, RefreshCw, Check, X, Eye, EyeOff } from 'lucide-react';
-import { apiErrorMessage } from '../../lib/errors';
+import { apiErrorWithDetails } from '../../lib/errors';
 import api from '../../api/client';
 
 interface LLMConfig {
@@ -32,14 +32,16 @@ export default function LLMSettings() {
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [message, setMessage] = useState('');
+  const [message, setMessageState] = useState('');
+  const [messageIsError, setMessageIsError] = useState(false);
+  const setMessage = (text: string, isError = false) => { setMessageState(text); setMessageIsError(isError); };
 
   const loadConfig = useCallback(async () => {
     try {
       const { data } = await api.get('/settings/llm');
       setConfig(data);
     } catch (err) {
-      setMessage(apiErrorMessage(err, 'Failed to load settings'));
+      setMessage(apiErrorWithDetails(err, 'Failed to load settings'), true);
     } finally {
       setLoading(false);
     }
@@ -73,7 +75,7 @@ export default function LLMSettings() {
       setMessage('Settings saved');
       loadConfig();
     } catch (err) {
-      setMessage(apiErrorMessage(err, 'Failed to save'));
+      setMessage(apiErrorWithDetails(err, 'Failed to save'), true);
     } finally {
       setSaving(false);
     }
@@ -252,7 +254,7 @@ export default function LLMSettings() {
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
         {message && (
-          <span className={`text-sm ${message.includes('Failed') ? 'text-danger' : 'text-success'}`}>
+          <span className={`text-sm ${messageIsError ? 'text-danger' : 'text-success'}`} role={messageIsError ? 'alert' : 'status'}>
             {message}
           </span>
         )}

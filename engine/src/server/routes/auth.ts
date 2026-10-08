@@ -8,6 +8,7 @@ import { getDb } from '../../db/client.js';
 import { users, sessions, organizations, passwordResetTokens } from '../../db/schema.js';
 import { safeJson } from '../utils.js';
 import { logger } from '../../logger.js';
+import { getResendApiKey } from '../../services/notifications.js';
 
 export const authRoutes = new Hono();
 
@@ -318,12 +319,12 @@ authRoutes.post('/forgot-password', authRateLimit(3), async (c) => {
   const resetUrl = `${appUrl}/reset-password?token=${resetToken}`;
 
   // Send via Resend if configured, otherwise log to console
-  if (config.NOMUS_RESEND_API_KEY) {
+  if (getResendApiKey()) {
     try {
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${config.NOMUS_RESEND_API_KEY}`,
+          Authorization: `Bearer ${getResendApiKey()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
