@@ -103,12 +103,18 @@ This extension is not published to the VS Code Marketplace. Build and install it
 npm install
 npm run build:vscode-extension                   # bundles to packages/vscode-extension/dist
 cd packages/vscode-extension
-npx @vscode/vsce package --no-dependencies       # creates nomus-1.0.0.vsix (vsce is not a repo dependency)
+npm run package                                  # creates nomus-1.0.0.vsix (runs @vscode/vsce via npx)
 code --install-extension nomus-1.0.0.vsix
 ```
 
+You can also install the `.vsix` from VS Code: open the Extensions view, click the `...` menu,
+choose **Install from VSIX...** and pick the file.
+
 1. Start a Nomus engine (see the [deployment guide](../../docs/admin-guide/deployment.md); locally `npm run dev:engine` serves `http://localhost:3100`).
 2. Set `nomus.apiUrl` if your engine is elsewhere, then run **Nomus: Sign In** (or set `nomus.apiKey`).
+   With the Docker Compose setup the engine is `http://localhost:3100` and the dashboard is
+   `http://localhost:8080`; set `nomus.dashboardUrl` to the dashboard URL so **Open Dashboard**
+   goes there (without it the extension assumes the development server on port 5173).
 3. Open a TypeScript, JavaScript, Python, Java or Go file that imports an AI SDK. Nomus scans on open and on save.
 
 Without a key the extension runs in an offline mode: it lists detected AI SDK imports as informational diagnostics but cannot match regulatory rules. If the engine is configured but unreachable, the extension shows an error rather than a clean result.
