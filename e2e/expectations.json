@@ -1,0 +1,112 @@
+{
+  "seed": {
+    "activeRules": 117,
+    "sources": 35,
+    "ruleJurisdictions": [
+      "EU",
+      "US-FED"
+    ]
+  },
+  "org": {
+    "name": "Gate Health Clinics",
+    "slug": "gate-health",
+    "industry": "healthcare",
+    "jurisdictions": [
+      "EU",
+      "US-FED"
+    ],
+    "memberEmail": "member@gate.example.org"
+  },
+  "scanner": {
+    "total": 63,
+    "bySeverity": {
+      "critical": 5,
+      "high": 25,
+      "medium": 30,
+      "low": 3
+    },
+    "rulesByFile": {
+      "app/chatbot.py": [
+        "eu_ai_act.art50.1.chatbot_disclosure",
+        "eu_ai_act.art50.2.synthetic_content_marking",
+        "fda.aiml_samd.gmlp",
+        "fda.aiml_samd.predetermined_change_control",
+        "gdpr.art5.handles_pii",
+        "gdpr.art5.pii_in_ai_pipeline",
+        "gdpr.art5.pii_in_source",
+        "hipaa.164_502.handles_phi",
+        "hipaa.164_502.phi_in_ai_pipeline",
+        "hipaa.164_502.phi_in_source",
+        "iso27001.annex_a.5_1.information_security_policy",
+        "iso27001.annex_a.5_31.legal_statutory_requirements",
+        "iso27001.annex_a.8_11.data_masking",
+        "iso27001.annex_a.8_25.secure_development_lifecycle",
+        "iso27001.annex_a.8_9.configuration_management",
+        "nis2.art21.risk_management",
+        "nist_ai_rmf.govern_1_1.legal_compliance",
+        "nist_ai_rmf.govern_1_2.trustworthy_ai",
+        "samd.iec62304.software_lifecycle",
+        "soc2.cc6_1.access_controls",
+        "soc2.cc6_3.role_based_access",
+        "soc2.cc8_1.change_management",
+        "trism.modelops.inventory",
+        "trism.modelops.lifecycle",
+        "trism.privacy.data_protection"
+      ],
+      "app/triage.py": [
+        "fda.aiml_samd.gmlp",
+        "fda.aiml_samd.predetermined_change_control",
+        "gdpr.art5.handles_pii",
+        "gdpr.art5.pii_in_ai_pipeline",
+        "gdpr.art5.pii_in_source",
+        "iso27001.annex_a.5_1.information_security_policy",
+        "iso27001.annex_a.5_31.legal_statutory_requirements",
+        "iso27001.annex_a.8_11.data_masking",
+        "iso27001.annex_a.8_25.secure_development_lifecycle",
+        "iso27001.annex_a.8_9.configuration_management",
+        "nis2.art21.risk_management",
+        "nist_ai_rmf.govern_1_1.legal_compliance",
+        "nist_ai_rmf.govern_1_2.trustworthy_ai",
+        "samd.iec62304.software_lifecycle",
+        "soc2.cc6_1.access_controls",
+        "soc2.cc8_1.change_management",
+        "trism.modelops.inventory",
+        "trism.modelops.lifecycle",
+        "trism.privacy.data_protection"
+      ],
+      "src/api/chat.ts": [
+        "eu_ai_act.art50.1.chatbot_disclosure",
+        "eu_ai_act.art50.2.synthetic_content_marking",
+        "fda.aiml_samd.gmlp",
+        "fda.aiml_samd.predetermined_change_control",
+        "hipaa.164_502.handles_phi",
+        "hipaa.164_502.phi_in_ai_pipeline",
+        "hipaa.164_502.phi_in_source",
+        "iso27001.annex_a.5_1.information_security_policy",
+        "iso27001.annex_a.5_31.legal_statutory_requirements",
+        "iso27001.annex_a.8_25.secure_development_lifecycle",
+        "iso27001.annex_a.8_9.configuration_management",
+        "nis2.art21.risk_management",
+        "nist_ai_rmf.govern_1_1.legal_compliance",
+        "nist_ai_rmf.govern_1_2.trustworthy_ai",
+        "samd.iec62304.software_lifecycle",
+        "soc2.cc6_3.role_based_access",
+        "soc2.cc8_1.change_management",
+        "trism.modelops.inventory",
+        "trism.modelops.lifecycle"
+      ]
+    },
+    "neverRulePrefixes": [
+      "ferpa.",
+      "glba.",
+      "pci_dss.",
+      "ccpa.",
+      "eu_ai_act.annex_iii",
+      "eu_ai_act.art5.",
+      "dora."
+    ]
+  },
+  "pipeline": {
+    "rulesCreated": 7
+  }
+}

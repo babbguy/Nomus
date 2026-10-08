@@ -1,0 +1,2 @@
+# Fixtures are byte-exact inputs: keep line endings as committed on every OS.
+* -text

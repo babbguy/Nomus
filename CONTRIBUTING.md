@@ -38,6 +38,10 @@ npm run test:extensions
 npm run test:dashboard
 ```
 
+- Run the release gate, `npm run gate` (see [e2e/README.md](e2e/README.md)). It runs the
+  built product end to end and is a required check: a pull request cannot merge until the
+  "Release gate" check passes. When a change legitimately alters its expected results, update
+  `e2e/expectations.json` in the same pull request and explain why.
 - Add or update tests for behavior you change.
 - Keep changes focused; unrelated refactors belong in a separate pull request.
 - If you change `packages/github-action`, rebuild its committed bundle with

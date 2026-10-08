@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Release gate
+- `npm run gate` (`e2e/run-gate.mjs`) runs the built product the way users do and fails on
+  anything a user would notice: the production engine on a fresh database with a deterministic
+  fake LLM, the production dashboard build, the scanner CLI, the GitHub Action bundle against a
+  fake GitHub API, the MCP server over stdio and the VS Code extension in a stub extension host.
+  It checks bring-up and rule integrity, exact scanner findings and exit codes, SARIF validity,
+  Action outputs and second-run updates, MCP tool results, the extension's sign-in and views,
+  `/evaluate`-`/simulate` agreement, attestation lifecycle and offline verification, rule SSE
+  events and replay, the manual-upload pipeline, a Playwright sweep of every dashboard route
+  (console errors, failed calls, broken values, numbers that must agree across pages), server
+  logs and peak memory. See `e2e/README.md`.
+- New required CI check "Release gate" (`.github/workflows/release-gate.yml`) on pull requests
+  to and pushes on `develop` and `main`; screenshots, logs and results are uploaded as an
+  artifact and the PASS/FAIL table is written to the job summary.
+
 ## [1.0.0] - 2026-10-07
 
 Initial public release under the Apache License 2.0.

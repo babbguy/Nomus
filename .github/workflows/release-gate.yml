@@ -1,0 +1,70 @@
+# =============================================================================
+# Nomus — Release gate
+# =============================================================================
+# Builds the product and runs it the way users do (engine on a fresh
+# database, production dashboard build, scanner CLI, GitHub Action bundle, MCP
+# server, VS Code extension) against a deterministic fake LLM and a fake
+# GitHub API. See e2e/README.md. Required check: "Release gate".
+# =============================================================================
+
+name: Release gate
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium (version pinned by package-lock.json)
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Build all workspaces
+        run: npm run build:all
+
+      # The Action runs from the committed bundle, so the gate must test what
+      # ships: the build above must reproduce it exactly.
+      - name: Committed GitHub Action bundle matches the source
+        run: |
+          if ! git diff --quiet -- packages/github-action/dist/index.js; then
+            echo "::error file=packages/github-action/dist/index.js::The committed GitHub Action bundle is out of date. Run npm run build:github-action and commit packages/github-action/dist/index.js."
+            git diff --stat -- packages/github-action/dist/index.js
+            exit 1
+          fi
+
+      - name: Run the release gate
+        run: node e2e/run-gate.mjs --no-build
+
+      - name: Upload screenshots, logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/out/
+            !e2e/out/work/
+          if-no-files-found: warn
+          retention-days: 14
