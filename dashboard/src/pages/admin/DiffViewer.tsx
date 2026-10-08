@@ -301,7 +301,9 @@ export default function DiffViewer() {
               className="px-3 py-1.5 bg-surface border border-border rounded-lg text-sm text-text-primary focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition"
             >
               <option value="">Latest</option>
-              {snapshots.map((snap) => (
+              {/* The oldest snapshot has nothing before it to compare with (the API
+                  answers 400), so it is not offered. Snapshots are newest first. */}
+              {snapshots.slice(0, -1).map((snap) => (
                 <option key={snap.id} value={snap.id}>
                   {formatDateTime(snap.scrapedAt)} ({snap.contentHash.slice(0, 8)})
                 </option>
