@@ -22,6 +22,7 @@ import { initSigningKeys } from '../../core/signing.js';
 import type { AppEnv } from '../app.js';
 import { evaluateRoutes } from './evaluate.js';
 import { auditRoutes } from './audit.js';
+import { simulateRoutes } from './simulate.js';
 
 const app = new Hono<AppEnv>();
 app.route('/api/v1/evaluate', evaluateRoutes);
@@ -112,5 +113,58 @@ describe('POST /api/v1/evaluate — pipeline-extracted rules apply', () => {
     }).run();
     const r = await call('POST', '/api/v1/evaluate', { action: 'high_risk_employment', jurisdiction: 'ZZ', context: { sector: 'hr' } });
     expect(r.json.result).toBe('non_compliant');
+  });
+});
+
+describe('POST /api/v1/evaluate — same applicability as /simulate', () => {
+  const simApp = new Hono<AppEnv>();
+  simApp.route('/api/v1/simulate', simulateRoutes);
+
+  async function sim(method: string, path: string, body?: unknown) {
+    const res = await simApp.request(path, {
+      method,
+      headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return await res.json() as any;
+  }
+
+  it('PHI in an AI call for a healthcare context is non-compliant even without a data_type', async () => {
+    const r = await call('POST', '/api/v1/evaluate', {
+      action: 'phi_in_ai_call', jurisdiction: 'US-FED', context: { sector: 'healthcare' },
+    });
+    expect(r.status).toBe(200);
+    expect(r.json.result).toBe('non_compliant');
+    expect(matched(r.json)).toContain('hipaa.164_502.phi_in_ai_pipeline');
+  });
+
+  it('matches exactly the rules /simulate returns for every capability, market and sector', async () => {
+    const vocab = await sim('GET', '/api/v1/simulate/vocabulary');
+    expect(vocab.capabilities.length).toBeGreaterThan(0);
+    const mismatches: string[] = [];
+    for (const capability of vocab.capabilities as string[]) {
+      for (const market of ['EU', 'US-FED']) {
+        for (const sector of [undefined, 'healthcare']) {
+          const s = await sim('POST', '/api/v1/simulate', {
+            capabilities: [capability], targetMarkets: [market], ...(sector ? { sector } : {}),
+          });
+          const expected = s.markets[market].rules.map((x: any) => x.ruleKey).sort();
+          const e = await call('POST', '/api/v1/evaluate', {
+            action: capability, jurisdiction: market, context: sector ? { region: market, sector } : { region: market },
+          });
+          const actual = matched(e.json).sort();
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            mismatches.push(`${capability}/${market}/${sector ?? '-'}: evaluate=${actual.join(',')} simulate=${expected.join(',')}`);
+          }
+        }
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  it('evaluates INTL rules for every market', async () => {
+    const r = await call('POST', '/api/v1/evaluate', { action: 'ai_operation', jurisdiction: 'EU', context: { region: 'EU' } });
+    const intl = r.json.rulesEvaluated.filter((x: any) => /^(trism|pci_dss|soc2|iso)/.test(x.ruleKey));
+    expect(intl.length).toBeGreaterThan(0);
   });
 });

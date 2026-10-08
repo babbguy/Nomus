@@ -1,3 +1,4 @@
+import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { getCookie } from 'hono/cookie';
 import { HTTPException } from 'hono/http-exception';
@@ -9,6 +10,23 @@ import { recordUsage } from '../../tenant/usage.js';
 import { getDb } from '../../db/client.js';
 import { sessions, users } from '../../db/schema.js';
 import { env } from '../../config/env.js';
+
+export const PASSWORD_CHANGE_REQUIRED_CODE = 'password_change_required';
+
+/**
+ * 403 response for a session whose user still holds a temporary password.
+ * Such a session may only call /auth/me, /auth/force-change-password and
+ * /auth/logout (those routes read the cookie themselves and never pass
+ * through the session middleware). Returned as a response rather than thrown
+ * so the machine-readable `code` reaches the client.
+ */
+export function passwordChangeRequiredResponse(c: Context): Response {
+  return c.json({
+    error: 'Password change required before using this endpoint',
+    status: 403,
+    code: PASSWORD_CHANGE_REQUIRED_CODE,
+  }, 403);
+}
 
 /**
  * API key authentication middleware.
@@ -81,6 +99,10 @@ export function requireSession(requiredRole?: 'platform_admin' | 'member') {
       throw new HTTPException(401, { message: 'User not found' });
     }
 
+    if (user.mustChangePassword) {
+      return passwordChangeRequiredResponse(c);
+    }
+
     if (requiredRole && user.role !== requiredRole && user.role !== 'platform_admin') {
       throw new HTTPException(403, { message: 'Insufficient permissions' });
     }
@@ -120,6 +142,10 @@ export function requireSessionOrApiKey(...requiredScopes: string[]) {
           .get();
 
         if (user) {
+          if (user.mustChangePassword) {
+            return passwordChangeRequiredResponse(c);
+          }
+
           const sessionScopes = [
             'read:policies',
             'stream',

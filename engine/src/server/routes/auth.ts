@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { getDb } from '../../db/client.js';
 import { users, sessions, organizations, passwordResetTokens } from '../../db/schema.js';
 import { safeJson } from '../utils.js';
+import { passwordChangeRequiredResponse } from '../middleware/auth.js';
 import { logger } from '../../logger.js';
 import { getResendApiKey } from '../../services/notifications.js';
 
@@ -247,6 +248,15 @@ authRoutes.patch('/profile', async (c) => {
   if (!session || new Date(session.expiresAt) < new Date()) {
     return c.json({ error: 'Not authenticated' }, 401);
   }
+
+  // A temporary-password session may only set a new password through
+  // /force-change-password; the profile endpoint would let it change the
+  // login email (with the temporary password as step-up) or bypass the flow.
+  const sessionUser = db.select().from(users)
+    .where(and(eq(users.id, session.userId), eq(users.isActive, true)))
+    .get();
+  if (!sessionUser) return c.json({ error: 'User not found' }, 401);
+  if (sessionUser.mustChangePassword) return passwordChangeRequiredResponse(c);
 
   const { data: body, error: jsonError } = await safeJson(c);
   if (jsonError) return c.json({ error: jsonError }, 400);

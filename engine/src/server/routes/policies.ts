@@ -9,7 +9,7 @@ import { compilePolicy } from '../../core/policy-compiler.js';
 import { signData } from '../../core/signing.js';
 import { policyBundleCache } from '../../core/policy-cache.js';
 import { getPublicKey } from '../../core/signing.js';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey } from 'node:crypto';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeParseInt } from '../utils.js';
 
@@ -272,14 +272,23 @@ export const wellKnownRoutes = new Hono();
 
 wellKnownRoutes.get('/.well-known/nomus-keys', (c) => {
   try {
-    const publicKey = getPublicKey();
+    // getPublicKey() is the base64 SPKI DER, the form embedded in evidence
+    // bundles (verification.publicKey). RFC 8037 requires `x` to be the
+    // base64url raw 32-byte key, so derive it from the same key; `kid` stays
+    // the hash of the SPKI base64 so existing references keep matching.
+    const spki = getPublicKey();
+    const { x } = createPublicKey({ key: Buffer.from(spki, 'base64'), format: 'der', type: 'spki' })
+      .export({ format: 'jwk' });
     return c.json({
       keys: [{
         kty: 'OKP',
         crv: 'Ed25519',
-        x: publicKey,
+        x,
         use: 'sig',
-        kid: createHash('sha256').update(publicKey).digest('hex').slice(0, 16),
+        kid: createHash('sha256').update(spki).digest('hex').slice(0, 16),
+        // Non-standard: base64 SPKI DER, byte-identical to verification.publicKey
+        // in evidence bundles, for direct comparison.
+        spki,
       }],
       _notice: 'Nomus is an automated regulatory monitoring tool, not a law firm. Cryptographic signatures verify data integrity only — they do not constitute legal certification or endorsement.',
     });

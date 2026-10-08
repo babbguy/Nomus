@@ -111,6 +111,11 @@ export function effectiveDataTypes(capabilities: string[], dataTypes: string[]):
   return [...out];
 }
 
+/** The data type a capability implies (already normalized), if any. */
+export function impliedDataType(capability: string | undefined): string | undefined {
+  return capability ? IMPLIED_DATA_TYPES[capability] : undefined;
+}
+
 function parseIndustries(industries: string | string[] | null | undefined): string[] {
   if (!industries) return [];
   if (Array.isArray(industries)) return industries;
@@ -120,6 +125,19 @@ function parseIndustries(industries: string | string[] | null | undefined): stri
   } catch {
     return [];
   }
+}
+
+/**
+ * True when the rule is scoped to specific industries and the declared sector
+ * is not among them. An undeclared sector never excludes a rule.
+ */
+export function industriesExcludeSector(
+  industries: string | string[] | null | undefined,
+  sector: string | undefined,
+): boolean {
+  if (!sector) return false;
+  const ruleIndustries = parseIndustries(industries).map((i) => normalizeSector(i) ?? i);
+  return ruleIndustries.length > 0 && !ruleIndustries.includes('all') && !ruleIndustries.includes(sector);
 }
 
 /**
@@ -136,10 +154,7 @@ export function matchRuleToProfile(
   profile: ApplicabilityProfile,
 ): string[] | null {
   const sector = normalizeSector(profile.sector);
-  const ruleIndustries = parseIndustries(industries).map((i) => normalizeSector(i) ?? i);
-  if (sector && ruleIndustries.length > 0 && !ruleIndustries.includes('all') && !ruleIndustries.includes(sector)) {
-    return null;
-  }
+  if (industriesExcludeSector(industries, sector)) return null;
 
   const entries = Object.entries(conditions).filter(
     (e): e is [string, string] => typeof e[1] === 'string' && e[1].length > 0 && !isDescriptiveConditionKey(e[0]),
