@@ -1,0 +1,28 @@
+{
+  "name": "@nomus/chain",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "babbguy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babbguy/Nomus.git",
+    "directory": "packages/chain"
+  },
+  "homepage": "https://github.com/babbguy/Nomus#readme",
+  "bugs": "https://github.com/babbguy/Nomus/issues",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "ethers": "^6.14.3"
+  }
+}

@@ -1,0 +1,99 @@
+# Nomus — TLS reverse proxy (docker compose profile "tls")
+#
+# This is an Nginx template: the official nginx image substitutes the DOMAIN variable
+# from the container environment at startup (see docker-compose.yml).
+# One hostname serves both the dashboard and the API (the dashboard calls
+# /api/v1/* on its own origin). Certificates come from Let's Encrypt; the
+# first certificate must be issued before this proxy can start - see
+# docs/admin-guide/deployment.md.
+
+# Rate limiting zones
+limit_req_zone $binary_remote_addr zone=api:10m rate=60r/m;
+limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/m;
+
+# Redirect HTTP -> HTTPS
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    # Let's Encrypt HTTP-01 challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    # TLS hardening
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Request size limit (document uploads, ontology imports)
+    client_max_body_size 25m;
+
+    # Dashboard (static; the dashboard container also proxies /api to the engine)
+    location / {
+        proxy_pass http://dashboard:80;
+        proxy_set_header Host $host;
+    }
+
+    # Auth endpoints - stricter rate limit
+    location /api/v1/auth/ {
+        limit_req zone=auth burst=5 nodelay;
+        proxy_pass http://engine:3100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # SSE streaming - long-lived connections
+    location /api/v1/stream {
+        proxy_pass http://engine:3100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection '';
+        proxy_http_version 1.1;
+        chunked_transfer_encoding off;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;
+    }
+
+    # All other API endpoints
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://engine:3100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Published signing keys
+    location /.well-known/ {
+        proxy_pass http://engine:3100;
+        proxy_set_header Host $host;
+    }
+}

@@ -1,0 +1,84 @@
+# Nomus — Docker Compose
+#
+# Quickstart (localhost):
+#   cp engine/.env.example engine/.env      # then edit the secrets in it
+#   docker compose up --build
+#   -> dashboard  http://localhost:8080
+#   -> engine API http://localhost:3100  (GET /health)
+#
+# Optional TLS front proxy (bring your own domain; see docs/admin-guide/deployment.md):
+#   export DOMAIN=nomus.example.com
+#   docker compose --profile tls run --rm -p 80:80 --entrypoint certbot certbot \n#     certonly --standalone -d "$DOMAIN" --email you@example.com --agree-tos
+#   docker compose --profile tls up -d --build
+#
+# The engine reads its configuration from engine/.env (see engine/.env.example).
+
+name: nomus
+
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nomus-engine
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - nomus-data:/app/data
+    env_file:
+      - engine/.env
+    environment:
+      # Container paths; everything else comes from engine/.env.
+      NOMUS_DB_PATH: /app/data/nomus.db
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: nomus-dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      engine:
+        condition: service_healthy
+
+  # ─── Optional TLS front proxy (profile: tls) ───────────────────────────
+  nginx:
+    profiles: ["tls"]
+    image: nginx:1.27-alpine
+    container_name: nomus-proxy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-nomus.example.com}
+      NGINX_ENVSUBST_FILTER: ^DOMAIN$$
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx-tls.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./infra/certbot/conf:/etc/letsencrypt:ro
+      - ./infra/certbot/www:/var/www/certbot:ro
+    depends_on:
+      - engine
+      - dashboard
+
+  certbot:
+    profiles: ["tls"]
+    image: certbot/certbot
+    container_name: nomus-certbot
+    volumes:
+      - ./infra/certbot/conf:/etc/letsencrypt
+      - ./infra/certbot/www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;"]
+
+volumes:
+  nomus-data:
+    driver: local

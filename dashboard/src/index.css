@@ -1,0 +1,173 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  /* ─── Nomus Brand Palette (Blue / Purple) ────────── */
+  --color-brand-blue: #2980BA;
+  --color-brand-navy: #2B3D4F;
+  --color-brand-purple: #795499;
+  --color-brand-gray: #7E8B8C;
+  --color-brand-light: #EDF1F2;
+
+  /* ─── Dark mode (default) ───────────────────────────── */
+  --color-accent: #4BA3D9;
+  --color-accent-hover: #6BB8E5;
+  --color-accent-dim: rgba(75, 163, 217, 0.12);
+  --color-accent-border: rgba(75, 163, 217, 0.25);
+  --color-accent-text: #0A1A2A;
+
+  --color-accent-secondary: #9B7BBF;
+  --color-accent-tertiary: #70A99A;
+
+  --color-surface-base: #1A1A1A;
+  --color-surface: #1E2229;
+  --color-surface-raised: #252B33;
+  --color-surface-overlay: #2B3D4F;
+  --color-surface-hover: #323C48;
+
+  --color-border: #2B3D4F;
+  --color-border-bright: #3D5060;
+
+  --color-text-primary: #EDF1F2;
+  --color-text-secondary: #94A3AB;
+  --color-text-muted: #6B7C82;
+
+  --color-success: #70A99A;
+  --color-warning: #F0AD4E;
+  --color-danger: #E74C3C;
+  --color-info: #795499;
+
+  --color-critical: #E74C3C;
+  --color-high: #E67E22;
+  --color-medium: #F0AD4E;
+  --color-low: #70A99A;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ─── Light mode overrides ──────────────────────────── */
+.light {
+  --color-accent: #2B3D4F;
+  --color-accent-hover: #1E2D3D;
+  --color-accent-dim: rgba(43, 61, 79, 0.08);
+  --color-accent-border: rgba(43, 61, 79, 0.2);
+  --color-accent-text: #ffffff;
+
+  --color-accent-secondary: #795499;
+  --color-accent-tertiary: #70A99A;
+
+  --color-surface-base: #EDF1F2;
+  --color-surface: #ffffff;
+  --color-surface-raised: #F5F7F8;
+  --color-surface-overlay: #E8ECEE;
+  --color-surface-hover: #DDE3E5;
+
+  --color-border: #C8D0D3;
+  --color-border-bright: #A8B4B8;
+
+  --color-text-primary: #2B3D4F;
+  --color-text-secondary: #5A6668;
+  --color-text-muted: #7E8B8C;
+
+  --color-success: #2F6D7A;
+  --color-warning: #D4940A;
+  --color-danger: #C0392B;
+  --color-info: #795499;
+
+  --color-critical: #C0392B;
+  --color-high: #D35400;
+  --color-medium: #D4940A;
+  --color-low: #2F6D7A;
+}
+
+@utility glass {
+  background: rgba(30, 34, 41, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+
+  .light & {
+    background: rgba(255, 255, 255, 0.75);
+  }
+}
+
+@utility glow-accent {
+  box-shadow: 0 0 20px rgba(75, 163, 217, 0.2);
+}
+
+@utility glow-accent-strong {
+  box-shadow: 0 0 30px rgba(75, 163, 217, 0.3);
+}
+
+body {
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  margin: 0;
+}
+
+::selection {
+  background: rgba(75, 163, 217, 0.3);
+  color: #EDF1F2;
+}
+
+.light ::selection {
+  background: rgba(43, 61, 79, 0.2);
+  color: #2B3D4F;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-bright);
+}
+
+/* Page transition */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@utility animate-page {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Card hover lift */
+@utility hover-lift {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Responsive table wrapper */
+@utility table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile sidebar overlay backdrop */
+@utility sidebar-backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+/* Scroll-constrained tile */
+@utility max-h-tile {
+  max-height: 480px;
+  overflow-y: auto;
+}

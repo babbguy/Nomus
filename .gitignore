@@ -1,0 +1,84 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+# The GitHub Action runs from its committed bundle (JavaScript actions have no build step)
+!packages/github-action/dist/
+packages/github-action/dist/*
+!packages/github-action/dist/index.js
+!packages/github-action/dist/licenses.txt
+!packages/github-action/dist/package.json
+*.map
+
+# Data / databases
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Environment (may contain secrets)
+.env
+.env.local
+.env.*
+!.env.example
+!engine/.env.test
+
+# Logs
+logs/
+*.log
+
+# TypeScript build artifacts
+*.tsbuildinfo
+engine/tests/*.js
+engine/tests/*.js.map
+engine/tests/*.d.ts
+engine/tests/*.d.ts.map
+
+# Test coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code workspace files
+CLAUDE.md
+.claude/
+
+# Secrets (belt-and-suspenders)
+*.pem
+*.key
+secrets/
+
+# Package archives
+*.tgz
+
+# Built extension artifacts
+*.vsix
+
+# Ontology seed files (imported via API, not shipped)
+ontology-seed.json
+ontology-edges.json
+ontology-seed-v1.json
+merged_ontology_part2.json
+docs/internal/
+
+# Internal business documents (never push to GitHub)
+*.docx
+*.xlsx
+*.pptx
+*.ics
+**/internal/
+**/BURNDOWN*
+**/WORK_ORDER*
+**/DOD*
+**/BACKLOG*
+**/*_PROGRAM*

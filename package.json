@@ -1,0 +1,49 @@
+{
+  "name": "nomus",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "babbguy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babbguy/Nomus.git"
+  },
+  "homepage": "https://github.com/babbguy/Nomus#readme",
+  "bugs": "https://github.com/babbguy/Nomus/issues",
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/*",
+    "engine",
+    "dashboard"
+  ],
+  "scripts": {
+    "dev:engine": "npm run dev -w engine",
+    "dev:dashboard": "npm run dev -w dashboard",
+    "build:shared": "npm run build -w packages/shared",
+    "build:scanner": "npm run build -w packages/scanner",
+    "build:chain": "npm run build -w packages/chain",
+    "build:mcp-server": "npm run build -w packages/mcp-server",
+    "build:packages": "npm run build:shared && npm run build:scanner && npm run build:chain && npm run build:mcp-server",
+    "build:github-action": "npm run build -w packages/github-action",
+    "build:vscode-extension": "npm run build -w packages/vscode-extension",
+    "build:extensions": "npm run build:github-action && npm run build:vscode-extension",
+    "build:engine": "npm run build -w engine",
+    "build:dashboard": "npm run build -w dashboard",
+    "build:all": "npm run build:packages && npm run build:extensions && npm run build:engine && npm run build:dashboard",
+    "test:scanner": "npm run test -w packages/scanner",
+    "test:github-action": "npm run test -w packages/github-action",
+    "test:vscode-extension": "npm run test -w packages/vscode-extension",
+    "test:mcp-server": "npm run test -w packages/mcp-server",
+    "test:extensions": "npm run test:scanner && npm run test:github-action && npm run test:vscode-extension && npm run test:mcp-server",
+    "test:engine": "npm run test -w engine",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^24.12.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/pdf-parse": "^1.1.5"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

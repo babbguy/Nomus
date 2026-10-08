@@ -1,0 +1,25 @@
+{
+  "name": "Nomus AI Regulatory",
+  "description": "Automated AI regulatory applicability mapping. Detects AI SDK usage, identifies obligations that may apply under regulations such as the EU AI Act and NIST AI RMF, and posts results on pull requests. Requires a self-hosted Nomus engine.",
+  "url": "https://github.com/babbguy/Nomus",
+  "hook_attributes": {
+    "url": "https://nomus.example.com/api/v1/github/webhook",
+    "active": true
+  },
+  "callback_urls": [
+    "https://nomus.example.com/api/v1/auth/github/callback"
+  ],
+  "public": false,
+  "default_permissions": {
+    "checks": "write",
+    "contents": "read",
+    "pull_requests": "write",
+    "security_events": "write",
+    "metadata": "read"
+  },
+  "default_events": [
+    "pull_request",
+    "push",
+    "installation"
+  ]
+}

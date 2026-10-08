@@ -1,0 +1,78 @@
+{
+  "name": "@nomus/scanner",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "babbguy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babbguy/Nomus.git",
+    "directory": "packages/scanner"
+  },
+  "homepage": "https://github.com/babbguy/Nomus#readme",
+  "bugs": "https://github.com/babbguy/Nomus/issues",
+  "description": "AI regulatory applicability engine — detect AI SDK usage and identify applicable regulatory obligations",
+  "type": "module",
+  "main": "dist/scan.js",
+  "types": "./dist/scan.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/scan.js",
+      "types": "./dist/scan.d.ts"
+    },
+    "./sarif": {
+      "import": "./dist/output/sarif.js",
+      "types": "./dist/output/sarif.d.ts"
+    },
+    "./detect": {
+      "import": "./dist/detect/imports.js",
+      "types": "./dist/detect/imports.d.ts"
+    },
+    "./capabilities": {
+      "import": "./dist/detect/capabilities.js",
+      "types": "./dist/detect/capabilities.d.ts"
+    },
+    "./reporter": {
+      "import": "./dist/output/reporter.js",
+      "types": "./dist/output/reporter.d.ts"
+    },
+    "./detector": {
+      "import": "./dist/detect/detector.js",
+      "types": "./dist/detect/detector.d.ts"
+    }
+  },
+  "bin": {
+    "nomus-scan": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "nomus",
+    "ai-compliance",
+    "regulatory",
+    "scanner",
+    "sarif",
+    "eu-ai-act",
+    "compliance",
+    "security"
+  ],
+  "dependencies": {
+    "axios": "^1.13.6",
+    "glob": "^11.0.2",
+    "typescript": "~5.9.3",
+    "yaml": "^2.9.1",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "tsx": "^4.20.3",
+    "vitest": "^4.1.0"
+  }
+}

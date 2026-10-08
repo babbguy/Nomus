@@ -1,0 +1,21 @@
+Nomus
+Copyright 2026 babbguy
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party content bundled in this repository:
+
+- The HTML files under engine/src/hunter/__fixtures__ (ccpa.html, eu-ai-act.html,
+  gdpr.html) are small, abridged test fixtures that imitate the page structure of
+  public sites (a header comment in each names the page it is modeled on). The
+  statutory text inside them is condensed, may not match the source word for
+  word, and is not an authoritative copy. The underlying laws are public legal
+  texts; the publishers' own page markup and any rights they hold are not
+  covered by the copyright claim above.
+
+- packages/github-action/dist/index.js is a bundled build of the GitHub Action
+  together with its npm dependencies. The licenses of those dependencies are
+  listed in packages/github-action/dist/licenses.txt.
+
+- Other npm dependencies are installed from the registry (see package.json and
+  package-lock.json) and remain under their own licenses.

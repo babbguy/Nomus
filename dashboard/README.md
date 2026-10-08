@@ -1,0 +1,115 @@
+# Nomus Dashboard
+
+The web frontend for Nomus: administration and organization views for regulatory monitoring, rule management, code scan results, attestations, radar, benchmarks and more.
+
+Built with React 19, Vite, Tailwind CSS, Zustand (state management), and React Router.
+
+## Quick Start
+
+```bash
+# From the repository root
+npm install
+npm run build:packages
+npm run dev:engine        # in one terminal: http://localhost:3100
+npm run dev:dashboard     # in another: http://localhost:5173
+```
+
+The Vite dev server proxies `/api` and `/.well-known` to `http://localhost:3100` (see `vite.config.ts`). In the engine's `.env`, `NOMUS_CORS_ORIGIN` should be `http://localhost:5173` (the `.env.example` default).
+
+With Docker Compose (`docker compose up --build`) the dashboard is served by nginx on `http://localhost:8080` and proxies `/api/` to the engine container; see `Dockerfile.dashboard` (repository root) and `infra/nginx-dashboard.conf`.
+
+The first login uses the admin account created from `NOMUS_ADMIN_EMAIL` / `NOMUS_ADMIN_PASSWORD` in the engine configuration.
+
+## Pages
+
+Routes are defined in `src/App.tsx`.
+
+### Admin pages (`src/pages/admin/`, role `platform_admin`)
+
+| Page | Purpose |
+|------|---------|
+| `AdminDashboard` | Platform overview and metrics |
+| `SourceList` / `SourceAudit` / `DiffViewer` | Manage regulatory sources, audit them, and review text diffs |
+| `PipelineHistory` | Source pipeline run history and status |
+| `TenantList` / `TenantDetail` | Organization management |
+| `UserList` | User account administration |
+| `ScoutFeeds` / `ScoutReview` | Regulatory prediction feeds and review |
+| `ScanAdmin` | Code scan administration |
+| `OntologyManage` | Regulatory ontology/taxonomy management |
+| `RadarManage` | Regulatory radar configuration |
+| `FeedbackReview` | Review submitted rule quality feedback |
+| `LLMSettings` | LLM provider and model configuration |
+| `NotificationSettings` | Email, Slack and ntfy notification configuration |
+| `IntegrityCheck` | Database and rule integrity verification |
+| `SystemStatus` | System health monitoring |
+| `ModusIntegration` | Optional Modus integration settings |
+
+### Organization pages (`src/pages/customer/`)
+
+| Page | Purpose |
+|------|---------|
+| `CustomerDashboard` | Organization overview |
+| `Policies` / `Templates` | Applicable regulatory rules and rule templates |
+| `Scans` / `ScanRepo` | Code scan results |
+| `Attestations` | Attestation records |
+| `CompliancePosture` | Overall regulatory posture |
+| `Benchmarks` | AI model benchmarking results (COMPL-AI) |
+| `Simulator` / `Simulations` | Scenario simulation |
+| `Radar` / `RadarV2` / `BillDetail` | Regulatory change radar and tracked bills |
+| `GraphExplorer` | Regulatory knowledge graph |
+| `ClauseMap` | Clause-level mapping |
+| `AiBom` | AI Bill of Materials |
+| `AuditExport` | Audit log export |
+| `BadgePage` | Badge embed codes |
+| `FeedbackSubmit` | Submit rule quality feedback |
+| `Team` | Team member management |
+| `Profile` / `Settings` | User profile and organization settings |
+
+### Public and auth pages
+
+| Page | Purpose |
+|------|---------|
+| `PublicTransparency` | Public transparency/ledger view (`/ledger`, `/transparency`) |
+| `PublicVerify` | Public attestation verification (`/verify/:verifyId`) |
+| `Login` / `ForgotPassword` / `ResetPassword` / `ForceChangePassword` | Authentication flows |
+
+## Architecture
+
+### State management (`src/stores/`)
+
+- `authStore.ts` -- authentication state (user, session, role-based access)
+- `appStore.ts` -- global application state
+- `pipelineStore.ts` -- live pipeline monitoring (Server-Sent Events)
+
+### API layer (`src/api/`)
+
+Typed clients built on a shared Axios base client (`client.ts`), including `admin.ts`, `auth.ts`, `dashboard.ts`, `scans.ts`, `policies.ts`, `attestations.ts`, `scout.ts`, `radar.ts`, `radar-v2.ts`, `simulate.ts`, `sources.ts`, `tenants.ts`, `diffs.ts`, `clause-map.ts`, `verify.ts` and `transparency-accuracy.ts`.
+
+### Routing
+
+Role-based routing with `AdminRoute` and `ProtectedRoute` wrappers. Admin pages require the `platform_admin` role. Users flagged `mustChangePassword` are redirected to a forced password change page.
+
+### Optional error tracking
+
+Browser error reporting is initialized only if `VITE_NOMUS_SENTRY_DSN` is set at build time; it is off by default.
+
+## Build
+
+```bash
+npm run build -w dashboard      # TypeScript check + Vite production build (outputs to dashboard/dist/)
+npm run lint -w dashboard       # ESLint
+npm run preview -w dashboard    # Preview the production build locally
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/App.tsx` | Route definitions and layout |
+| `src/api/client.ts` | Base Axios HTTP client (auth headers, error handling) |
+| `src/stores/authStore.ts` | Auth state and session persistence |
+| `src/stores/pipelineStore.ts` | SSE-driven pipeline progress tracking |
+| `src/components/layout/Shell.tsx` | App shell with navigation |
+| `src/components/layout/ProtectedRoute.tsx` | Auth guard for protected routes |
+
+Nomus output is regulatory applicability information, not legal advice or a compliance certification.

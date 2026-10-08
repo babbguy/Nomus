@@ -1,0 +1,57 @@
+{
+  "name": "@nomus/mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "babbguy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babbguy/Nomus.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/babbguy/Nomus#readme",
+  "bugs": "https://github.com/babbguy/Nomus/issues",
+  "description": "Nomus MCP server — live, provenance-cited regulatory applicability for AI coding agents (Claude Code, Cursor, VS Code, and any MCP-capable client)",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "./dist/server.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    }
+  },
+  "bin": {
+    "nomus-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "nomus",
+    "mcp",
+    "model-context-protocol",
+    "ai-compliance",
+    "regulatory",
+    "eu-ai-act",
+    "compliance"
+  ],
+  "dependencies": {
+    "@nomus/scanner": "*",
+    "@nomus/shared": "*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "tsx": "^4.20.3",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

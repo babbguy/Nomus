@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+.git
+.github
+.claude
+CLAUDE.md
+data
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+coverage
+docs
+infra/certbot

@@ -1,0 +1,57 @@
+{
+  "name": "nomus-engine",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "babbguy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babbguy/Nomus.git",
+    "directory": "engine"
+  },
+  "homepage": "https://github.com/babbguy/Nomus#readme",
+  "bugs": "https://github.com/babbguy/Nomus/issues",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.53.0",
+    "@google/generative-ai": "^0.24.1",
+    "@nomus/chain": "*",
+    "@nomus/scanner": "*",
+    "@nomus/shared": "*",
+    "@hono/node-server": "^1.14.3",
+    "@sentry/node": "8.47.0",
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.8.0",
+    "cheerio": "^1.0.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.8.3",
+    "node-cron": "^3.0.3",
+    "openai": "^6.32.0",
+    "pdf-parse": "^1.1.1",
+    "pino": "^9.8.0",
+    "playwright-core": "^1.62.0",
+    "rss-parser": "^3.13.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.12.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/pdf-parse": "^1.1.4",
+    "drizzle-kit": "^0.31.4",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

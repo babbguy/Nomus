@@ -1,0 +1,36 @@
+# Nomus Dashboard — multi-stage Dockerfile
+# Build context: repository root.
+#
+#   docker build -f Dockerfile.dashboard -t nomus-dashboard .
+#
+# Serves the static React build with Nginx. The dashboard calls the API on the
+# same origin (/api/v1), and infra/nginx-dashboard.conf proxies /api to the
+# engine, so no API URL is baked into the bundle.
+
+# ─── Stage 1: Install + Build ─────────────────────────────────────────────
+FROM node:20-slim AS build
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
+COPY dashboard/package.json dashboard/
+
+RUN npm ci --workspace=dashboard --workspace=packages/shared --include-workspace-root
+
+COPY tsconfig.base.json ./
+COPY packages/shared/ packages/shared/
+COPY dashboard/ dashboard/
+
+RUN npm run build -w packages/shared && \
+    npm run build -w dashboard
+
+# ─── Stage 2: Serve with Nginx ────────────────────────────────────────────
+FROM nginx:1.27-alpine AS runtime
+
+COPY --from=build /app/dashboard/dist /usr/share/nginx/html
+COPY infra/nginx-dashboard.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost/health || exit 1

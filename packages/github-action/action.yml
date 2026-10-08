@@ -1,0 +1,63 @@
+name: 'Nomus Regulatory Scan'
+description: 'Scan your codebase for AI regulatory applicability. Detects AI SDK usage, matches against regulations in the Nomus rule base (for example the EU AI Act and NIST AI RMF), and posts findings as PR comments, SARIF for Code Scanning, and Check Runs.'
+author: 'babbguy'
+
+branding:
+  icon: 'shield'
+  color: 'green'
+
+inputs:
+  api-key:
+    description: 'API key for your Nomus engine (needs the evaluate scope; read:policies for the score lookup)'
+    required: true
+  api-url:
+    description: 'Base URL of your Nomus engine; it must be reachable from the runner (the default is localhost, which GitHub-hosted runners cannot reach)'
+    required: false
+    default: 'http://localhost:3100'
+  github-token:
+    description: 'GitHub token for PR comments, SARIF upload, and Check Runs. Falls back to GITHUB_TOKEN env var if not provided.'
+    required: false
+  fail-on:
+    description: 'Minimum finding severity that fails the check (critical, high, medium, low)'
+    required: false
+    default: 'critical'
+  working-directory:
+    description: 'Directory to scan (relative to repo root)'
+    required: false
+    default: '.'
+  upload-sarif:
+    description: 'Upload SARIF results to GitHub Code Scanning tab'
+    required: false
+    default: 'true'
+  post-pr-comment:
+    description: 'Post findings as PR inline comments and summary'
+    required: false
+    default: 'true'
+  badge-embed:
+    description: 'Include Nomus regulatory badge in PR summary comment'
+    required: false
+    default: 'true'
+
+outputs:
+  total-findings:
+    description: 'Total number of regulatory findings'
+  critical-count:
+    description: 'Number of critical findings'
+  high-count:
+    description: 'Number of high findings'
+  medium-count:
+    description: 'Number of medium findings'
+  low-count:
+    description: 'Number of low findings'
+  status:
+    description: 'Overall scan status (pass, fail, or unknown when the Nomus engine could not be reached)'
+  compliance-score:
+    description: 'Regulatory exposure score (0-100) incorporating both org-level and scan findings'
+  compliance-label:
+    description: 'Human-readable regulatory rating (Excellent, Good, Fair, Needs Work, Critical)'
+  sarif-file:
+    description: 'Path to the SARIF file (only set when findings exist, a GitHub token is available and upload-sarif is enabled)'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

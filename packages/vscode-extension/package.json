@@ -1,0 +1,191 @@
+{
+  "name": "nomus",
+  "displayName": "Nomus AI Compliance",
+  "description": "AI regulatory applicability engine — detect AI SDK usage and identify applicable regulatory obligations in real time",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "babbguy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babbguy/Nomus.git",
+    "directory": "packages/vscode-extension"
+  },
+  "homepage": "https://github.com/babbguy/Nomus#readme",
+  "bugs": "https://github.com/babbguy/Nomus/issues",
+  "publisher": "nomus",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "compliance",
+    "regulatory",
+    "eu-ai-act",
+    "scanner"
+  ],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascriptreact",
+    "onLanguage:python",
+    "onLanguage:java",
+    "onLanguage:go"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "Nomus Compliance",
+      "properties": {
+        "nomus.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "(Optional — use Sign In instead) Nomus API key for full rule matching"
+        },
+        "nomus.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:3100",
+          "description": "Nomus API endpoint URL"
+        },
+        "nomus.dashboardUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Nomus dashboard URL (derived from API URL if not set)"
+        },
+        "nomus.jurisdictions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "EU"
+          ],
+          "description": "Jurisdictions to check compliance against"
+        },
+        "nomus.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan files on save"
+        },
+        "nomus.scanOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan files when opened"
+        },
+        "nomus.failOn": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ],
+          "default": "medium",
+          "description": "Minimum severity to flag as error"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "nomus.scanFile",
+        "title": "Nomus: Scan Current File"
+      },
+      {
+        "command": "nomus.scanWorkspace",
+        "title": "Nomus: Scan Workspace"
+      },
+      {
+        "command": "nomus.clearDiagnostics",
+        "title": "Nomus: Clear All Diagnostics"
+      },
+      {
+        "command": "nomus.openDashboard",
+        "title": "Nomus: Open Dashboard"
+      },
+      {
+        "command": "nomus.signIn",
+        "title": "Nomus: Sign In"
+      },
+      {
+        "command": "nomus.signOut",
+        "title": "Nomus: Sign Out"
+      },
+      {
+        "command": "nomus.generateAiBom",
+        "title": "Nomus: Generate AI Bill of Materials"
+      },
+      {
+        "command": "nomus.runBenchmarks",
+        "title": "Nomus: Run COMPL-AI Benchmarks"
+      },
+      {
+        "command": "nomus.simulateImpact",
+        "title": "Nomus: Simulate Regulatory Impact"
+      },
+      {
+        "command": "nomus.exportReport",
+        "title": "Nomus: Export Compliance Report"
+      },
+      {
+        "command": "nomus.showComplianceOverview",
+        "title": "Nomus: Show Compliance Overview"
+      },
+      {
+        "command": "nomus.refreshViews",
+        "title": "Nomus: Refresh All Views"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "nomus",
+          "title": "Nomus Compliance",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "nomus": [
+        {
+          "id": "nomus.complianceStatus",
+          "name": "Compliance Status"
+        },
+        {
+          "id": "nomus.findings",
+          "name": "Findings"
+        },
+        {
+          "id": "nomus.aiBom",
+          "name": "AI Bill of Materials"
+        },
+        {
+          "id": "nomus.radar",
+          "name": "Regulatory Radar"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@nomus/scanner": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.0"
+  }
+}
