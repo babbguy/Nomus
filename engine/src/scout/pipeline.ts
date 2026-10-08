@@ -298,9 +298,11 @@ export async function runScoutCycle(): Promise<ScoutCycleResult> {
         llmResponse.model, llmResponse.provider,
       );
       result.totalLlmCostCents += costCents;
-      result.itemsExtracted++;
 
       if (!signal) continue;
+      // Counted once a signal was actually extracted (attempts that yielded
+      // nothing were reported as extracted signals).
+      result.itemsExtracted++;
 
       // Store extracted signal — accumulate cost (don't overwrite Phase 2 classification cost)
       db.update(scoutItems).set({

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { and, eq, desc, sql } from 'drizzle-orm';
+import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
@@ -114,15 +114,29 @@ scoutRoutes.patch('/feeds/:id', async (c) => {
   return c.json({ message: 'Feed updated' });
 });
 
-// Delete a feed (soft — deactivate)
+// Delete a feed. The page's Delete button used to only deactivate it (the
+// same as Disable), so the feed stayed listed. A feed whose items became
+// radar signals is kept for their provenance: disable it instead.
 scoutRoutes.delete('/feeds/:id', (c) => {
   const db = getDb();
-  const result = db.update(scoutFeeds)
-    .set({ isActive: false, updatedAt: new Date().toISOString() })
-    .where(eq(scoutFeeds.id, c.req.param('id')))
-    .run();
-  if (result.changes === 0) return c.json({ error: 'Feed not found' }, 404);
-  return c.json({ message: 'Feed deactivated' });
+  const id = c.req.param('id');
+  const feed = db.select({ id: scoutFeeds.id }).from(scoutFeeds).where(eq(scoutFeeds.id, id)).get();
+  if (!feed) return c.json({ error: 'Feed not found' }, 404);
+
+  const promoted = db.select({ n: sql<number>`count(*)` }).from(scoutItems)
+    .where(and(eq(scoutItems.feedId, id), inArray(scoutItems.status, ['accepted', 'auto_promoted'])))
+    .get()?.n ?? 0;
+  if (promoted > 0) {
+    return c.json({
+      error: `This feed produced ${promoted} radar signal(s); it is kept as their source. Disable it instead.`,
+    }, 409);
+  }
+
+  db.transaction((tx) => {
+    tx.delete(scoutItems).where(eq(scoutItems.feedId, id)).run();
+    tx.delete(scoutFeeds).where(eq(scoutFeeds.id, id)).run();
+  });
+  return c.json({ message: 'Feed deleted' });
 });
 
 // Seed default feeds (idempotent)

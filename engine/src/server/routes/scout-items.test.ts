@@ -58,3 +58,22 @@ describe('GET /api/v1/scout/items', () => {
     expect(rejected.total).toBe(120);
   });
 });
+
+describe('DELETE /api/v1/scout/feeds/:id', () => {
+  it('deletes a feed and its unpromoted items, but keeps a feed that produced signals', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    const plain = randomUUID();
+    const productive = randomUUID();
+    for (const id of [plain, productive]) {
+      db.insert(scoutFeeds).values({ id, name: `feed ${id.slice(0, 4)}`, url: `https://example.gov/${id}`, feedType: 'rss', createdAt: now, updatedAt: now }).run();
+    }
+    db.insert(scoutItems).values({ id: randomUUID(), feedId: plain, title: 'x', url: 'https://example.gov/x1', status: 'rejected', discoveredAt: now }).run();
+    db.insert(scoutItems).values({ id: randomUUID(), feedId: productive, title: 'y', url: 'https://example.gov/y1', status: 'accepted', discoveredAt: now }).run();
+
+    const del = (id: string) => app.request(`/api/v1/scout/feeds/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${KEY}` } });
+    expect((await del(plain)).status).toBe(200);
+    expect(db.select().from(scoutFeeds).all().some((f) => f.id === plain)).toBe(false);
+    expect((await del(productive)).status).toBe(409);
+  });
+});
