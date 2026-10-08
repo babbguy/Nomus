@@ -46,7 +46,7 @@ interface BomSummary {
   total: number;
   highRisk: number;
   jurisdictions: number;
-  complianceScore: number;
+  unclassified: number;
 }
 
 interface BomData {
@@ -290,7 +290,7 @@ export default function AiBom() {
   const inputCls =
     'w-full text-sm bg-surface border border-border rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition';
 
-  const summary = data?.summary ?? { total: 0, highRisk: 0, jurisdictions: 0, complianceScore: 0 };
+  const summary = data?.summary ?? { total: 0, highRisk: 0, jurisdictions: 0, unclassified: 0 };
 
   // Real data timestamp: most recent system update in the BOM (if any)
   const lastDataUpdate = data && data.systems.length > 0
@@ -343,8 +343,8 @@ export default function AiBom() {
           <p className="text-2xl font-bold text-text-primary mt-1">{summary.jurisdictions}</p>
         </Card>
         <Card>
-          <p className="text-xs text-text-muted uppercase tracking-wide">Compliance Score</p>
-          <p className="text-2xl font-bold text-accent mt-1">{summary.complianceScore}%</p>
+          <p className="text-xs text-text-muted uppercase tracking-wide">Unclassified</p>
+          <p className={`text-2xl font-bold mt-1 ${summary.unclassified > 0 ? 'text-warning' : 'text-text-primary'}`}>{summary.unclassified}</p>
         </Card>
       </div>
 

@@ -507,9 +507,22 @@ aiBomRoutes.get('/', (c) => {
     });
   }
 
+  // Summary of the listed systems (the AI-BOM page reads it; without it the
+  // page's cards showed 0 systems next to a table of systems).
+  const listedJurisdictions = new Set<string>();
+  for (const s of systems) {
+    for (const j of JSON.parse(s.jurisdictions || '[]') as string[]) listedJurisdictions.add(j);
+  }
+
   return c.json({
     count: systems.length,
     systems: systems.map(serializeSystem),
+    summary: {
+      total: systems.length,
+      highRisk: systems.filter((s) => s.riskClassification === 'high' || s.riskClassification === 'unacceptable').length,
+      unclassified: systems.filter((s) => s.riskClassification === 'unclassified').length,
+      jurisdictions: listedJurisdictions.size,
+    },
   });
 });
 
