@@ -51,7 +51,12 @@ interface SarifResult {
   level: SarifLevel;
   message: { text: string };
   locations: SarifLocation[];
-  fixes?: SarifFix[];
+  /**
+   * Remediation guidance. Not emitted as a SARIF `fix`: the 2.1.0 schema
+   * requires `fix.artifactChanges` (concrete replacements), and GitHub Code
+   * Scanning rejects uploads whose fixes lack them.
+   */
+  properties?: { suggestion: string };
 }
 
 interface SarifLocation {
@@ -59,10 +64,6 @@ interface SarifLocation {
     artifactLocation: { uri: string; uriBaseId: string };
     region: { startLine: number; startColumn: number };
   };
-}
-
-interface SarifFix {
-  description: { text: string };
 }
 
 function mapSeverityToLevel(severity: string): SarifLevel {
@@ -136,7 +137,7 @@ export function formatSarifReport(findings: Finding[], rootDir: string): SarifLo
     };
 
     if (f.suggestion) {
-      result.fixes = [{ description: { text: f.suggestion } }];
+      result.properties = { suggestion: f.suggestion };
     }
 
     return result;

@@ -20,9 +20,11 @@ tenantRoutes.get('/', (c) => {
   const db = getDb();
   const limit = Math.min(safeParseInt(c.req.query('limit'), 100), 500);
   const offset = safeParseInt(c.req.query('offset'), 0);
-  const orgs = db.select().from(organizations).limit(limit).offset(offset).all();
+  const orgs = db.select().from(organizations).orderBy(organizations.name).limit(limit).offset(offset).all();
+  const total = db.select({ n: sql<number>`count(*)` }).from(organizations).get()?.n ?? orgs.length;
   return c.json({
     count: orgs.length,
+    total,
     tenants: orgs.map((o) => {
       let jurisdictionAccess: unknown;
       try { jurisdictionAccess = JSON.parse(o.jurisdictionAccess); } catch { jurisdictionAccess = []; }
@@ -145,7 +147,7 @@ tenantRoutes.post('/:id/api-keys', async (c) => {
 
   logger.info({ orgId, keyId: result.id, scopes: result.scopes, actor: actorOf(c) }, 'API key created');
 
-  // Return the raw key ONCE — it can never be retrieved again
+  // Return the raw key ONCE â€” it can never be retrieved again
   return c.json({
     id: result.id,
     key: result.key,
@@ -153,7 +155,7 @@ tenantRoutes.post('/:id/api-keys', async (c) => {
     label: result.label,
     scopes: result.scopes,
     rateLimitRpm: result.rateLimitRpm,
-    message: 'Store this key securely — it cannot be retrieved again.',
+    message: 'Store this key securely â€” it cannot be retrieved again.',
   }, 201);
 });
 

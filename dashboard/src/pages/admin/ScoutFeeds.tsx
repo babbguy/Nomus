@@ -113,6 +113,7 @@ export default function ScoutFeeds() {
   }
 
   async function handleDelete(id: string) {
+    if (!window.confirm('Delete this feed and the items it found that were not promoted to the radar?')) return;
     try {
       await deleteFeed(id);
       load();

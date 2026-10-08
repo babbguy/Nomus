@@ -2,7 +2,7 @@
   "name": "nomus",
   "displayName": "Nomus AI Compliance",
   "description": "AI regulatory applicability engine — detect AI SDK usage and identify applicable regulatory obligations in real time",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "license": "Apache-2.0",
   "author": "babbguy",
@@ -176,7 +176,7 @@
     "watch": "node esbuild.mjs --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "vsce package --no-dependencies"
+    "package": "npx --yes @vscode/vsce@3 package --no-dependencies"
   },
   "dependencies": {
     "@nomus/scanner": "*"

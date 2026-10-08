@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { eq, desc, sql } from 'drizzle-orm';
+import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
@@ -114,15 +114,29 @@ scoutRoutes.patch('/feeds/:id', async (c) => {
   return c.json({ message: 'Feed updated' });
 });
 
-// Delete a feed (soft — deactivate)
+// Delete a feed. The page's Delete button used to only deactivate it (the
+// same as Disable), so the feed stayed listed. A feed whose items became
+// radar signals is kept for their provenance: disable it instead.
 scoutRoutes.delete('/feeds/:id', (c) => {
   const db = getDb();
-  const result = db.update(scoutFeeds)
-    .set({ isActive: false, updatedAt: new Date().toISOString() })
-    .where(eq(scoutFeeds.id, c.req.param('id')))
-    .run();
-  if (result.changes === 0) return c.json({ error: 'Feed not found' }, 404);
-  return c.json({ message: 'Feed deactivated' });
+  const id = c.req.param('id');
+  const feed = db.select({ id: scoutFeeds.id }).from(scoutFeeds).where(eq(scoutFeeds.id, id)).get();
+  if (!feed) return c.json({ error: 'Feed not found' }, 404);
+
+  const promoted = db.select({ n: sql<number>`count(*)` }).from(scoutItems)
+    .where(and(eq(scoutItems.feedId, id), inArray(scoutItems.status, ['accepted', 'auto_promoted'])))
+    .get()?.n ?? 0;
+  if (promoted > 0) {
+    return c.json({
+      error: `This feed produced ${promoted} radar signal(s); it is kept as their source. Disable it instead.`,
+    }, 409);
+  }
+
+  db.transaction((tx) => {
+    tx.delete(scoutItems).where(eq(scoutItems.feedId, id)).run();
+    tx.delete(scoutFeeds).where(eq(scoutFeeds.id, id)).run();
+  });
+  return c.json({ message: 'Feed deleted' });
 });
 
 // Seed default feeds (idempotent)
@@ -170,14 +184,20 @@ scoutRoutes.get('/items', (c) => {
   const limit = Math.min(safeParseInt(c.req.query('limit'), 50), 200);
   const offset = safeParseInt(c.req.query('offset'), 0);
 
-  let items = db.select().from(scoutItems)
+  // Filter in SQL, before the limit: filtering the newest `limit` rows of
+  // every status afterwards showed 9 of 879 pending items in the review queue.
+  const filters = [];
+  if (status) filters.push(eq(scoutItems.status, status as typeof scoutItems.$inferSelect.status));
+  if (feedId) filters.push(eq(scoutItems.feedId, feedId));
+  const where = filters.length > 0 ? and(...filters) : undefined;
+
+  const items = db.select().from(scoutItems)
+    .where(where)
     .orderBy(desc(scoutItems.discoveredAt))
     .limit(limit)
     .offset(offset)
     .all();
-
-  if (status) items = items.filter((i) => i.status === status);
-  if (feedId) items = items.filter((i) => i.feedId === feedId);
+  const total = db.select({ n: sql<number>`count(*)` }).from(scoutItems).where(where).get()?.n ?? 0;
 
   // Parse extractedSignal JSON for convenience
   const enriched = items.map((item) => ({
@@ -185,7 +205,7 @@ scoutRoutes.get('/items', (c) => {
     extractedSignal: (() => { if (!item.extractedSignal) return null; try { return JSON.parse(item.extractedSignal); } catch { return item.extractedSignal; } })(),
   }));
 
-  return c.json({ count: enriched.length, items: enriched });
+  return c.json({ count: enriched.length, total, items: enriched });
 });
 
 // Accept item — promote to Radar

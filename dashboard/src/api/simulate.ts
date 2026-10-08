@@ -36,3 +36,16 @@ export async function runSimulation(input: SimulateInput): Promise<SimulateResul
   const { data } = await api.post('/simulate', input);
   return data;
 }
+
+/** Values the active rules are written in (GET /simulate/vocabulary). */
+export interface SimulationVocabulary {
+  capabilities: string[];
+  dataTypes: string[];
+  sectors: string[];
+  markets: string[];
+}
+
+export async function getSimulationVocabulary(): Promise<SimulationVocabulary> {
+  const { data } = await api.get('/simulate/vocabulary');
+  return data;
+}

@@ -183,6 +183,14 @@ describe('custom sources', () => {
     expect(res.json.selectorConfig).toEqual({});
   });
 
+  it('creates an inactive source when the Active box is unchecked', async () => {
+    const res = await call('POST', '/api/v1/sources', {
+      name: `Inactive Source ${uniq()}`, jurisdiction: 'ZZ', url: 'https://example.com/inactive', isActive: false,
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.isActive).toBe(false);
+  });
+
   it('requires an admin', async () => {
     expect((await call('POST', '/api/v1/sources', { name: 'x', jurisdiction: 'ZZ', url: 'https://example.com' }, null)).status).toBe(401);
     expect((await call('POST', '/api/v1/sources', { name: 'x', jurisdiction: 'ZZ', url: 'https://example.com' }, READER_KEY)).status).toBe(403);
@@ -369,7 +377,9 @@ describe('create rule', () => {
     });
     expect(hit.status).toBe(200);
     expect(hit.json.result).toBe('non_compliant');
-    expect(hit.json.rulesEvaluated).toEqual([expect.objectContaining({ ruleKey: body.ruleKey, matched: true })]);
+    // INTL rules are evaluated in every market; only the jurisdiction's own rule is under test.
+    expect(hit.json.rulesEvaluated.filter((r: any) => r.ruleKey === body.ruleKey))
+      .toEqual([expect.objectContaining({ ruleKey: body.ruleKey, matched: true })]);
     const miss = await call('POST', '/api/v1/evaluate', {
       action: 'publish_generated_content', jurisdiction: 'ZQ', context: { sector: 'finance' },
     });
@@ -555,7 +565,7 @@ describe('retire and reactivate rule', () => {
     expect(hashRetired.ruleCount).toBe(hashActive.ruleCount - 1);
     expect(verifyIntegrity().total).toBe(totalBefore - 1);
     const ev = await call('POST', '/api/v1/evaluate', { action: rule.conditions.action, jurisdiction: 'ZR', context: { probe: 'x' } });
-    expect(ev.json.rulesEvaluated).toEqual([]);
+    expect(ev.json.rulesEvaluated.filter((r: any) => r.ruleKey === rule.ruleKey)).toEqual([]);
 
     const again = await call('POST', `/api/v1/admin/rules/${rule.id}/retire`);
     expect(again.status).toBe(200);

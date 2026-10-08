@@ -67,7 +67,7 @@ export default function Scans() {
         <Card>
           <p className="text-xs text-text-muted uppercase tracking-wide">Last Scan</p>
           <p className="text-sm font-medium text-text-primary mt-2">
-            {loading || loadError ? '—' : repos[0] ? new Date(repos[0].lastScanned).toLocaleDateString() : 'Never'}
+            {loading || loadError ? '—' : lastScanTime ? new Date(lastScanTime).toLocaleDateString() : 'Never'}
           </p>
         </Card>
       </div>

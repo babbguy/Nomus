@@ -1,0 +1,11 @@
+# Scanner configuration of the release-gate fixture repository. The gate
+# points api_url at the engine it starts for each run.
+nomus:
+  api_url: http://localhost:3100
+  jurisdictions:
+    - EU
+    - US-FED
+  sector: healthcare
+  data_types:
+    - phi
+    - personal_data

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { calculateCostCents } from '../llm/pricing.js';
 import { getDb } from '../db/client.js';
 import { scoutFeeds, scoutItems, regulatorySignals } from '../db/schema.js';
@@ -23,6 +23,9 @@ export interface ScoutCycleResult {
   totalLlmCostCents: number;
   durationMs: number;
 }
+
+/** Batches of earlier-unclassified items retried per cycle (bounds LLM spend). */
+const BACKLOG_BATCHES_PER_CYCLE = 5;
 
 /**
  * Run a full Scout cycle: fetch all active feeds, filter, classify, extract, promote.
@@ -128,12 +131,6 @@ export async function runScoutCycle(): Promise<ScoutCycleResult> {
   result.itemsNew = newItems.length;
   logger.info({ newItems: newItems.length }, 'Scout: Deduplication complete');
 
-  if (newItems.length === 0) {
-    result.durationMs = Math.round(performance.now() - startTime);
-    logger.info(result, 'Scout: Cycle complete (no new items)');
-    return result;
-  }
-
   // Phase 1: Keyword Filter (free)
   interface ScoredItem extends NewItem {
     keywordScore: number;
@@ -182,9 +179,37 @@ export async function runScoutCycle(): Promise<ScoutCycleResult> {
     rejected: result.itemsKeywordRejected,
   }, 'Scout: Keyword filter complete');
 
+  // Items whose classification failed in an earlier cycle (e.g. the model
+  // was unreachable) stay pending with no LLM verdict. Retry a bounded number
+  // each cycle; without this they sat in the review queue unclassified forever.
+  const takenIds = new Set(survivingItems.map((i) => i.dbId));
+  const backlog = db.select({
+    id: scoutItems.id, feedId: scoutItems.feedId, title: scoutItems.title, url: scoutItems.url,
+    publishedAt: scoutItems.publishedAt, snippet: scoutItems.rawSnippet, keywordScore: scoutItems.keywordScore,
+    feedJurisdiction: scoutFeeds.jurisdiction,
+  })
+    .from(scoutItems)
+    .innerJoin(scoutFeeds, eq(scoutItems.feedId, scoutFeeds.id))
+    .where(and(eq(scoutItems.status, 'pending'), isNull(scoutItems.llmRelevant)))
+    .orderBy(desc(scoutItems.discoveredAt))
+    .limit(batchSize * BACKLOG_BATCHES_PER_CYCLE + survivingItems.length)
+    .all()
+    .filter((row) => !takenIds.has(row.id))
+    .slice(0, batchSize * BACKLOG_BATCHES_PER_CYCLE);
+  for (const row of backlog) {
+    survivingItems.push({
+      feedId: row.feedId, title: row.title, url: row.url, publishedAt: row.publishedAt,
+      snippet: row.snippet ?? '', feedJurisdiction: row.feedJurisdiction ?? 'global',
+      keywordScore: row.keywordScore ?? 0, dbId: row.id,
+    });
+  }
+  if (backlog.length > 0) logger.info({ retried: backlog.length }, 'Scout: Retrying unclassified items from earlier cycles');
+
   if (survivingItems.length === 0) {
     result.durationMs = Math.round(performance.now() - startTime);
-    logger.info(result, 'Scout: Cycle complete (all filtered by keywords)');
+    logger.info(result, newItems.length === 0
+      ? 'Scout: Cycle complete (no new items)'
+      : 'Scout: Cycle complete (all filtered by keywords)');
     return result;
   }
 
@@ -273,9 +298,11 @@ export async function runScoutCycle(): Promise<ScoutCycleResult> {
         llmResponse.model, llmResponse.provider,
       );
       result.totalLlmCostCents += costCents;
-      result.itemsExtracted++;
 
       if (!signal) continue;
+      // Counted once a signal was actually extracted (attempts that yielded
+      // nothing were reported as extracted signals).
+      result.itemsExtracted++;
 
       // Store extracted signal — accumulate cost (don't overwrite Phase 2 classification cost)
       db.update(scoutItems).set({
@@ -310,7 +337,6 @@ export async function runScoutCycle(): Promise<ScoutCycleResult> {
 
         // Broadcast to connected dashboards
         broadcastEvent({
-          id: signalId,
           type: 'scout.auto_promoted',
           data: { signalId, title: signal.title },
           jurisdiction: signal.jurisdiction,

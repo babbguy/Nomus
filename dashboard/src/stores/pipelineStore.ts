@@ -14,7 +14,24 @@ export interface PipelineProgress {
   rulesUpdated?: number;
   durationMs?: number;
   candidateRules?: number;
+  /** Set on the single event that ends a run (or a Scrape All cycle). */
+  done?: boolean;
+  outcome?: 'completed' | 'no_change' | 'error';
+  error?: string;
+  stepReached?: number;
+  scrapeAllSummary?: {
+    total: number;
+    succeeded: number;
+    failed: number;
+    noChange: number;
+    totalRulesCreated: number;
+    totalRulesUpdated: number;
+    failures: Array<{ name: string; error?: string }>;
+  };
 }
+
+/** Pipeline steps: 1 fetch, 2 clean, 3 verify, 4 extract + score, 5 promote. */
+export const PIPELINE_STEPS = 5;
 
 interface PipelineState {
   progress: PipelineProgress | null;
@@ -48,8 +65,9 @@ export const usePipelineStore = create<PipelineState>((set) => ({
         const data = JSON.parse(e.data) as PipelineProgress;
         set({ progress: data });
 
-        // Clear progress 8 seconds after completion
-        if (data.step === 4 || data.percentComplete === 100) {
+        // Clear progress 8 seconds after the run's end event. (Step numbers
+        // and percentComplete also reach their maximum mid-run.)
+        if (data.done) {
           if (_dismissTimer) clearTimeout(_dismissTimer);
           _dismissTimer = setTimeout(() => {
             set({ progress: null });

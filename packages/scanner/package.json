@@ -1,6 +1,6 @@
 {
   "name": "@nomus/scanner",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "license": "Apache-2.0",
   "author": "babbguy",
@@ -35,6 +35,10 @@
     "./reporter": {
       "import": "./dist/output/reporter.js",
       "types": "./dist/output/reporter.d.ts"
+    },
+    "./config": {
+      "import": "./dist/config/loader.js",
+      "types": "./dist/config/loader.d.ts"
     },
     "./detector": {
       "import": "./dist/detect/detector.js",

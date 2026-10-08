@@ -28,7 +28,7 @@ import { bulkExtract } from '../hunter/bulk-extractor.js';
 import { scoreRules } from '../hunter/rule-scorer.js';
 import { signRule } from '../core/rule-signing.js';
 import { upsertExtractedRule } from '../core/rule-upsert.js';
-import { policyBundleCache } from '../core/policy-cache.js';
+import { publishRuleEvents, type PendingRuleEvent } from '../core/rule-management.js';
 import { resolveProvider } from '../llm/provider.js';
 import { calculateCostCents } from '../llm/pricing.js';
 import { broadcastEvent } from '../sse/manager.js';
@@ -62,7 +62,6 @@ export interface PvsResult {
 
 function broadcastProgress(job: ForgeJob, phase: string, detail?: string, pct?: number): void {
   broadcastEvent({
-    id: randomUUID(),
     type: 'forge.progress',
     jurisdiction: job.jurisdiction,
     data: {
@@ -370,6 +369,7 @@ export async function processJob(job: ForgeJob): Promise<PvsResult> {
     }).run();
 
     // Transactional rule upsert — identical to existing pipeline
+    const pendingEvents: PendingRuleEvent[] = [];
     db.transaction((tx) => {
       const lastEvent = tx.select({ sequence: policyEvents.sequence })
         .from(policyEvents)
@@ -383,10 +383,11 @@ export async function processJob(job: ForgeJob): Promise<PvsResult> {
           tx,
           { sourceId, now, nextSequence: () => nextSequence++ },
           rule,
+          pendingEvents,
         );
         if (outcome === 'created') rulesCreated++;
         else if (outcome === 'updated') rulesUpdated++;
-        else rulesSkippedLocked++;
+        else if (outcome === 'skipped_locked') rulesSkippedLocked++;
       }
 
       // Update source metadata
@@ -397,8 +398,9 @@ export async function processJob(job: ForgeJob): Promise<PvsResult> {
       }).where(eq(regulatorySources.id, sourceId)).run();
     });
 
-    // Invalidate policy cache
-    policyBundleCache.invalidate();
+    // Tell live subscribers about every rule the transaction wrote (also
+    // invalidates the policy cache). Runs after commit, never inside it.
+    publishRuleEvents(pendingEvents);
 
     const duration = Math.round(performance.now() - startTime);
     const rulesAccepted = rulesCreated + rulesUpdated;

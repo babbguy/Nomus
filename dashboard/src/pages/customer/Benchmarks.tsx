@@ -31,12 +31,18 @@ interface BenchmarkDef {
   euAiActArticle: string | null;
 }
 
+interface PrincipleAverage {
+  principle: string;
+  avgScore: number;
+}
+
+/** GET /api/v1/benchmarks/summary */
 interface Summary {
-  modelsTestedCount: number;
-  avgScore: number | null;
-  bestPrinciple: string | null;
-  worstPrinciple: string | null;
-  recentRuns: BenchmarkRun[];
+  modelsTested: number;
+  averageScore: number | null;
+  totalRuns: number;
+  bestPrinciple: PrincipleAverage | null;
+  worstPrinciple: PrincipleAverage | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -191,7 +197,9 @@ export default function Benchmarks() {
           </div>
           {startError && <ErrorState compact message={startError} />}
           <p className="text-xs text-text-muted mt-3">
-            Benchmarks run on your infrastructure using your API keys. Nomus does not execute LLM calls — the @nomus/benchmark package does.
+            Nomus records the run; it never calls a model. Run the benchmarks with your own evaluation harness, then upload the
+            scores to the run with <code className="font-mono">PATCH /api/v1/benchmarks/runs/&lt;run id&gt;/results</code> (an API key with
+            the read:policies scope). The run stays pending until results arrive.
           </p>
         </div>
       )}
@@ -204,24 +212,28 @@ export default function Benchmarks() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="glass rounded-xl p-5">
             <p className="text-xs text-text-muted">Models Tested</p>
-            <p className="text-2xl font-semibold text-text-primary mt-1">{summary.modelsTestedCount}</p>
+            <p className="text-2xl font-semibold text-text-primary mt-1">{summary.modelsTested}</p>
           </div>
           <div className="glass rounded-xl p-5">
             <p className="text-xs text-text-muted">Average Score</p>
             <p className="text-2xl font-semibold text-text-primary mt-1">
-              {summary.avgScore != null ? `${summary.avgScore.toFixed(1)}%` : '—'}
+              {summary.averageScore != null ? `${summary.averageScore.toFixed(1)}%` : '—'}
             </p>
           </div>
           <div className="glass rounded-xl p-5">
             <p className="text-xs text-text-muted">Strongest Principle</p>
-            <p className={`text-lg font-semibold mt-1 ${principleColors[summary.bestPrinciple ?? ''] ?? 'text-text-primary'}`}>
-              {summary.bestPrinciple?.replace(/_/g, ' ') ?? '—'}
+            <p className={`text-lg font-semibold mt-1 ${principleColors[summary.bestPrinciple?.principle ?? ''] ?? 'text-text-primary'}`}>
+              {summary.bestPrinciple
+                ? `${summary.bestPrinciple.principle.replace(/_/g, ' ')} (${summary.bestPrinciple.avgScore.toFixed(0)}%)`
+                : '—'}
             </p>
           </div>
           <div className="glass rounded-xl p-5">
             <p className="text-xs text-text-muted">Weakest Principle</p>
-            <p className={`text-lg font-semibold mt-1 ${principleColors[summary.worstPrinciple ?? ''] ?? 'text-danger'}`}>
-              {summary.worstPrinciple?.replace(/_/g, ' ') ?? '—'}
+            <p className={`text-lg font-semibold mt-1 ${principleColors[summary.worstPrinciple?.principle ?? ''] ?? 'text-danger'}`}>
+              {summary.worstPrinciple
+                ? `${summary.worstPrinciple.principle.replace(/_/g, ' ')} (${summary.worstPrinciple.avgScore.toFixed(0)}%)`
+                : '—'}
             </p>
           </div>
         </div>
@@ -256,6 +268,12 @@ export default function Benchmarks() {
                       {expandedRun === run.id ? <ChevronUp size={14} className="text-text-muted" /> : <ChevronDown size={14} className="text-text-muted" />}
                     </div>
                   </div>
+                  {expandedRun === run.id && run.status !== 'completed' && (
+                    <p className="mt-3 text-xs text-text-muted">
+                      Awaiting results. Upload them with{' '}
+                      <code className="font-mono text-text-secondary">PATCH /api/v1/benchmarks/runs/{run.id}/results</code>
+                    </p>
+                  )}
                   {expandedRun === run.id && run.resultsByPrinciple && (
                     <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
                       {Object.entries(run.resultsByPrinciple).map(([principle, data]) => (

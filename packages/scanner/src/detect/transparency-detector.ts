@@ -111,7 +111,7 @@ export class TransparencyDetector implements DetectorPlugin {
     const signals: DetectorSignal[] = [];
 
     for (const { file, content } of iterFiles(ctx)) {
-      if (isTestFile(file)) continue;
+      if (isTestFile(file, ctx.rootDir)) continue;
       const stripped = stripComments(file, content);
       const hits = findHits(stripped);
       if (hits.length === 0) continue;

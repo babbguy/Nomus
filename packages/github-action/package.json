@@ -1,6 +1,6 @@
 {
   "name": "@nomus/github-action",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "license": "Apache-2.0",
   "author": "babbguy",
@@ -13,7 +13,7 @@
   "bugs": "https://github.com/babbguy/Nomus/issues",
   "type": "module",
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --license licenses.txt && node scripts/strip-declaration-maps.mjs",
+    "build": "ncc build src/index.ts -o dist --license licenses.txt && node scripts/strip-declaration-maps.mjs && node scripts/esm-cjs-globals.mjs",
     "build:tsc": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

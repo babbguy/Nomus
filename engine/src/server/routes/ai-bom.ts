@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { randomUUID, createHash } from 'node:crypto';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, ne, inArray, sql, desc } from 'drizzle-orm';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
 import { aiBomSystems, aiBomSnapshots, scanFindings, policyRules, organizations } from '../../db/schema.js';
@@ -286,81 +286,182 @@ aiBomRoutes.get('/export/:format', (c) => {
 
 // ─── POST /generate — Auto-generate AI-BOM from scan findings ────
 
+/** AI provider behind each SDK name the scanner reports. */
+const SDK_PROVIDERS: Record<string, string> = {
+  'openai': 'OpenAI',
+  'com.openai': 'OpenAI',
+  'openai-go': 'OpenAI',
+  'anthropic': 'Anthropic',
+  '@anthropic-ai/sdk': 'Anthropic',
+  'com.anthropic': 'Anthropic',
+  'anthropic-sdk-go': 'Anthropic',
+  '@google/generative-ai': 'Google',
+  'google.generativeai': 'Google',
+  '@aws-sdk/client-bedrock-runtime': 'AWS Bedrock',
+  'boto3-bedrock': 'AWS Bedrock',
+  'aws-bedrock': 'AWS Bedrock',
+  'cohere-ai': 'Cohere',
+  'cohere': 'Cohere',
+  '@huggingface/inference': 'Hugging Face',
+  'huggingface_hub': 'Hugging Face',
+  'replicate': 'Replicate',
+};
+
+/** EU AI Act Annex III rule keys → the euAiActCategory values classifyRisk knows. */
+const ANNEX_III_CATEGORIES: Array<[RegExp, string]> = [
+  [/^eu_ai_act\.annex_iii\.1/, 'biometric_identification'],
+  [/^eu_ai_act\.annex_iii\.2\./, 'critical_infrastructure'],
+  [/^eu_ai_act\.annex_iii\.3\./, 'education_vocational'],
+  [/^eu_ai_act\.annex_iii\.4\./, 'employment_workers'],
+  [/^eu_ai_act\.annex_iii\.5\./, 'essential_services'],
+  [/^eu_ai_act\.annex_iii\.6\./, 'law_enforcement'],
+  [/^eu_ai_act\.annex_iii\.7\./, 'migration_asylum'],
+  [/^eu_ai_act\.annex_iii\.8\./, 'administration_of_justice'],
+];
+
+/**
+ * EU AI Act risk tier implied by the obligations the scanner found:
+ * Article 5 (prohibited practices) → unacceptable, an Annex III category →
+ * high, Article 50 transparency duties → limited, anything else → minimal.
+ */
+function riskFromRuleKeys(ruleKeys: string[]): {
+  risk: 'unacceptable' | 'high' | 'limited' | 'minimal';
+  euAiActCategory: string | null;
+} {
+  if (ruleKeys.some((k) => /^eu_ai_act\.art5\./.test(k))) return { risk: 'unacceptable', euAiActCategory: null };
+  for (const key of ruleKeys) {
+    const hit = ANNEX_III_CATEGORIES.find(([re]) => re.test(key));
+    if (hit) return { risk: 'high', euAiActCategory: hit[1] };
+  }
+  if (ruleKeys.some((k) => /^eu_ai_act\.art50\./.test(k))) return { risk: 'limited', euAiActCategory: null };
+  return { risk: 'minimal', euAiActCategory: null };
+}
+
 aiBomRoutes.post('/generate', (c) => {
   const db = getDb();
   const orgId = c.get('orgId')!;
   const now = new Date().toISOString();
 
-  // Fetch all scan findings for the org
+  // Every finding that has not been dismissed describes AI usage in the code.
   const findings = db.select().from(scanFindings)
-    .where(eq(scanFindings.orgId, orgId))
+    .where(and(eq(scanFindings.orgId, orgId), ne(scanFindings.status, 'dismissed')))
     .all();
 
   if (findings.length === 0) {
-    return c.json({ created: 0, message: 'No scan findings found for this organization' });
+    return c.json({ created: 0, updated: 0, totalGroups: 0, message: 'No scan findings found for this organization' });
   }
 
-  // Group by capabilityDetected + repo
-  const groups = new Map<string, typeof findings>();
+  // One AI system per (repository, AI provider). The scanner names the SDK in
+  // capabilityDetected; '@anthropic-ai/sdk' and 'anthropic' are one provider.
+  const groups = new Map<string, { repo: string; provider: string; findings: typeof findings }>();
   for (const f of findings) {
-    const key = `${f.capabilityDetected}::${f.repo}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(f);
+    const provider = SDK_PROVIDERS[f.capabilityDetected] ?? f.capabilityDetected;
+    const key = `${f.repo}::${provider}`;
+    const group = groups.get(key) ?? { repo: f.repo, provider, findings: [] };
+    group.findings.push(f);
+    groups.set(key, group);
   }
+
+  // Jurisdiction of every rule the findings reference (INTL is not a market).
+  const ruleJurisdiction = new Map(
+    db.select({ ruleKey: policyRules.ruleKey, jurisdiction: policyRules.jurisdiction }).from(policyRules).all()
+      .map((r) => [r.ruleKey, r.jurisdiction]),
+  );
 
   let created = 0;
+  let updated = 0;
 
-  for (const [key, groupFindings] of groups) {
-    const [capability, repo] = key.split('::');
+  for (const { repo, provider, findings: groupFindings } of groups.values()) {
+    const ruleKeys = [...new Set(groupFindings.map((f) => f.ruleKey))];
+    const sdks = [...new Set(groupFindings.map((f) => f.capabilityDetected))].sort();
+    const jurisdictions = [...new Set(
+      ruleKeys.map((k) => ruleJurisdiction.get(k)).filter((j): j is string => !!j && j !== 'INTL'),
+    )].sort();
+    const regulatoryTags = [...new Set(ruleKeys.map((k) => k.split('.')[0]))].sort();
+    const { risk, euAiActCategory } = riskFromRuleKeys(ruleKeys);
+    const name = `${provider} (${repo})`;
+    const knownProvider = Object.values(SDK_PROVIDERS).includes(provider);
+    const metadata = {
+      repo,
+      findingCount: groupFindings.length,
+      sdks,
+      autoRiskClassification: risk,
+    };
 
-    // Check if a system already exists for this capability+repo
-    const existing = db.select().from(aiBomSystems)
-      .where(
-        and(
-          eq(aiBomSystems.orgId, orgId),
-          eq(aiBomSystems.name, `${capability} (${repo})`),
-        ),
-      )
+    let existing = db.select().from(aiBomSystems)
+      .where(and(eq(aiBomSystems.orgId, orgId), eq(aiBomSystems.name, name)))
       .get();
 
-    if (existing) continue;
+    // Earlier versions named scanner systems "<sdk> (<repo>)", one per SDK
+    // spelling. Adopt the first such system (keeping its id and history) and
+    // retire the other spellings so the inventory does not list them twice.
+    const legacy = db.select().from(aiBomSystems)
+      .where(and(
+        eq(aiBomSystems.orgId, orgId),
+        eq(aiBomSystems.detectedFrom, 'scanner'),
+        eq(aiBomSystems.isActive, true),
+        inArray(aiBomSystems.name, sdks.map((sdk) => `${sdk} (${repo})`)),
+      ))
+      .all()
+      .filter((row) => row.name !== name);
+    let toRetire = legacy;
+    if (!existing && legacy.length > 0) {
+      const [adopt, ...rest] = legacy;
+      db.update(aiBomSystems).set({
+        name,
+        ...(knownProvider ? { provider, systemType: adopt.systemType === 'other' ? 'model' as const : adopt.systemType } : {}),
+        purpose: `AI integration via ${sdks.join(', ')}`,
+        updatedAt: now,
+      }).where(eq(aiBomSystems.id, adopt.id)).run();
+      existing = db.select().from(aiBomSystems).where(eq(aiBomSystems.id, adopt.id)).get();
+      toRetire = rest;
+    }
+    for (const row of toRetire) {
+      db.update(aiBomSystems).set({ isActive: false, updatedAt: now }).where(eq(aiBomSystems.id, row.id)).run();
+    }
 
-    const findingIds = groupFindings.map((f) => f.id);
-    const capabilities = [...new Set(groupFindings.map((f) => f.capabilityDetected))];
-
-    // Infer system type from capability
-    let systemType: 'model' | 'pipeline' | 'agent' | 'embedding' | 'fine_tune' | 'other' = 'other';
-    const capLower = capability.toLowerCase();
-    if (capLower.includes('embed')) systemType = 'embedding';
-    else if (capLower.includes('agent') || capLower.includes('autonomous')) systemType = 'agent';
-    else if (capLower.includes('pipeline') || capLower.includes('chain')) systemType = 'pipeline';
-    else if (capLower.includes('fine') || capLower.includes('train')) systemType = 'fine_tune';
-    else if (capLower.includes('model') || capLower.includes('llm') || capLower.includes('gpt') || capLower.includes('claude')) systemType = 'model';
-
-    const riskClassification = classifyRisk(systemType, capability, capabilities);
+    if (existing) {
+      // Refresh what the scanner knows. Keep a risk tier a person has set:
+      // only replace it while it still equals the last auto-classification.
+      const previous = parseJsonField(existing.metadata) as { autoRiskClassification?: string } | null;
+      const autoManaged = existing.riskClassification === 'unclassified'
+        || existing.riskClassification === previous?.autoRiskClassification;
+      db.update(aiBomSystems).set({
+        description: `Auto-detected from ${groupFindings.length} scan finding(s) in repository ${repo}`,
+        capabilities: JSON.stringify(sdks),
+        jurisdictions: JSON.stringify(jurisdictions),
+        regulatoryTags: JSON.stringify(regulatoryTags),
+        scanFindingIds: JSON.stringify(groupFindings.map((f) => f.id)),
+        metadata: JSON.stringify(metadata),
+        ...(autoManaged ? { riskClassification: risk, euAiActCategory } : {}),
+        updatedAt: now,
+      }).where(eq(aiBomSystems.id, existing.id)).run();
+      updated++;
+      continue;
+    }
 
     db.insert(aiBomSystems).values({
       id: randomUUID(),
       orgId,
-      name: `${capability} (${repo})`,
+      name,
       description: `Auto-detected from ${groupFindings.length} scan finding(s) in repository ${repo}`,
-      systemType,
-      provider: '',
+      systemType: knownProvider ? 'model' : 'other',
+      provider: knownProvider ? provider : '',
       modelName: '',
       version: '',
-      purpose: capability,
-      capabilities: JSON.stringify(capabilities),
+      purpose: `AI integration via ${sdks.join(', ')}`,
+      capabilities: JSON.stringify(sdks),
       dataFlows: '[]',
-      jurisdictions: '[]',
-      riskClassification,
-      euAiActCategory: null,
-      regulatoryTags: '[]',
+      jurisdictions: JSON.stringify(jurisdictions),
+      riskClassification: risk,
+      euAiActCategory,
+      regulatoryTags: JSON.stringify(regulatoryTags),
       deploymentType: 'development',
       detectedFrom: 'scanner',
-      scanFindingIds: JSON.stringify(findingIds),
+      scanFindingIds: JSON.stringify(groupFindings.map((f) => f.id)),
       lastAssessedAt: null,
       isActive: true,
-      metadata: JSON.stringify({ repo, findingCount: groupFindings.length }),
+      metadata: JSON.stringify(metadata),
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -368,7 +469,7 @@ aiBomRoutes.post('/generate', (c) => {
     created++;
   }
 
-  return c.json({ created, totalGroups: groups.size }, 201);
+  return c.json({ created, updated, totalGroups: groups.size }, 201);
 });
 
 // ─── GET / — List all AI-BOM systems ─────────────────────────────
@@ -406,9 +507,22 @@ aiBomRoutes.get('/', (c) => {
     });
   }
 
+  // Summary of the listed systems (the AI-BOM page reads it; without it the
+  // page's cards showed 0 systems next to a table of systems).
+  const listedJurisdictions = new Set<string>();
+  for (const s of systems) {
+    for (const j of JSON.parse(s.jurisdictions || '[]') as string[]) listedJurisdictions.add(j);
+  }
+
   return c.json({
     count: systems.length,
     systems: systems.map(serializeSystem),
+    summary: {
+      total: systems.length,
+      highRisk: systems.filter((s) => s.riskClassification === 'high' || s.riskClassification === 'unacceptable').length,
+      unclassified: systems.filter((s) => s.riskClassification === 'unclassified').length,
+      jurisdictions: listedJurisdictions.size,
+    },
   });
 });
 
@@ -430,7 +544,11 @@ aiBomRoutes.post('/', async (c) => {
   if (!validTypes.includes(body.systemType)) {
     return c.json({ error: `Invalid systemType. Must be one of: ${validTypes.join(', ')}` }, 400);
   }
-
+  // Same enums PATCH enforces (POST stored any value, outside the schema enum).
+  const validDeployments = ['production', 'staging', 'development', 'retired'];
+  if (body.deploymentType !== undefined && !validDeployments.includes(body.deploymentType)) {
+    return c.json({ error: `Invalid deploymentType. Must be one of: ${validDeployments.join(', ')}` }, 400);
+  }
   const capabilities = Array.isArray(body.capabilities) ? body.capabilities : [];
   const dataFlows = Array.isArray(body.dataFlows) ? body.dataFlows : [];
   const jurisdictions = Array.isArray(body.jurisdictions) ? body.jurisdictions : [];

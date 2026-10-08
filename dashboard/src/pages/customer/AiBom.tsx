@@ -13,14 +13,15 @@ import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import DataFreshness from '../../components/ui/DataFreshness';
 import { apiErrorMessage } from '../../lib/errors';
+import { JURISDICTIONS as JURISDICTION_NAMES } from '@nomus/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
 type RiskLevel = 'unacceptable' | 'high' | 'limited' | 'minimal' | 'unclassified';
-type DeploymentType = 'cloud' | 'on-premise' | 'hybrid' | 'edge';
-type SystemType = 'model' | 'agent' | 'pipeline' | 'integration' | 'other';
+type DeploymentType = 'production' | 'staging' | 'development' | 'retired';
+type SystemType = 'model' | 'agent' | 'pipeline' | 'embedding' | 'fine_tune' | 'other';
 
 interface AiSystem {
   id: string;
@@ -46,7 +47,7 @@ interface BomSummary {
   total: number;
   highRisk: number;
   jurisdictions: number;
-  complianceScore: number;
+  unclassified: number;
 }
 
 interface BomData {
@@ -66,7 +67,7 @@ const EMPTY_FORM: Omit<AiSystem, 'id' | 'createdAt' | 'updatedAt' | 'dataFlows' 
   jurisdictions: [],
   riskClassification: 'unclassified',
   euAiActCategory: '',
-  deploymentType: 'cloud',
+  deploymentType: 'development',
 };
 
 /* ------------------------------------------------------------------ */
@@ -85,20 +86,21 @@ const SYSTEM_TYPE_ICONS: Record<SystemType, React.ReactNode> = {
   model: <Brain size={14} />,
   agent: <Bot size={14} />,
   pipeline: <Server size={14} />,
-  integration: <Globe size={14} />,
+  embedding: <Globe size={14} />,
+  fine_tune: <Brain size={14} />,
   other: <Cpu size={14} />,
 };
 
-const JURISDICTIONS = [
-  'EU', 'US', 'UK', 'Canada', 'Australia', 'Japan', 'South Korea',
-  'Singapore', 'Brazil', 'India', 'China', 'Global',
-];
+// Jurisdiction codes, as rules, scans and simulations use them ('US' and
+// 'Canada' never matched a signal's 'US-FED' / 'CA').
+const JURISDICTIONS = Object.keys(JURISDICTION_NAMES);
 
 const SYSTEM_TYPES: { value: SystemType; label: string }[] = [
   { value: 'model', label: 'Model' },
   { value: 'agent', label: 'Agent' },
   { value: 'pipeline', label: 'Pipeline' },
-  { value: 'integration', label: 'Integration' },
+  { value: 'embedding', label: 'Embedding' },
+  { value: 'fine_tune', label: 'Fine-tune' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -111,10 +113,10 @@ const RISK_LEVELS: { value: RiskLevel; label: string }[] = [
 ];
 
 const DEPLOYMENT_TYPES: { value: DeploymentType; label: string }[] = [
-  { value: 'cloud', label: 'Cloud' },
-  { value: 'on-premise', label: 'On-Premise' },
-  { value: 'hybrid', label: 'Hybrid' },
-  { value: 'edge', label: 'Edge' },
+  { value: 'development', label: 'Development' },
+  { value: 'staging', label: 'Staging' },
+  { value: 'production', label: 'Production' },
+  { value: 'retired', label: 'Retired' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -200,7 +202,7 @@ export default function AiBom() {
     setFormError(null);
     try {
       if (editingId) {
-        await api.put(`/ai-bom/${editingId}`, form);
+        await api.patch(`/ai-bom/${editingId}`, form);
       } else {
         await api.post('/ai-bom', form);
       }
@@ -236,31 +238,46 @@ export default function AiBom() {
     setGenerating(false);
   }
 
-  function exportJson() {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ai-bom-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  async function exportPdf() {
+  // Exports go through GET /ai-bom/export/:format, which records a hashed
+  // snapshot for the audit trail. (JSON used to dump the page's list response
+  // and "PDF" saved that endpoint's JSON envelope under a .pdf name.)
+  async function exportJson() {
+    setActionError(null);
     try {
-      const response = await api.get('/ai-bom/export/pdf', { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data);
+      const { data: snapshot } = await api.get('/ai-bom/export/json');
+      const blob = new Blob([JSON.stringify(snapshot.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ai-bom-${Date.now()}.pdf`;
+      a.download = `ai-bom-${snapshot.generatedAt.slice(0, 10)}-${snapshot.bomHash.slice(0, 8)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
+      setActionError(apiErrorMessage(err, 'Failed to export JSON'));
+    }
+  }
+
+  // The engine renders the report as HTML; open it and use the browser's
+  // print dialog to save it as PDF. The window is opened before the request
+  // so pop-up blockers treat it as the user's click.
+  async function exportPdf() {
+    setActionError(null);
+    const win = window.open('', '_blank');
+    try {
+      const { data: snapshot } = await api.get('/ai-bom/export/pdf');
+      if (!win) {
+        setActionError('Allow pop-ups for this site to open the printable AI-BOM report.');
+        return;
+      }
+      win.document.open();
+      win.document.write(snapshot.data);
+      win.document.close();
+      win.focus();
+      win.print();
+    } catch (err) {
+      win?.close();
       setActionError(apiErrorMessage(err, 'Failed to export PDF'));
     }
   }
@@ -290,7 +307,7 @@ export default function AiBom() {
   const inputCls =
     'w-full text-sm bg-surface border border-border rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition';
 
-  const summary = data?.summary ?? { total: 0, highRisk: 0, jurisdictions: 0, complianceScore: 0 };
+  const summary = data?.summary ?? { total: 0, highRisk: 0, jurisdictions: 0, unclassified: 0 };
 
   // Real data timestamp: most recent system update in the BOM (if any)
   const lastDataUpdate = data && data.systems.length > 0
@@ -343,8 +360,8 @@ export default function AiBom() {
           <p className="text-2xl font-bold text-text-primary mt-1">{summary.jurisdictions}</p>
         </Card>
         <Card>
-          <p className="text-xs text-text-muted uppercase tracking-wide">Compliance Score</p>
-          <p className="text-2xl font-bold text-accent mt-1">{summary.complianceScore}%</p>
+          <p className="text-xs text-text-muted uppercase tracking-wide">Unclassified</p>
+          <p className={`text-2xl font-bold mt-1 ${summary.unclassified > 0 ? 'text-warning' : 'text-text-primary'}`}>{summary.unclassified}</p>
         </Card>
       </div>
 

@@ -3,6 +3,7 @@ import { DiagnosticsProvider, type DiagnosticFinding } from './diagnostics';
 import { FindingsTreeProvider } from './sidebar/findings-provider';
 import { ComplianceStatusProvider } from './sidebar/compliance-status-provider';
 import { StatusBarManager } from './status-bar';
+import { loadWorkspaceConfig, WorkspaceConfigError } from './workspace-config';
 
 const SUPPORTED_LANGUAGES = new Set([
   'typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java', 'go',
@@ -63,16 +64,17 @@ export async function scanCurrentFile(
       const config = vscode.workspace.getConfiguration('nomus');
       const { runScanFromContents } = await import('@nomus/scanner');
       const files = new Map([[document.fileName, content]]);
+      const rootDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
+      const apiUrl = config.get<string>('apiUrl', 'http://localhost:3100');
+      // The workspace's .nomus.yml takes precedence over the jurisdictions setting.
+      const workspaceConfig = await loadWorkspaceConfig(rootDir, apiKey, apiUrl);
+      const jurisdictions = workspaceConfig?.jurisdictions ?? config.get<string[]>('jurisdictions', ['EU']);
       const result = await runScanFromContents(files, {
-        rootDir: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.',
+        rootDir,
         apiKey,
-        apiUrl: config.get<string>('apiUrl', 'http://localhost:3100'),
-        jurisdictions: config.get<string[]>('jurisdictions', ['EU']),
-        config: {
-          jurisdictions: config.get<string[]>('jurisdictions', ['EU']),
-          api_key: apiKey,
-          api_url: config.get<string>('apiUrl', 'http://localhost:3100'),
-        },
+        apiUrl,
+        jurisdictions,
+        config: workspaceConfig ?? { jurisdictions, api_key: apiKey, api_url: apiUrl },
       });
 
       diagnosticFindings = result.findings.map((f) => ({
@@ -106,6 +108,10 @@ export async function scanCurrentFile(
     complianceStatus?.setLocalFindings(diagnosticFindings);
   } catch (err) {
     // Fail closed: leave existing diagnostics/status untouched (no green state).
+    if (err instanceof WorkspaceConfigError) {
+      vscode.window.showErrorMessage(`Nomus: cannot use the workspace configuration — ${err.message}`);
+      return;
+    }
     if (isNomusApiError(err)) {
       console.error('Nomus API unreachable:', err);
       vscode.window.showErrorMessage('Nomus API unreachable — results unavailable. Compliance status is unknown.');
@@ -140,15 +146,22 @@ export async function scanWorkspace(
   }, async () => {
     try {
       const { runScan } = await import('@nomus/scanner');
+      // The workspace's .nomus.yml takes precedence over the jurisdictions setting.
+      const workspaceConfig = await loadWorkspaceConfig(
+        folder.uri.fsPath,
+        apiKey || undefined,
+        config.get<string>('apiUrl', 'http://localhost:3100'),
+      );
+      const jurisdictions = workspaceConfig?.jurisdictions ?? config.get<string[]>('jurisdictions', ['EU']);
       const result = await runScan({
         rootDir: folder.uri.fsPath,
         apiKey: apiKey || undefined,
         apiUrl: config.get<string>('apiUrl'),
         failOn: config.get<string>('failOn', 'medium'),
-        jurisdictions: config.get<string[]>('jurisdictions', ['EU']),
-        ...(apiKey ? {
+        jurisdictions,
+        ...(workspaceConfig ? { config: workspaceConfig } : apiKey ? {
           config: {
-            jurisdictions: config.get<string[]>('jurisdictions', ['EU']),
+            jurisdictions,
             api_key: apiKey,
             api_url: config.get<string>('apiUrl', 'http://localhost:3100'),
           },
@@ -187,6 +200,10 @@ export async function scanWorkspace(
       );
     } catch (err) {
       // Fail closed: leave existing diagnostics/status untouched (no green state).
+      if (err instanceof WorkspaceConfigError) {
+        vscode.window.showErrorMessage(`Nomus: cannot use the workspace configuration — ${err.message}`);
+        return;
+      }
       if (isNomusApiError(err)) {
         vscode.window.showErrorMessage('Nomus API unreachable — results unavailable. Compliance status is unknown.');
         return;

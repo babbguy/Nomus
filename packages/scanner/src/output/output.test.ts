@@ -256,18 +256,20 @@ describe('formatSarifReport', () => {
     expect(uri).not.toContain('\\'); // never backslashes even on Windows
   });
 
-  it('attaches a fix object when finding has a suggestion', () => {
+  it('carries the suggestion in result properties, never as a schema-invalid fix', () => {
     const finding = makeFinding({ suggestion: 'Add audit logging here' });
     const out = formatSarifReport([finding], '/repo');
-    expect(out.runs[0].results[0].fixes).toBeDefined();
-    expect(out.runs[0].results[0].fixes![0].description.text).toBe('Add audit logging here');
+    const result = out.runs[0].results[0] as unknown as Record<string, unknown>;
+    // SARIF 2.1.0 requires fix.artifactChanges; GitHub rejects fixes without it.
+    expect(result.fixes).toBeUndefined();
+    expect(out.runs[0].results[0].properties?.suggestion).toBe('Add audit logging here');
   });
 
-  it('omits fixes when finding has no suggestion', () => {
+  it('omits properties when finding has no suggestion', () => {
     const finding = makeFinding();
     delete (finding as { suggestion?: string }).suggestion;
     const out = formatSarifReport([finding], '/repo');
-    expect(out.runs[0].results[0].fixes).toBeUndefined();
+    expect(out.runs[0].results[0].properties).toBeUndefined();
   });
 
   it('tags rules with effect-derived properties', () => {
@@ -277,5 +279,44 @@ describe('formatSarifReport', () => {
     expect(tags).toContain('regulatory');
     expect(tags).toContain('ai-regulation');
     expect(tags).toContain('prohibited');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// --fail-on agreement (end-to-end audit: the report must match the exit code)
+// ════════════════════════════════════════════════════════════════════
+
+describe('report status honours --fail-on', () => {
+  const high = () => makeFinding({ rule: { ...makeFinding().rule, severity: 'high' } });
+
+  it('JSON status is fail for a high finding under --fail-on=high', () => {
+    const out = formatJsonReport([high()], { failOn: 'high' });
+    expect(out.status).toBe('fail');
+    expect(out.failOn).toBe('high');
+  });
+
+  it('JSON status stays pass for a high finding under the default threshold', () => {
+    expect(formatJsonReport([high()]).status).toBe('pass');
+  });
+
+  it('console summary says FAIL (not WARN) when --fail-on=high trips', () => {
+    const out = formatConsoleReport([high()], { failOn: 'high' });
+    expect(out).toMatch(/FAIL/);
+    expect(out).toMatch(/--fail-on=high/);
+    expect(out).not.toMatch(/WARN/);
+  });
+
+  it('prints the whole multi-line suggestion, not just its first line', () => {
+    const [f] = generateSuggestions([makeFinding({ rule: { ...makeFinding().rule, effect: 'deny' } })]);
+    const out = formatConsoleReport([f]);
+    expect(out).toMatch(/1\. Adding human oversight/);
+    expect(out).toMatch(/3\. Consulting legal counsel/);
+  });
+
+  it('reports paths relative to rootDir when given', () => {
+    const out = formatJsonReport([makeFinding({ file: '/repo/src/api/handler.ts' })], { rootDir: '/repo' });
+    expect(out.findings[0].file).toBe('src/api/handler.ts');
+    expect(formatConsoleReport([makeFinding({ file: '/repo/src/api/handler.ts' })], { rootDir: '/repo' }))
+      .toContain('File: src/api/handler.ts:42');
   });
 });

@@ -31,11 +31,14 @@ radarV2Routes.get('/bills', (c) => {
   const limit = Math.min(100, Math.max(1, safeParseInt(c.req.query('limit'), 20)));
   const offset = (page - 1) * limit;
 
-  // Build WHERE conditions
-  const conditions = [
-    gte(trackedBills.passageScore, minScore),
-    lte(trackedBills.passageScore, maxScore),
-  ];
+  // Build WHERE conditions. The score range only applies when the caller
+  // narrows it: a NULL (not yet scored) bill fails any comparison, so the
+  // default 0-100 range silently dropped every unscored bill.
+  const conditions = [];
+  const scoreFiltered = c.req.query('minScore') !== undefined || c.req.query('maxScore') !== undefined;
+  if (scoreFiltered) {
+    conditions.push(gte(trackedBills.passageScore, minScore), lte(trackedBills.passageScore, maxScore));
+  }
   if (jurisdiction) conditions.push(eq(trackedBills.jurisdiction, jurisdiction));
   if (stage) conditions.push(eq(trackedBills.currentStage, stage));
 

@@ -43,19 +43,28 @@ export function makeFinding(overrides: Partial<{
   };
 }
 
+/** Unified-diff patch for a newly added file of `lines` lines. */
+export function addedFilePatch(lines: number): string {
+  return [`@@ -0,0 +1,${lines} @@`, ...Array.from({ length: lines }, (_, i) => `+line${i + 1}`)].join('\n');
+}
+
 /**
  * Build a mock Octokit instance with spies for API calls.
  */
 export function mockOctokit() {
   return {
+    // octokit.paginate(method, params): the mocks return one page.
+    paginate: async (fn: (p: any) => Promise<{ data: any[] }>, params: any) => (await fn(params)).data,
     rest: {
       checks: {
         create: async (params: any) => ({ data: { id: 1, ...params } }),
       },
       pulls: {
         listFiles: async () => ({
-          data: [{ filename: 'src/app.ts' }],
+          // A newly added 40-line file: every line 1-40 is commentable.
+          data: [{ filename: 'src/app.ts', patch: addedFilePatch(40) }],
         }),
+        listReviewComments: async () => ({ data: [] as any[] }),
         createReview: async (params: any) => ({ data: { id: 1, ...params } }),
       },
       issues: {

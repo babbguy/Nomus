@@ -5,37 +5,45 @@ import { policyRules, stateHashes } from '../db/schema.js';
 import { logger } from '../logger.js';
 
 /**
- * Compute SHA-256 hash of all active policy rules.
- * Stores the result for integrity auditing.
+ * The corpus state hash: SHA-256 over the sorted Ed25519 signatures of the
+ * active rules, joined by '|'. This is the value GET /api/v1/policies/hash,
+ * the policy bundle, attestation receipts (per jurisdiction), the Modus sync
+ * and the MCP provenance stamp all report, so anyone can recompute it.
+ *
+ * (The stored/anchored hash used to be computed differently — over
+ * "ruleKey:version:signature" — so the admin dashboard showed a hash that
+ * matched nothing else the API served for the same corpus.)
  */
-export function computeAndStoreStateHash(): { hash: string; ruleCount: number } {
-  const db = getDb();
+export function corpusStateHash(signatures: string[]): string {
+  return createHash('sha256').update([...signatures].sort().join('|')).digest('hex');
+}
 
-  const rules = db.select({
-    ruleKey: policyRules.ruleKey,
-    version: policyRules.version,
-    signature: policyRules.signature,
-  })
+/** The current corpus state hash, without storing it. */
+export function computeCurrentStateHash(): { hash: string; ruleCount: number } {
+  const rules = getDb().select({ signature: policyRules.signature })
     .from(policyRules)
     .where(eq(policyRules.isActive, true))
     .all();
+  return { hash: corpusStateHash(rules.map((r) => r.signature)), ruleCount: rules.length };
+}
 
-  // Deterministic hash: sort by ruleKey, concatenate signatures
-  const sorted = rules.sort((a, b) => a.ruleKey.localeCompare(b.ruleKey));
-  const payload = sorted.map((r) => `${r.ruleKey}:${r.version}:${r.signature}`).join('|');
-  const hash = createHash('sha256').update(payload).digest('hex');
+/**
+ * Compute the corpus state hash and store it for integrity auditing (and the
+ * daily on-chain anchor).
+ */
+export function computeAndStoreStateHash(): { hash: string; ruleCount: number } {
+  const { hash, ruleCount } = computeCurrentStateHash();
 
-  // Store (skip SIGNING_KEY entries)
-  db.insert(stateHashes).values({
+  getDb().insert(stateHashes).values({
     id: randomUUID(),
     hash,
-    ruleCount: rules.length,
+    ruleCount,
     computedAt: new Date().toISOString(),
   }).run();
 
-  logger.info({ hash: hash.slice(0, 16) + '...', ruleCount: rules.length }, 'State hash computed');
+  logger.info({ hash: hash.slice(0, 16) + '...', ruleCount }, 'State hash computed');
 
-  return { hash, ruleCount: rules.length };
+  return { hash, ruleCount };
 }
 
 /**

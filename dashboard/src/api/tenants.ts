@@ -44,6 +44,8 @@ export interface ApiKeyInfo {
   label: string;
   scopes: string[];
   isActive: boolean;
+  /** Effective state: an unrevoked key past expiresAt is expired. */
+  status?: 'active' | 'revoked' | 'expired';
   lastUsedAt: string | null;
   createdAt: string;
   expiresAt: string | null;

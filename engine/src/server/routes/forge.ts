@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { logger } from '../../logger.js';
-import { safeJson } from '../utils.js';
+import { safeJson, safeParseInt } from '../utils.js';
 import {
   startForge,
   stopForge,
@@ -238,11 +238,14 @@ export const ledgerPublicRoutes = new Hono();
 /** Public Ledger — limited fields, only published entries */
 ledgerPublicRoutes.get('/', (c) => {
   const jurisdiction = c.req.query('jurisdiction');
-  const limit = parseInt(c.req.query('limit') ?? '50', 10);
-  const offset = parseInt(c.req.query('offset') ?? '0', 10);
+  // Bounded: a negative or non-numeric limit reached SQLite as LIMIT -1 / NaN.
+  const limit = Math.min(Math.max(safeParseInt(c.req.query('limit'), 50), 1), 200);
+  const offset = Math.max(safeParseInt(c.req.query('offset'), 0), 0);
 
   const result = getPublicLedger({ jurisdiction, limit, offset });
-  const stats = getLedgerStats();
+  // Public stats cover the published entries the list shows (they counted
+  // unpublished entries too, and named their jurisdictions).
+  const stats = getLedgerStats({ publishedOnly: true });
 
   return c.json({
     ledger: {

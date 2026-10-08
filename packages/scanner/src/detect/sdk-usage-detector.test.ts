@@ -463,3 +463,37 @@ await client.chat.completions.create({});
     expect(signals[0].line).toBe(4);
   });
 });
+
+describe('SdkUsageDetector — Python client variables (regex engine)', () => {
+  it('detects calls on a client bound by `client = OpenAI(...)`', async () => {
+    const signals = await scan([
+      'from openai import OpenAI',
+      'client = OpenAI(api_key="x")',
+      'resp = client.chat.completions.create(model="gpt-4o", messages=[])',
+    ].join('\n'), '/tmp/bot.py');
+    const call = signals.find((s) => s.target === 'openai.chat.completions.create');
+    expect(call).toBeDefined();
+    expect(call!.line).toBe(3);
+    expect(call!.confidence).toBe(0.95);
+    expect(call!.capabilities).toEqual(['text_generation']);
+  });
+
+  it('detects `client = anthropic.Anthropic()` + client.messages.create, and does not count the constructor as a call', async () => {
+    const signals = await scan([
+      'import anthropic',
+      'client = anthropic.Anthropic()',
+      'msg = client.messages.create(model="claude", max_tokens=10, messages=[])',
+    ].join('\n'), '/tmp/triage.py');
+    expect(signals.map((s) => s.target)).toEqual(['anthropic.messages.create']);
+    expect(signals[0].line).toBe(3);
+  });
+
+  it('detects async clients', async () => {
+    const signals = await scan([
+      'from openai import AsyncOpenAI',
+      'llm = AsyncOpenAI()',
+      'out = await llm.embeddings.create(input="x", model="m")',
+    ].join('\n'), '/tmp/emb.py');
+    expect(signals.map((s) => s.target)).toEqual(['openai.embeddings.create']);
+  });
+});

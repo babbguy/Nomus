@@ -59,7 +59,7 @@ export default function SourceCard({
   onDismissResult: (id: string) => void;
   onShowError: (source: RegulatorySource, error: string, stepReached?: number) => void;
 }) {
-  const isThisInProgress = isScraping || (progress != null && progress.step < 4);
+  const isThisInProgress = isScraping || (progress != null && !progress.done);
   const isFirstScrape = !source.lastScrapedAt;
   const pendingFile = (source as unknown as { pendingUploadFile?: string | null }).pendingUploadFile ?? null;
   const hasPendingUpload = !!pendingFile;
@@ -73,7 +73,7 @@ export default function SourceCard({
 
       <Card className={
         isEditing ? 'border border-accent/20 opacity-60'
-        : progress && progress.step < 4 ? 'border border-accent/30'
+        : progress && !progress.done ? 'border border-accent/30'
         : (source.consecutiveFailures ?? 0) >= 2 ? 'border border-danger/30'
         : ''
       }>

@@ -7,7 +7,7 @@ import {
   organizations, usageRecords, policyFeedback,
 } from '../../db/schema.js';
 import { requireSessionOrApiKey } from '../middleware/auth.js';
-import { getLatestStateHash } from '../../core/state-hasher.js';
+import { getLatestStateHash, computeCurrentStateHash } from '../../core/state-hasher.js';
 import { getConnectedClients } from '../../sse/manager.js';
 import { getLatestShadowTests } from '../../audit/logger.js';
 import { getFeedbackSummary } from '../../feedback/analyzer.js';
@@ -31,6 +31,10 @@ dashboardRoutes.get('/stats', (c) => {
     .where(eq(regulatorySources.isActive, true))
     .get()?.count ?? 0;
 
+  const totalSourceCount = db.select({ count: sql<number>`count(*)` })
+    .from(regulatorySources)
+    .get()?.count ?? 0;
+
   const tenantCount = db.select({ count: sql<number>`count(*)` })
     .from(organizations)
     .where(eq(organizations.isActive, true))
@@ -43,10 +47,15 @@ dashboardRoutes.get('/stats', (c) => {
     .get();
 
   const stateHash = getLatestStateHash();
+  // The stored hash is a periodic snapshot (every 6 h and on demand) while the
+  // corpus changes in between, so the live value is served as current.
+  const current = computeCurrentStateHash();
 
   return c.json({
     rules: ruleCount,
     sources: sourceCount,
+    totalSources: totalSourceCount,
+    currentStateHash: { ...current, computedAt: new Date().toISOString() },
     tenants: tenantCount,
     connectedClients: getConnectedClients().length,
     lastPipelineRun: lastRun ? {

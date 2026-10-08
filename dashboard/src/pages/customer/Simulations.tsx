@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { FlaskConical, Play, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import ErrorState from '../../components/ui/ErrorState';
 import { apiErrorMessage } from '../../lib/errors';
+import { formatDecimalUsd } from '../../lib/formatters';
 import api from '../../api/client';
 
 interface Simulation {
@@ -14,7 +15,7 @@ interface Simulation {
   overallRiskLevel: string;
   estimatedRemediationCost: string | null;
   remediationRoadmap: Array<{ step: number; priority: string; estimatedDays: number; description: string }>;
-  impactDetails: Array<{ systemId: string; systemName: string; impact: string; remediationSteps: string[]; estimatedCost: string }>;
+  impactDetails: Array<{ systemId: string; systemName: string; impact: string; reason: string; remediationSteps: string[]; estimatedCost: string }>;
   status: string;
   completedAt: string | null;
   createdAt: string;
@@ -55,6 +56,7 @@ function timeAgo(dateStr: string): string {
 
 export default function Simulations() {
   const [simulations, setSimulations] = useState<Simulation[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -74,6 +76,7 @@ export default function Simulations() {
       }),
     ]).then(([simRes, sigRes]) => {
       setSimulations(simRes.data?.simulations ?? []);
+      setTotalCount(simRes.data?.count ?? simRes.data?.simulations?.length ?? 0);
       setSignals(sigRes.data?.signals ?? []);
     }).catch((err) => setLoadError(apiErrorMessage(err, 'Failed to load simulations')))
       .finally(() => setLoading(false));
@@ -177,12 +180,12 @@ export default function Simulations() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="glass rounded-xl p-5">
             <p className="text-xs text-text-muted">Total Simulations</p>
-            <p className="text-2xl font-semibold text-text-primary mt-1">{simulations.length}</p>
+            <p className="text-2xl font-semibold text-text-primary mt-1">{totalCount}</p>
           </div>
           <div className="glass rounded-xl p-5">
             <p className="text-xs text-text-muted">Systems at Risk</p>
             <p className="text-2xl font-semibold text-warning mt-1">
-              {simulations.reduce((sum, s) => sum + s.systemsImpacted, 0)}
+              {new Set(simulations.flatMap((s) => s.impactDetails.filter((d) => d.impact !== 'none').map((d) => d.systemId))).size}
             </p>
           </div>
           <div className="glass rounded-xl p-5">
@@ -245,9 +248,11 @@ export default function Simulations() {
                               <div key={i} className="bg-surface rounded-lg p-3">
                                 <div className="flex items-center justify-between mb-1">
                                   <span className="text-sm font-medium text-text-primary">{d.systemName}</span>
-                                  {d.estimatedCost && <span className="text-xs text-warning font-mono">${d.estimatedCost}</span>}
+                                  {d.estimatedCost && <span className="text-xs text-warning font-mono">{formatDecimalUsd(d.estimatedCost)}</span>}
                                 </div>
-                                <p className="text-xs text-text-secondary mb-2">{d.impact}</p>
+                                <p className="text-xs text-text-secondary mb-2">
+                                  <span className="font-medium capitalize">{d.impact} impact</span> — {d.reason}
+                                </p>
                                 {d.remediationSteps.length > 0 && (
                                   <ul className="text-xs text-text-muted space-y-0.5">
                                     {d.remediationSteps.map((step, j) => (
@@ -271,7 +276,7 @@ export default function Simulations() {
                                 <span className="w-6 h-6 rounded-full bg-accent-dim text-accent flex items-center justify-center font-semibold shrink-0">
                                   {step.step}
                                 </span>
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${step.priority === 'high' ? 'bg-danger/15 text-danger' : step.priority === 'medium' ? 'bg-warning/15 text-warning' : 'bg-info/15 text-info'}`}>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${step.priority === 'critical' || step.priority === 'high' ? 'bg-danger/15 text-danger' : step.priority === 'medium' ? 'bg-warning/15 text-warning' : 'bg-info/15 text-info'}`}>
                                   {step.priority}
                                 </span>
                                 <span className="text-text-secondary flex-1">{step.description}</span>
@@ -284,7 +289,7 @@ export default function Simulations() {
 
                       {sim.estimatedRemediationCost && (
                         <p className="text-xs text-text-muted">
-                          Estimated total remediation cost: <span className="text-warning font-semibold">${sim.estimatedRemediationCost}</span>
+                          Estimated total remediation cost: <span className="text-warning font-semibold">{formatDecimalUsd(sim.estimatedRemediationCost)}</span>
                         </p>
                       )}
                     </div>

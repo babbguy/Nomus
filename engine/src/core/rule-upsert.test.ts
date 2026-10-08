@@ -12,6 +12,8 @@ import { policyEvents, policyRules, regulatorySources } from '../db/schema.js';
 import { initSigningKeys } from './signing.js';
 import { verifyRuleSignature } from './rule-signing.js';
 import { upsertExtractedRule, type ExtractedRule } from './rule-upsert.js';
+import { publishRuleEvents, type PendingRuleEvent } from './rule-management.js';
+import { registerClient, removeClient } from '../sse/manager.js';
 
 let sourceId: string;
 
@@ -84,5 +86,84 @@ describe('upsertExtractedRule', () => {
     getDb().update(policyRules).set({ locked: false }).where(eq(policyRules.id, row.id)).run();
     expect(upsert(extracted({ severity: 'critical' }))).toBe('updated');
     expect(byKey('upsert.test.rule')).toMatchObject({ version: 3, severity: 'critical' });
+  });
+
+  it('leaves an identical re-extraction alone: no version bump, event or re-signing', () => {
+    const before = byKey('upsert.test.rule');
+    const eventsBefore = getDb().select().from(policyEvents).where(eq(policyEvents.ruleId, before.id)).all().length;
+    const same = extracted({
+      severity: before.severity,
+      // Key order differs from the stored JSON; it is the same condition set.
+      conditions: { ...JSON.parse(before.conditions) },
+      industries: JSON.parse(before.industries ?? '["all"]'),
+    });
+    expect(upsert(same)).toBe('unchanged');
+    expect(byKey('upsert.test.rule')).toEqual(before);
+    expect(getDb().select().from(policyEvents).where(eq(policyEvents.ruleId, before.id)).all()).toHaveLength(eventsBefore);
+  });
+
+  it('stores every signed field, so an update that changes the category still verifies', () => {
+    expect(upsert(extracted({ severity: 'critical', category: 'accountability', industries: ['healthcare'] }))).toBe('updated');
+    const row = byKey('upsert.test.rule');
+    expect(row.category).toBe('accountability');
+    expect(JSON.parse(row.industries ?? '[]')).toEqual(['healthcare']);
+    expect(verifyRuleSignature(row)).toBe(true);
+  });
+});
+
+
+describe('live delivery of upserted rules', () => {
+  it('delivers one policy.created per new rule to a connected subscriber, with its sequence as the SSE id', () => {
+    const received: string[] = [];
+    const decoder = new TextDecoder();
+    const clientId = registerClient('org-upsert-live', [], {
+      enqueue: (chunk: Uint8Array) => { received.push(decoder.decode(chunk)); },
+    } as unknown as ReadableStreamDefaultController);
+    expect(clientId).not.toBeNull();
+
+    try {
+      const db = getDb();
+      let seq = db.select().from(policyEvents).all().length + 5000;
+      const pending: PendingRuleEvent[] = [];
+      const now = new Date().toISOString();
+      db.transaction((tx) => {
+        for (const n of [1, 2, 3]) {
+          upsertExtractedRule(tx, { sourceId, now, nextSequence: () => seq++ },
+            extracted({ ruleKey: `upsert.live.rule_${n}` }), pending);
+        }
+      });
+      // Nothing is sent until the caller publishes after commit.
+      expect(received).toHaveLength(0);
+      publishRuleEvents(pending);
+
+      expect(received).toHaveLength(3);
+      for (const [i, n] of [1, 2, 3].entries()) {
+        const stored = db.select().from(policyEvents)
+          .where(eq(policyEvents.ruleId, byKey(`upsert.live.rule_${n}`).id)).get()!;
+        expect(received[i]).toBe(
+          `id: ${stored.sequence}\nevent: policy.created\ndata: ${stored.payload}\n\n`,
+        );
+      }
+    } finally {
+      removeClient(clientId!);
+    }
+  });
+
+  it('collects policy.updated for a changed rule and nothing for unchanged rules', () => {
+    const db = getDb();
+    let seq = db.select().from(policyEvents).all().length + 6000;
+    const run = (rule: ExtractedRule) => {
+      const pending: PendingRuleEvent[] = [];
+      db.transaction((tx) => {
+        upsertExtractedRule(tx, { sourceId, now: new Date().toISOString(), nextSequence: () => seq++ }, rule, pending);
+      });
+      return pending;
+    };
+    expect(run(extracted({ ruleKey: 'upsert.live.updated' }))).toHaveLength(1);
+    expect(run(extracted({ ruleKey: 'upsert.live.updated' }))).toHaveLength(0);
+    const changed = run(extracted({ ruleKey: 'upsert.live.updated', severity: 'high' }));
+    expect(changed).toHaveLength(1);
+    expect(changed[0]).toMatchObject({ eventType: 'policy.updated', jurisdiction: 'EU' });
+    expect(changed[0].payload).toMatchObject({ version: 2, severity: 'high' });
   });
 });

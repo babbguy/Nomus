@@ -88,3 +88,12 @@ export {
   API_KEY_PREFIX_TEST,
   LEGAL_DISCLAIMER,
 } from './constants.js';
+
+// Bill lifecycle stages (Bill Tracker)
+export {
+  BILL_STAGES,
+  type BillStageId,
+  ENACTED_BILL_STAGES,
+  ENDED_BILL_STAGES,
+  billStageLabel,
+} from './bill-stages.js';

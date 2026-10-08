@@ -40,3 +40,32 @@ export async function dismissFinding(id: string, status: 'dismissed' | 'resolved
   const { data } = await api.patch(`/scan/findings/${id}`, { status });
   return data;
 }
+
+export interface AdminScanSummary {
+  totals: { organizations: number; repos: number; totalFindings: number; openFindings: number; criticalOpen: number };
+  repos: Array<{
+    orgId: string;
+    orgName: string | null;
+    repo: string;
+    totalFindings: number;
+    openFindings: number;
+    criticalOpen: number;
+    lastScanned: string;
+  }>;
+  recentFindings: Array<{
+    id: string;
+    orgName: string | null;
+    repo: string;
+    filePath: string;
+    lineNumber: number;
+    ruleKey: string;
+    severity: string;
+    scannedAt: string;
+  }>;
+}
+
+/** Platform admin: findings across every organization. */
+export async function getAdminScanSummary() {
+  const { data } = await api.get('/admin/scans/summary');
+  return data as AdminScanSummary;
+}

@@ -26,7 +26,7 @@ export default function ScrapeAllBanner({ isRunning, progress, sourceName }: {
           {progress && sourceName && (
             <p className="text-xs text-text-muted mt-0.5">
               Currently processing: <span className="text-text-secondary font-medium">{sourceName}</span>
-              {progress.step < 4 && ` — Step ${progress.step}/4`}
+              {!progress.done && ` — Step ${progress.step}/5`}
             </p>
           )}
         </div>

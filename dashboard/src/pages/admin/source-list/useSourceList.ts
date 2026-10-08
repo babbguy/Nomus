@@ -57,24 +57,39 @@ export function useSourceList() {
 
   // Auto-reload sources and show result when pipeline completes via SSE
   useEffect(() => {
-    if (pipelineProgress?.step === 4 && pipelineProgress.sourceId) {
+    if (pipelineProgress?.done && pipelineProgress.scrapeAllSummary) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing external SSE state to local state
+      setScrapingAll(false);
+      const s = pipelineProgress.scrapeAllSummary;
+      setNotice(
+        `Scrape All finished: ${s.succeeded} updated, ${s.noChange} unchanged, ${s.failed} failed of ${s.total} sources ` +
+        `(${s.totalRulesCreated} rules created, ${s.totalRulesUpdated} updated).` +
+        (s.failures.length > 0 ? ` Failed: ${s.failures.map((f) => f.name).join(', ')}.` : ''),
+      );
+      const timer = setTimeout(reload, 2000);
+      return () => clearTimeout(timer);
+    }
+    if (pipelineProgress?.done && pipelineProgress.sourceId) {
+      const outcome = pipelineProgress.outcome ?? 'completed';
       setScrapeResults((prev) => ({
         ...prev,
-        [pipelineProgress.sourceId!]: {
-          status: 'completed',
-          rulesCreated: pipelineProgress.rulesCreated,
-          rulesUpdated: pipelineProgress.rulesUpdated,
-          durationMs: pipelineProgress.durationMs,
-        },
+        [pipelineProgress.sourceId!]: outcome === 'error'
+          ? { status: 'error', error: pipelineProgress.error ?? 'Pipeline failed', stepReached: pipelineProgress.stepReached }
+          : {
+              status: 'completed',
+              noChanges: outcome === 'no_change',
+              rulesCreated: pipelineProgress.rulesCreated,
+              rulesUpdated: pipelineProgress.rulesUpdated,
+              durationMs: pipelineProgress.durationMs,
+            },
       }));
       const timer = setTimeout(reload, 2000);
       return () => clearTimeout(timer);
     }
-  }, [pipelineProgress?.step, pipelineProgress?.sourceId, pipelineProgress?.durationMs, pipelineProgress?.rulesCreated, pipelineProgress?.rulesUpdated, reload]);
+  }, [pipelineProgress, reload]);
 
   // Determine if any scrape is active (either local API call or SSE progress)
-  const isScrapeActive = scraping !== null || scrapingAll || (pipelineProgress != null && pipelineProgress.step < 4);
+  const isScrapeActive = scraping !== null || scrapingAll || (pipelineProgress != null && !pipelineProgress.done);
 
   const retryLoad = useCallback(() => {
     setLoading(true);
@@ -117,9 +132,7 @@ export function useSourceList() {
       setActionError(apiErrorMessage(err, 'Failed to start Scrape All pipeline'));
       setScrapingAll(false);
     }
-    // We'll leave scrapingAll=true until user dismisses or all sources complete
-    // For now, set a generous timeout to auto-clear
-    setTimeout(() => setScrapingAll(false), 600_000); // 10 min max
+    // Cleared by the cycle's end event (scrapeAllSummary).
   }
 
   async function handleAudit() {

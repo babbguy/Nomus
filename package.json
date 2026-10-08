@@ -9,7 +9,7 @@
   },
   "homepage": "https://github.com/babbguy/Nomus#readme",
   "bugs": "https://github.com/babbguy/Nomus/issues",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "workspaces": [
     "packages/*",
     "engine",
@@ -35,7 +35,9 @@
     "test:mcp-server": "npm run test -w packages/mcp-server",
     "test:extensions": "npm run test:scanner && npm run test:github-action && npm run test:vscode-extension && npm run test:mcp-server",
     "test:engine": "npm run test -w engine",
-    "lint": "npm run lint --workspaces --if-present"
+    "test:dashboard": "npm run test -w dashboard",
+    "lint": "npm run lint --workspaces --if-present",
+    "gate": "node e2e/run-gate.mjs"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

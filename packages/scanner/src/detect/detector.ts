@@ -122,6 +122,27 @@ const DETECTOR_PRIORITY: Record<string, number> = {
   'import-detector': 1,
 };
 
+/**
+ * The import detector names SDKs by package (`@anthropic-ai/sdk`,
+ * `google.generativeai`, `cohere`); the SDK-usage detector by SDK family.
+ * Map both to one key so the two can be compared.
+ */
+const SDK_FAMILY: Record<string, string> = {
+  '@anthropic-ai/sdk': 'anthropic',
+  'com.anthropic': 'anthropic',
+  'anthropic-sdk-go': 'anthropic',
+  'com.openai': 'openai',
+  'openai-go': 'openai',
+  'google.generativeai': '@google/generative-ai',
+  'cohere': 'cohere-ai',
+  'boto3-bedrock': '@aws-sdk/client-bedrock-runtime',
+  'aws-bedrock': '@aws-sdk/client-bedrock-runtime',
+};
+
+function canonicalSdk(sdk: string): string {
+  return SDK_FAMILY[sdk] ?? sdk;
+}
+
 function priorityOf(source: string): number {
   return DETECTOR_PRIORITY[source] ?? 0;
 }
@@ -138,6 +159,21 @@ export function mergeSignals(signals: DetectorSignal[]): {
 } {
   const allCaps = new Set<string>();
   const signalsByFile = new Map<string, DetectorSignal[]>();
+
+  // The import detector reports every capability an SDK *could* provide
+  // (an `openai` import implies image generation, speech, vision, ...). Where
+  // the SDK-usage detector found the actual calls for that SDK in the same
+  // file, those calls are the evidence: the speculative import signal is
+  // dropped so it cannot widen the capability set.
+  const usedSdksByFile = new Set<string>();
+  for (const signal of signals) {
+    if (signal.source !== 'sdk-usage-detector') continue;
+    const sdk = (signal.metadata as { sdk?: unknown } | undefined)?.sdk;
+    if (typeof sdk === 'string') usedSdksByFile.add(`${signal.file}::${canonicalSdk(sdk)}`);
+  }
+  signals = signals.filter((signal) =>
+    signal.source !== 'import-detector' ||
+    !usedSdksByFile.has(`${signal.file}::${canonicalSdk(signal.target)}`));
 
   // Dedup key = file + line + capability
   // Value = winning signal

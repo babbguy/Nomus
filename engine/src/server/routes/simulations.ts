@@ -7,7 +7,7 @@ import { simulationRuns, regulatorySignals, aiBomSystems } from '../../db/schema
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
-import { safeJson } from '../utils.js';
+import { safeJson, safeParseInt } from '../utils.js';
 
 export const simulationRoutes = new Hono<AppEnv>();
 
@@ -98,7 +98,7 @@ function evaluateImpact(
         impact: 'none',
         reason: 'No jurisdiction overlap',
         remediationSteps: [],
-        estimatedCost: '0.00',
+        estimatedCost: centsToNumeric8(0),
       });
       continue;
     }
@@ -147,7 +147,7 @@ function evaluateImpact(
       impact,
       reason: `${system.riskClassification} risk system in affected jurisdiction`,
       remediationSteps,
-      estimatedCost: (estimatedCostCents / 100).toFixed(2),
+      estimatedCost: centsToNumeric8(estimatedCostCents),
     });
 
     // Generate roadmap steps for impacted systems
@@ -225,7 +225,14 @@ simulationRoutes.post('/run', async (c) => {
       createdAt: now,
     }).run();
 
-    return c.json({ id, status: 'completed', systemsAnalyzed: 0, systemsImpacted: 0 }, 201);
+    return c.json({
+      id,
+      status: 'completed',
+      systemsAnalyzed: 0,
+      systemsImpacted: 0,
+      overallRiskLevel: 'none',
+      estimatedRemediationCost: centsToNumeric8(0),
+    }, 201);
   }
 
   // Run impact evaluation
@@ -270,7 +277,7 @@ simulationRoutes.get('/', (c) => {
   const orgId = c.get('orgId')!;
   const status = c.req.query('status');
   const signalId = c.req.query('signalId');
-  const limit = Math.min(parseInt(c.req.query('limit') || '50'), 200);
+  const limit = Math.min(Math.max(safeParseInt(c.req.query('limit'), 50), 1), 200);
 
   let sims = db.select().from(simulationRuns)
     .where(eq(simulationRuns.orgId, orgId))
@@ -280,9 +287,17 @@ simulationRoutes.get('/', (c) => {
   if (status) sims = sims.filter((s) => s.status === status);
   if (signalId) sims = sims.filter((s) => s.signalId === signalId);
 
+  // JSON columns are served parsed, as GET /:id serves them; the list sent
+  // strings and the Simulations page crashed calling .map on '[]'.
+  const parse = (v: string): unknown[] => { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } };
+
   return c.json({
     count: sims.length,
-    simulations: sims.slice(0, limit),
+    simulations: sims.slice(0, limit).map((s) => ({
+      ...s,
+      impactDetails: parse(s.impactDetails),
+      remediationRoadmap: parse(s.remediationRoadmap),
+    })),
     _disclaimer: LEGAL_DISCLAIMER,
   });
 });

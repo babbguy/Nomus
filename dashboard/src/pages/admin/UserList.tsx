@@ -56,7 +56,8 @@ export default function UserList() {
     setLoading(true);
     setLoadError(null);
     try {
-      const params: Record<string, string> = {};
+      // The API pages at 100 by default; ask for its maximum.
+      const params: Record<string, string> = { limit: '500' };
       if (filterOrg) params.orgId = filterOrg;
       const { data } = await api.get('/users', { params });
       setUsers(data.users);
@@ -264,7 +265,7 @@ export default function UserList() {
             </div>
             <div className="col-span-2 flex items-center gap-2">
               <Button type="submit" disabled={creating}>{creating ? 'Creating...' : 'Create & Send Invitation'}</Button>
-              <p className="text-xs text-text-muted flex items-center gap-1"><Mail size={12} /> Invitation email sent automatically</p>
+              <p className="text-xs text-text-muted flex items-center gap-1"><Mail size={12} /> Emailed when an email provider is configured; otherwise you get a temporary password to share</p>
             </div>
           </form>
         </Card>

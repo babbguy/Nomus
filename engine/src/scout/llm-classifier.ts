@@ -54,7 +54,19 @@ export async function classifyBatch(
       .replace(/```json?\n?/g, '')
       .replace(/```/g, '')
       .trim();
-    parsed = JSON.parse(jsonStr);
+    const raw: unknown = JSON.parse(jsonStr);
+    // Models often wrap the array ({"items": [...]}) — accept that. Any other
+    // shape used to throw "parsed.map is not a function", failing the batch
+    // so the same items were re-sent (and re-billed) every cycle.
+    const list = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === 'object'
+        ? Object.values(raw as Record<string, unknown>).find(Array.isArray)
+        : undefined;
+    if (!list) throw new Error('classifier response is not a JSON array');
+    parsed = (list as unknown[]).filter(
+      (r): r is ClassifiedItem => !!r && typeof r === 'object' && typeof (r as ClassifiedItem).index === 'number',
+    );
   } catch {
     logger.error(
       { content: llmResponse.content.slice(0, 300) },

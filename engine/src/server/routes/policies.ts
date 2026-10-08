@@ -9,7 +9,7 @@ import { compilePolicy } from '../../core/policy-compiler.js';
 import { signData } from '../../core/signing.js';
 import { policyBundleCache } from '../../core/policy-cache.js';
 import { getPublicKey } from '../../core/signing.js';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey } from 'node:crypto';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeParseInt } from '../utils.js';
 
@@ -52,6 +52,7 @@ policyRoutes.get('/', (c) => {
   // Apply LIMIT in SQL when there's no industry filter — saves loading 10k+
   // rows into JS heap on every request.
   let rules;
+  let total: number;
   if (industry) {
     // Industry filter requires JSON array introspection — load with a generous
     // cap, then filter, then take `limit`. The cap matches POLICIES_HARD_LIMIT
@@ -60,19 +61,24 @@ policyRoutes.get('/', (c) => {
       .where(and(...conditions))
       .limit(POLICIES_HARD_LIMIT * 4)
       .all();
-    rules = fetched.filter((r) => {
+    const matching = fetched.filter((r) => {
       const industries = safeParseJson<string[]>(r.industries, ['all']);
       return industries.includes(industry) || industries.includes('all');
-    }).slice(0, limit);
+    });
+    total = matching.length;
+    rules = matching.slice(0, limit);
   } else {
     rules = db.select().from(policyRules)
       .where(and(...conditions))
       .limit(limit)
       .all();
+    total = db.select({ n: sql<number>`count(*)` }).from(policyRules).where(and(...conditions)).get()?.n ?? rules.length;
   }
 
   return c.json({
     count: rules.length,
+    // Every matching rule, also when count is capped by limit.
+    total,
     policies: rules.map((r) => ({
       ...r,
       conditions: safeParseJson<unknown[]>(r.conditions, []),
@@ -109,10 +115,15 @@ policyRoutes.get('/industries', (c) => {
     }
   }
 
+  // Rules the industry filter of GET /policies returns for this industry: the
+  // ones tagged with it plus the ones tagged 'all'. (ruleCount counts only
+  // the specifically tagged rules, so the filter showed more than its label.)
+  const parsedIndustries = rules.map((r) => safeParseJson<string[]>(r.industries, ['all']));
   const industries = Object.entries(industryMap)
     .map(([name, data]) => ({
       name,
       ruleCount: data.count,
+      matchingRuleCount: parsedIndustries.filter((list) => list.includes(name) || list.includes('all')).length,
       jurisdictions: Array.from(data.jurisdictions),
       severities: data.severities,
     }))
@@ -261,14 +272,23 @@ export const wellKnownRoutes = new Hono();
 
 wellKnownRoutes.get('/.well-known/nomus-keys', (c) => {
   try {
-    const publicKey = getPublicKey();
+    // getPublicKey() is the base64 SPKI DER, the form embedded in evidence
+    // bundles (verification.publicKey). RFC 8037 requires `x` to be the
+    // base64url raw 32-byte key, so derive it from the same key; `kid` stays
+    // the hash of the SPKI base64 so existing references keep matching.
+    const spki = getPublicKey();
+    const { x } = createPublicKey({ key: Buffer.from(spki, 'base64'), format: 'der', type: 'spki' })
+      .export({ format: 'jwk' });
     return c.json({
       keys: [{
         kty: 'OKP',
         crv: 'Ed25519',
-        x: publicKey,
+        x,
         use: 'sig',
-        kid: createHash('sha256').update(publicKey).digest('hex').slice(0, 16),
+        kid: createHash('sha256').update(spki).digest('hex').slice(0, 16),
+        // Non-standard: base64 SPKI DER, byte-identical to verification.publicKey
+        // in evidence bundles, for direct comparison.
+        spki,
       }],
       _notice: 'Nomus is an automated regulatory monitoring tool, not a law firm. Cryptographic signatures verify data integrity only — they do not constitute legal certification or endorsement.',
     });

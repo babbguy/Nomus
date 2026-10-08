@@ -3,7 +3,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 
 import { createApp } from '../src/server/app.js';
 import { seedDatabase } from '../src/db/seed.js';
-import { initSigningKeys } from '../src/core/signing.js';
+import { initSigningKeys, getPublicKey, signData } from '../src/core/signing.js';
+import { createHash, createPublicKey, verify } from 'node:crypto';
 import { createTestTables } from './setup.js';
 
 const app = createApp();
@@ -156,6 +157,30 @@ describe('API Endpoints', () => {
       const body = await res.json();
       expect(body.keys).toBeDefined();
       expect(body.keys.length).toBeGreaterThan(0);
+    });
+
+    // RFC 8037: x is the base64url raw 32-byte Ed25519 key. The endpoint used to
+    // publish the 44-byte base64 SPKI DER, which standard libraries reject.
+    it('GET /.well-known/nomus-keys publishes an RFC 8037 JWK that standard libraries import', async () => {
+      const res = await request('GET', '/.well-known/nomus-keys');
+      const { keys } = await res.json();
+      const jwk = keys[0];
+      expect(jwk.kty).toBe('OKP');
+      expect(jwk.crv).toBe('Ed25519');
+      expect(jwk.x).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(Buffer.from(jwk.x, 'base64url')).toHaveLength(32);
+
+      const imported = createPublicKey({ key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x }, format: 'jwk' });
+      const engineKey = createPublicKey({ key: Buffer.from(getPublicKey(), 'base64'), format: 'der', type: 'spki' });
+      expect(imported.equals(engineKey)).toBe(true);
+
+      // spki member matches the evidence-bundle encoding and the kid is stable.
+      expect(jwk.spki).toBe(getPublicKey());
+      expect(jwk.kid).toBe(createHash('sha256').update(getPublicKey()).digest('hex').slice(0, 16));
+
+      // Engine-signed data verifies with the JWK-imported key.
+      const data = 'nomus jwks regression payload';
+      expect(verify(null, Buffer.from(data), imported, Buffer.from(signData(data), 'base64'))).toBe(true);
     });
   });
 

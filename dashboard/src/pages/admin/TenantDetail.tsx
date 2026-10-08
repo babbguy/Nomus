@@ -113,7 +113,7 @@ export default function TenantDetail() {
       <Card>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2"><Key size={16} /> API Keys</h2>
-          <Badge variant="default">{keys.filter((k) => k.isActive).length} active</Badge>
+          <Badge variant="default">{keys.filter((k) => (k.status ?? (k.isActive ? 'active' : 'revoked')) === 'active').length} active</Badge>
         </div>
 
         {/* Create Key Form */}
@@ -160,7 +160,7 @@ export default function TenantDetail() {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-text-primary">{key.label}</p>
-                    <Badge variant={key.isActive ? 'success' : 'default'}>{key.isActive ? 'Active' : 'Revoked'}</Badge>
+                    <Badge variant={(key.status ?? (key.isActive ? 'active' : 'revoked')) === 'active' ? 'success' : key.status === 'expired' ? 'warning' : 'default'}>{key.status === 'expired' ? 'Expired' : key.isActive ? 'Active' : 'Revoked'}</Badge>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-text-muted mt-1">
                     <span className="font-mono">{key.keyPrefix}...</span>

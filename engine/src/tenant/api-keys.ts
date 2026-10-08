@@ -38,10 +38,13 @@ export function listApiKeys(orgId: string) {
     .where(eq(apiKeys.orgId, orgId))
     .all();
 
+  const now = Date.now();
   return rows.map((k) => {
     let scopes: unknown;
     try { scopes = JSON.parse(k.scopes); } catch { scopes = []; }
-    return { ...k, scopes };
+    // Effective state: an unrevoked key past expiresAt no longer authenticates.
+    const status = !k.isActive ? 'revoked' : k.expiresAt && new Date(k.expiresAt).getTime() <= now ? 'expired' : 'active';
+    return { ...k, scopes, status };
   });
 }
 

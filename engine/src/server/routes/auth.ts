@@ -7,7 +7,9 @@ import { z } from 'zod';
 import { getDb } from '../../db/client.js';
 import { users, sessions, organizations, passwordResetTokens } from '../../db/schema.js';
 import { safeJson } from '../utils.js';
+import { passwordChangeRequiredResponse } from '../middleware/auth.js';
 import { logger } from '../../logger.js';
+import { getResendApiKey } from '../../services/notifications.js';
 
 export const authRoutes = new Hono();
 
@@ -227,7 +229,9 @@ const profileUpdateSchema = z.object({
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8).max(256).optional(),
 }).refine(
-  (data) => !(data.currentPassword && !data.newPassword) && !(data.newPassword && !data.currentPassword),
+  // currentPassword is the step-up for an email change as well as a password
+  // change; rejecting it without newPassword made changing the email impossible.
+  (data) => !(data.newPassword && !data.currentPassword) && !(data.currentPassword && !data.newPassword && !data.email),
   { message: 'Both currentPassword and newPassword are required to change password' },
 );
 
@@ -244,6 +248,15 @@ authRoutes.patch('/profile', async (c) => {
   if (!session || new Date(session.expiresAt) < new Date()) {
     return c.json({ error: 'Not authenticated' }, 401);
   }
+
+  // A temporary-password session may only set a new password through
+  // /force-change-password; the profile endpoint would let it change the
+  // login email (with the temporary password as step-up) or bypass the flow.
+  const sessionUser = db.select().from(users)
+    .where(and(eq(users.id, session.userId), eq(users.isActive, true)))
+    .get();
+  if (!sessionUser) return c.json({ error: 'User not found' }, 401);
+  if (sessionUser.mustChangePassword) return passwordChangeRequiredResponse(c);
 
   const { data: body, error: jsonError } = await safeJson(c);
   if (jsonError) return c.json({ error: jsonError }, 400);
@@ -268,9 +281,12 @@ authRoutes.patch('/profile', async (c) => {
     }
     const valid = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
     if (!valid) return c.json({ error: 'Current password is incorrect' }, 400);
-    const existing = db.select().from(users).where(eq(users.email, parsed.data.email)).get();
+    // Stored lowercased: login looks the address up lowercased, so a mixed-case
+    // address saved here could never sign in.
+    const newEmail = parsed.data.email.toLowerCase().trim();
+    const existing = db.select().from(users).where(eq(users.email, newEmail)).get();
     if (existing && existing.id !== session.userId) return c.json({ error: 'Email already in use' }, 409);
-    updates.email = parsed.data.email;
+    updates.email = newEmail;
   }
 
   if (parsed.data.currentPassword && parsed.data.newPassword) {
@@ -313,12 +329,12 @@ authRoutes.post('/forgot-password', authRateLimit(3), async (c) => {
   const resetUrl = `${appUrl}/reset-password?token=${resetToken}`;
 
   // Send via Resend if configured, otherwise log to console
-  if (config.NOMUS_RESEND_API_KEY) {
+  if (getResendApiKey()) {
     try {
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${config.NOMUS_RESEND_API_KEY}`,
+          Authorization: `Bearer ${getResendApiKey()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

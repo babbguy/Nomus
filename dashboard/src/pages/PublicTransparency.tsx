@@ -42,12 +42,15 @@ interface TransparencyData {
     byJurisdiction: Array<{ jurisdiction: string; count: number }>;
   };
   quality: {
-    pipelineSuccessRate: number;
+    /** null when no pipeline ran in the last 30 days */
+    pipelineSuccessRate: number | null;
     pipelineRunsLast30Days: number;
-    shadowTestPassRate: number;
+    /** null when no shadow test has run */
+    shadowTestPassRate: number | null;
     shadowTestsRun: number;
   };
   integrity: {
+    currentStateHash?: { hash: string; ruleCount: number; computedAt: string };
     latestStateHash: { hash: string; ruleCount: number; computedAt: string } | null;
     latestChainAnchor: { txHash: string; blockNumber: number; anchoredAt: string } | null;
   };
@@ -564,12 +567,18 @@ export default function PublicTransparency() {
             <p className="text-2xl font-bold">{data.rules.total}</p>
           </div>
           <div className="bg-[#161922] border border-[#2a2d3a] rounded-xl p-4">
-            <p className="text-xs text-[#6b7280] mb-1">Pipeline Success</p>
-            <p className="text-2xl font-bold">{data.quality.pipelineSuccessRate}%</p>
+            <p className="text-xs text-[#6b7280] mb-1">Pipeline Success (30 days)</p>
+            <p className="text-2xl font-bold">
+              {data.quality.pipelineSuccessRate === null ? '—' : `${data.quality.pipelineSuccessRate}%`}
+            </p>
+            <p className="text-[11px] text-[#6b7280] mt-1">{data.quality.pipelineRunsLast30Days} run{data.quality.pipelineRunsLast30Days === 1 ? '' : 's'}</p>
           </div>
           <div className="bg-[#161922] border border-[#2a2d3a] rounded-xl p-4">
-            <p className="text-xs text-[#6b7280] mb-1">Shadow Test Rate</p>
-            <p className="text-2xl font-bold">{data.quality.shadowTestPassRate}%</p>
+            <p className="text-xs text-[#6b7280] mb-1">Shadow Tests (latest run)</p>
+            <p className="text-2xl font-bold">
+              {data.quality.shadowTestPassRate === null ? '—' : `${data.quality.shadowTestPassRate}%`}
+            </p>
+            <p className="text-[11px] text-[#6b7280] mt-1">{data.quality.shadowTestsRun === 0 ? 'none run yet' : `${data.quality.shadowTestsRun} tests`}</p>
           </div>
         </div>
 
@@ -625,9 +634,16 @@ export default function PublicTransparency() {
           <h2 className="text-sm font-semibold text-[#9ca3af] mb-3 flex items-center gap-2">
             <ShieldCheck size={14} /> Cryptographic Integrity
           </h2>
+          {data.integrity.currentStateHash && (
+            <div className="mb-3">
+              <p className="text-xs text-[#6b7280] mb-1">Current Corpus State Hash (SHA-256)</p>
+              <p className="font-mono text-xs text-[#00e5a0] break-all">{data.integrity.currentStateHash.hash}</p>
+              <p className="text-xs text-[#6b7280] mt-1">{data.integrity.currentStateHash.ruleCount} active rules</p>
+            </div>
+          )}
           {data.integrity.latestStateHash ? (
             <div className="mb-3">
-              <p className="text-xs text-[#6b7280] mb-1">Latest State Hash (SHA-256)</p>
+              <p className="text-xs text-[#6b7280] mb-1">Last Stored Snapshot (SHA-256)</p>
               <p className="font-mono text-xs text-[#00e5a0] break-all">{data.integrity.latestStateHash.hash}</p>
               <p className="text-xs text-[#6b7280] mt-1">
                 {data.integrity.latestStateHash.ruleCount} rules · Computed {new Date(data.integrity.latestStateHash.computedAt).toLocaleString()}

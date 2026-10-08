@@ -5,16 +5,24 @@ import DataFreshness from '../../components/ui/DataFreshness';
 import { apiErrorMessage } from '../../lib/errors';
 import api from '../../api/client';
 
+/** A score factor as served by GET /api/v1/compliance/score. */
+interface ScoreFactor {
+  category: string;
+  description: string;
+  /** Points added (positive) or deducted (negative); 0 for informational factors. */
+  impact: number;
+}
+
 interface Score {
   overallScore: number;
   scoresByJurisdiction: Record<string, number>;
   scoresByCategory: Record<string, number>;
-  factorsPositive: Array<{ label: string; points: number }>;
-  factorsNegative: Array<{ label: string; points: number }>;
+  factorsPositive: ScoreFactor[];
+  factorsNegative: ScoreFactor[];
   rulesActive: number;
   rulesApplicable: number;
   openFindings: number;
-  aiBomSystems: number;
+  aiBomSystemCount: number;
   highRiskSystems: number;
   benchmarkScore: number | null;
   lastBenchmarkAt: string | null;
@@ -86,7 +94,7 @@ export default function CompliancePosture() {
 <div class="stats">
 <div class="stat"><div class="stat-val">${score.rulesApplicable}</div><div class="stat-lbl">Applicable Rules</div></div>
 <div class="stat"><div class="stat-val">${score.openFindings}</div><div class="stat-lbl">Open Findings</div></div>
-<div class="stat"><div class="stat-val">${score.aiBomSystems}</div><div class="stat-lbl">AI Systems</div></div>
+<div class="stat"><div class="stat-val">${score.aiBomSystemCount}</div><div class="stat-lbl">AI Systems</div></div>
 <div class="stat"><div class="stat-val">${score.highRiskSystems}</div><div class="stat-lbl">High Risk</div></div>
 </div>
 <h2>Score by Jurisdiction</h2>
@@ -229,7 +237,7 @@ export default function CompliancePosture() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Total AI Systems</span>
-                  <span className="text-text-primary font-medium">{score.aiBomSystems}</span>
+                  <span className="text-text-primary font-medium">{score.aiBomSystemCount}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">High Risk</span>
@@ -259,8 +267,8 @@ export default function CompliancePosture() {
                 <div className="space-y-2">
                   {score.factorsPositive.map((f, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-text-secondary">{f.label}</span>
-                      <span className="text-success font-medium">+{f.points}</span>
+                      <span className="text-text-secondary">{f.description}</span>
+                      <span className="text-success font-medium">{f.impact > 0 ? `+${f.impact}` : 'info'}</span>
                     </div>
                   ))}
                 </div>
@@ -276,8 +284,8 @@ export default function CompliancePosture() {
                 <div className="space-y-2">
                   {score.factorsNegative.map((f, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-text-secondary">{f.label}</span>
-                      <span className="text-danger font-medium">{f.points}</span>
+                      <span className="text-text-secondary">{f.description}</span>
+                      <span className="text-danger font-medium">{f.impact}</span>
                     </div>
                   ))}
                 </div>

@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import type { ScanResult } from '@nomus/scanner';
 import { formatSarifReport } from '@nomus/scanner/sarif';
+import { repoRoot } from './findings.js';
 
 type Octokit = ReturnType<typeof import('@actions/github').getOctokit>;
 
@@ -16,10 +17,12 @@ export async function uploadSarif(
   octokit: Octokit,
   repo: { owner: string; repo: string },
   sha: string,
-  rootDir: string,
+  rootDir: string = repoRoot(),
   ref?: string,
 ): Promise<string | null> {
   try {
+    // Code Scanning resolves artifact URIs against the repository root, so
+    // paths must be repo-relative even when working-directory is a subfolder.
     const sarif = formatSarifReport(result.findings, rootDir);
     const sarifJson = JSON.stringify(sarif, null, 2);
 

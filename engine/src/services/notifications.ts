@@ -3,6 +3,7 @@ import { getDb } from '../db/client.js';
 import { platformSettings } from '../db/schema.js';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
+import { decryptFromStorage } from '../core/crypto.js';
 
 // ─── Settings Cache (same pattern as llm/provider.ts) ────────
 
@@ -120,12 +121,30 @@ export function getConfiguredAlertChannels(): string[] {
  * accepting subscriptions that could never be notified.
  */
 export function isEmailConfigured(): boolean {
-  return !!(getSetting('notification.apiKeys.resend', '') || env().NOMUS_RESEND_API_KEY);
+  return !!getResendApiKey();
+}
+
+/**
+ * The Resend API key: the one saved on the Notifications page (stored
+ * encrypted, so it must be decrypted — it was sent as the ciphertext and every
+ * email failed) or NOMUS_RESEND_API_KEY. Used for alerts, invitations and
+ * password resets alike.
+ */
+export function getResendApiKey(): string | undefined {
+  const stored = getSetting('notification.apiKeys.resend', '');
+  if (stored) {
+    try {
+      return decryptFromStorage(stored);
+    } catch {
+      return stored; // saved before keys were encrypted
+    }
+  }
+  return env().NOMUS_RESEND_API_KEY || undefined;
 }
 
 export async function sendEmail(to: string[], subject: string, html: string): Promise<boolean> {
   const config = env();
-  const apiKey = getSetting('notification.apiKeys.resend', '') || config.NOMUS_RESEND_API_KEY;
+  const apiKey = getResendApiKey();
   if (!apiKey) {
     logger.warn('Notification email skipped — no Resend API key');
     return false;

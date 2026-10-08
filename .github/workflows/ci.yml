@@ -1,7 +1,7 @@
 # =============================================================================
 # Nomus — CI
 # =============================================================================
-# Runs on every PR and every push to main.
+# Runs on every PR and every push to main and develop.
 # =============================================================================
 
 name: CI
@@ -9,7 +9,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
@@ -49,3 +49,6 @@ jobs:
 
       - name: Package tests (scanner, github-action, vscode-extension)
         run: npm run test:extensions
+
+      - name: Dashboard tests
+        run: npm run test:dashboard

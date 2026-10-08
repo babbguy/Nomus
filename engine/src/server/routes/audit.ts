@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, and, gte, desc, isNull, inArray } from 'drizzle-orm';
+import { eq, and, gte, desc, isNull, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
@@ -41,9 +41,15 @@ auditRoutes.get('/', (c) => {
     .limit(limit)
     .all();
 
+  // count is the page size; total is every matching attestation (the
+  // dashboard showed the page size, capped at its limit, as the org's total).
+  const total = db.select({ n: sql<number>`count(*)` }).from(attestationReceipts)
+    .where(and(...conditions)).get()?.n ?? receipts.length;
+
   const now = new Date().toISOString();
   return c.json({
     count: receipts.length,
+    total,
     attestations: receipts.map((r) => {
       let actionContext: unknown;
       let rulesEvaluated: unknown;

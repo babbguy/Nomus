@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { policyRules, shadowTestResults } from '../db/schema.js';
 import { logger } from '../logger.js';
+import { ruleMatchesContext } from '../core/attestation.js';
 
 interface ShadowTestFixture {
   name: string;
@@ -133,6 +134,8 @@ export function runShadowTests(): {
   let passed = 0;
   let failed = 0;
   let skipped = 0;
+  // One timestamp per run, so a run's results can be read back together.
+  const runAt = new Date().toISOString();
 
   for (const fixture of TEST_FIXTURES) {
     const start = performance.now();
@@ -167,15 +170,14 @@ export function runShadowTests(): {
     };
 
     for (const rule of rules) {
-      const conditions = JSON.parse(rule.conditions) as Record<string, string>;
-      let matched = true;
-
-      for (const [key, value] of Object.entries(conditions)) {
-        if (value && fixture.context[key] !== value) {
-          matched = false;
-          break;
-        }
-      }
+      // The same matching /evaluate uses (the region defaults to the
+      // fixture's jurisdiction there too), so shadow tests verify what
+      // customers get.
+      const matched = ruleMatchesContext(
+        JSON.parse(rule.conditions) as Record<string, string>,
+        { region: fixture.jurisdiction, ...fixture.context },
+        rule.industries,
+      );
 
       if (matched && (effectRank[rule.effect] ?? 0) > (effectRank[matchedEffect] ?? 0)) {
         matchedEffect = rule.effect;
@@ -206,7 +208,7 @@ export function runShadowTests(): {
       actualEffect: matchedEffect,
       passed: testPassed,
       durationMs: duration,
-      runAt: new Date().toISOString(),
+      runAt,
     }).run();
   }
 

@@ -221,8 +221,8 @@ export default function OntologyManage() {
       {/* Pending Review */}
       {pendingTerms.length > 0 && (
         <Card className="mb-4 border-warning/30">
-          <h3 className="text-sm font-semibold text-warning mb-3">Pending Review ({pendingTerms.length})</h3>
-          <p className="text-xs text-text-muted mb-3">These terms were detected by the pipeline but aren't in the ontology. Approve or reject them.</p>
+          <h3 className="text-sm font-semibold text-warning mb-3">Inactive Terms ({pendingTerms.length})</h3>
+          <p className="text-xs text-text-muted mb-3">These terms are in the ontology but inactive, so extraction does not use them. Activate a term, or delete it permanently.</p>
           <div className="space-y-2">
             {pendingTerms.map((t) => (
               <div key={t.id} className="flex items-center justify-between py-2 px-3 bg-surface rounded-lg">
@@ -235,8 +235,8 @@ export default function OntologyManage() {
                   <p className="text-xs text-text-secondary mt-0.5">{t.description}</p>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => toggleActive(t.id, true)} className="p-1.5 rounded text-success hover:bg-success/10 transition" title="Approve"><Check size={14} /></button>
-                  <button onClick={() => deleteTerm(t.id)} className="p-1.5 rounded text-danger hover:bg-danger/10 transition" title="Reject"><X size={14} /></button>
+                  <button onClick={() => toggleActive(t.id, true)} className="p-1.5 rounded text-success hover:bg-success/10 transition" title="Activate"><Check size={14} /></button>
+                  <button onClick={() => deleteTerm(t.id)} className="p-1.5 rounded text-danger hover:bg-danger/10 transition" title="Delete permanently"><X size={14} /></button>
                 </div>
               </div>
             ))}
@@ -271,6 +271,9 @@ export default function OntologyManage() {
               ))}
             </tbody>
           </table>
+          {activeTerms.length > 100 && (
+            <p className="px-4 py-2 text-xs text-text-muted border-t border-border">Showing the first 100 of {activeTerms.length} terms. Filter by type to narrow the list.</p>
+          )}
         </Card>
       )}
     </div>
