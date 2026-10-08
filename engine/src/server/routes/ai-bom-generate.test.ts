@@ -17,7 +17,7 @@ import { getDb } from '../../db/client.js';
 import { runMigrations } from '../../db/migrate.js';
 import { seedDatabase } from '../../db/seed.js';
 import { seedRulesFromOntology } from '../../db/seed-rules.js';
-import { apiKeys, organizations } from '../../db/schema.js';
+import { aiBomSystems, apiKeys, organizations } from '../../db/schema.js';
 import { initSigningKeys } from '../../core/signing.js';
 import type { AppEnv } from '../app.js';
 import { aiBomRoutes } from './ai-bom.js';
@@ -103,5 +103,41 @@ describe('POST /api/v1/ai-bom/generate', () => {
     expect(openai.riskClassification).toBe('high');
     expect(openai.euAiActCategory).toBe('employment_workers');
     expect(after.find((s: any) => s.id === anthropic.id).riskClassification).toBe('high');
+  });
+});
+
+describe('POST /api/v1/ai-bom/generate — systems from earlier versions', () => {
+  it('adopts "<sdk> (<repo>)" systems instead of listing the provider twice', async () => {
+    const db = getDb();
+    const orgId = db.select().from(apiKeys).all().find((k) => k.label === 'bom test')!.orgId;
+    const now = new Date().toISOString();
+    const legacy = (name: string) => {
+      const id = randomUUID();
+      db.insert(aiBomSystems).values({
+        id, orgId, name, description: '', systemType: 'other', provider: '', modelName: '', version: '',
+        purpose: name.split(' ')[0], capabilities: '[]', dataFlows: '[]', jurisdictions: '[]',
+        riskClassification: 'minimal', regulatoryTags: '[]', deploymentType: 'development',
+        detectedFrom: 'scanner', scanFindingIds: '[]', isActive: true, metadata: '{}', createdAt: now, updatedAt: now,
+      }).run();
+      return id;
+    };
+    const legacyOpenai = legacy('openai (acme/legacy)');
+    const legacyTs = legacy('@anthropic-ai/sdk (acme/legacy)');
+    const legacyPy = legacy('anthropic (acme/legacy)');
+
+    await call('POST', '/api/v1/scan/findings', {
+      repo: 'acme/legacy',
+      findings: [
+        { file: 'a.py', line: 1, ruleKey: 'gdpr.art5.pii_in_source', severity: 'medium', sdk: 'openai' },
+        { file: 'b.ts', line: 1, ruleKey: 'gdpr.art5.pii_in_source', severity: 'medium', sdk: '@anthropic-ai/sdk' },
+        { file: 'c.py', line: 1, ruleKey: 'gdpr.art5.pii_in_source', severity: 'medium', sdk: 'anthropic' },
+      ],
+    });
+    await call('POST', '/api/v1/ai-bom/generate');
+
+    const active = (await call('GET', '/api/v1/ai-bom')).json.systems.filter((s: any) => s.name.endsWith('(acme/legacy)'));
+    expect(active.map((s: any) => s.name).sort()).toEqual(['Anthropic (acme/legacy)', 'OpenAI (acme/legacy)']);
+    expect(active.find((s: any) => s.name === 'OpenAI (acme/legacy)').id).toBe(legacyOpenai);
+    expect([legacyTs, legacyPy]).toContain(active.find((s: any) => s.name === 'Anthropic (acme/legacy)').id);
   });
 });

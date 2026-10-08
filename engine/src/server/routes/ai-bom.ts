@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { randomUUID, createHash } from 'node:crypto';
-import { eq, and, ne, sql, desc } from 'drizzle-orm';
+import { eq, and, ne, inArray, sql, desc } from 'drizzle-orm';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
 import { aiBomSystems, aiBomSnapshots, scanFindings, policyRules, organizations } from '../../db/schema.js';
@@ -388,9 +388,37 @@ aiBomRoutes.post('/generate', (c) => {
       autoRiskClassification: risk,
     };
 
-    const existing = db.select().from(aiBomSystems)
+    let existing = db.select().from(aiBomSystems)
       .where(and(eq(aiBomSystems.orgId, orgId), eq(aiBomSystems.name, name)))
       .get();
+
+    // Earlier versions named scanner systems "<sdk> (<repo>)", one per SDK
+    // spelling. Adopt the first such system (keeping its id and history) and
+    // retire the other spellings so the inventory does not list them twice.
+    const legacy = db.select().from(aiBomSystems)
+      .where(and(
+        eq(aiBomSystems.orgId, orgId),
+        eq(aiBomSystems.detectedFrom, 'scanner'),
+        eq(aiBomSystems.isActive, true),
+        inArray(aiBomSystems.name, sdks.map((sdk) => `${sdk} (${repo})`)),
+      ))
+      .all()
+      .filter((row) => row.name !== name);
+    let toRetire = legacy;
+    if (!existing && legacy.length > 0) {
+      const [adopt, ...rest] = legacy;
+      db.update(aiBomSystems).set({
+        name,
+        ...(knownProvider ? { provider, systemType: adopt.systemType === 'other' ? 'model' as const : adopt.systemType } : {}),
+        purpose: `AI integration via ${sdks.join(', ')}`,
+        updatedAt: now,
+      }).where(eq(aiBomSystems.id, adopt.id)).run();
+      existing = db.select().from(aiBomSystems).where(eq(aiBomSystems.id, adopt.id)).get();
+      toRetire = rest;
+    }
+    for (const row of toRetire) {
+      db.update(aiBomSystems).set({ isActive: false, updatedAt: now }).where(eq(aiBomSystems.id, row.id)).run();
+    }
 
     if (existing) {
       // Refresh what the scanner knows. Keep a risk tier a person has set:
