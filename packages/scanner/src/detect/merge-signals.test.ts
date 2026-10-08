@@ -68,3 +68,40 @@ describe('mergeSignals', () => {
     expect([...capabilities].sort()).toEqual(['x', 'y', 'z']);
   });
 });
+
+describe('mergeSignals — import-detector narrowing', () => {
+  it('drops the speculative import capabilities when the SDK calls in that file were found', () => {
+    const importSig: DetectorSignal = {
+      source: 'import-detector', file: '/a.ts', line: 1, target: 'openai',
+      capabilities: ['text_generation', 'image_generation', 'speech_synthesis', 'vision'],
+      confidence: 1, evidence: "import OpenAI from 'openai'",
+    };
+    const usage: DetectorSignal = {
+      source: 'sdk-usage-detector', file: '/a.ts', line: 7, target: 'openai.chat.completions.create',
+      capabilities: ['text_generation'], confidence: 0.95, evidence: 'openai.chat.completions.create(',
+      metadata: { sdk: 'openai' },
+    };
+    const { capabilities } = mergeSignals([importSig, usage]);
+    expect(capabilities).toEqual(['text_generation']);
+  });
+
+  it('matches the scoped package name to the SDK family (@anthropic-ai/sdk → anthropic)', () => {
+    const importSig: DetectorSignal = {
+      source: 'import-detector', file: '/a.ts', line: 1, target: '@anthropic-ai/sdk',
+      capabilities: ['text_generation', 'tool_use', 'content_analysis'], confidence: 1, evidence: 'import',
+    };
+    const usage: DetectorSignal = {
+      source: 'sdk-usage-detector', file: '/a.ts', line: 5, target: 'anthropic.messages.create',
+      capabilities: ['text_generation'], confidence: 0.95, evidence: 'messages.create', metadata: { sdk: 'anthropic' },
+    };
+    expect(mergeSignals([importSig, usage]).capabilities).toEqual(['text_generation']);
+  });
+
+  it('keeps import capabilities for a file whose calls were not found', () => {
+    const importSig: DetectorSignal = {
+      source: 'import-detector', file: '/b.py', line: 1, target: 'openai',
+      capabilities: ['text_generation', 'embeddings'], confidence: 1, evidence: 'import openai',
+    };
+    expect(mergeSignals([importSig]).capabilities.sort()).toEqual(['embeddings', 'text_generation']);
+  });
+});

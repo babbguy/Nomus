@@ -47,6 +47,7 @@ function getSuggestionForEffect(effect: string, sdk: string, ruleKey: string): s
 function getCallExample(sdk: string): string {
   const examples: Record<string, string> = {
     '@anthropic-ai/sdk': 'anthropic.messages.create({ ... })',
+    'anthropic': 'anthropic.messages.create({ ... })',
     'openai': 'openai.chat.completions.create({ ... })',
     '@google/generative-ai': 'model.generateContent({ ... })',
   };
@@ -56,6 +57,7 @@ function getCallExample(sdk: string): string {
 function getModelExample(sdk: string): string {
   const examples: Record<string, string> = {
     '@anthropic-ai/sdk': 'claude-sonnet',
+    'anthropic': 'claude-sonnet',
     'openai': 'gpt-4',
     '@google/generative-ai': 'gemini-pro',
   };

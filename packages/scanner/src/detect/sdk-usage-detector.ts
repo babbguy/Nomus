@@ -62,7 +62,7 @@ const SDK_SPECS: SdkSpec[] = [
   {
     sdk: 'openai',
     modules: ['openai'],
-    classNames: ['OpenAI', 'AzureOpenAI'],
+    classNames: ['OpenAI', 'AzureOpenAI', 'AsyncOpenAI', 'AsyncAzureOpenAI'],
     rootNames: ['openai'],
     methods: {
       'chat.completions.create': ['text_generation'],
@@ -80,7 +80,7 @@ const SDK_SPECS: SdkSpec[] = [
   {
     sdk: 'anthropic',
     modules: ['@anthropic-ai/sdk'],
-    classNames: ['Anthropic'],
+    classNames: ['Anthropic', 'AsyncAnthropic'],
     rootNames: ['anthropic'],
     methods: {
       'messages.create': ['text_generation'],
@@ -593,25 +593,61 @@ const REGEX_MAPPINGS: RegexMapping[] = SDK_SPECS.map((spec) => ({
 // Dynamic / indirect call: sdkName[var](...)
 const DYNAMIC_RE = /\b(openai|anthropic|cohere|bedrock|genai|generativeai)\s*\[\s*[a-zA-Z_]/g;
 
+// Client construction in non-JS files: `client = OpenAI(...)`,
+// `client = anthropic.Anthropic()`, `model = genai.GenerativeModel(...)`,
+// `client: AsyncOpenAI = AsyncOpenAI()`. Captures (variable, class).
+const INSTANCE_ASSIGN_RE =
+  /\b([A-Za-z_]\w*)\s*(?::\s*[\w.[\]]+\s*)?(?::=|=)\s*(?:await\s+)?(?:new\s+)?(?:[A-Za-z_]\w*\.)?([A-Za-z_]\w*)\s*\(/g;
+
+/** Variables bound to an SDK client by constructor call (regex engine). */
+function collectRegexInstances(content: string): Map<string, SdkSpec> {
+  const instances = new Map<string, SdkSpec>();
+  INSTANCE_ASSIGN_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = INSTANCE_ASSIGN_RE.exec(content)) !== null) {
+    const spec = CLASS_INDEX.get(m[2]);
+    if (spec) instances.set(m[1], spec);
+  }
+  return instances;
+}
+
 function findCallsRegex(content: string): CallHit[] {
   const hits: CallHit[] = [];
+  const seen = new Set<string>();
+  const push = (hit: CallHit): void => {
+    const key = `${hit.line}::${hit.sdk}::${hit.method ?? ''}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    hits.push(hit);
+  };
 
-  for (const map of REGEX_MAPPINGS) {
-    map.pattern.lastIndex = 0;
+  const scan = (sdk: string, pattern: RegExp, methods: Record<string, string[]>, defaults: string[]): void => {
+    pattern.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = map.pattern.exec(content)) !== null) {
+    while ((m = pattern.exec(content)) !== null) {
       const method = m[1];
-      const known = map.methods[method];
-      hits.push({
-        sdk: map.sdk,
+      // `anthropic.Anthropic()` constructs a client — it is not an AI call.
+      if (CLASS_INDEX.has(method)) continue;
+      const known = methods[method];
+      push({
+        sdk,
         method,
-        capabilities: known ?? map.defaultCapabilities,
+        capabilities: known ?? defaults,
         confidence: known ? 0.95 : 0.6,
         line: offsetToLine(content, m.index),
         evidence: content.slice(m.index, Math.min(m.index + 200, content.length)).split('\n')[0],
         binding: 'name-heuristic',
       });
     }
+  };
+
+  // Calls on client variables: client = OpenAI(); client.chat.completions.create(...)
+  for (const [name, spec] of collectRegexInstances(content)) {
+    scan(spec.sdk, new RegExp(`\\b${name}\\.([a-zA-Z_][\\w.]*)\\s*\\(`, 'g'), spec.methods, spec.defaultCapabilities);
+  }
+
+  for (const map of REGEX_MAPPINGS) {
+    scan(map.sdk, map.pattern, map.methods, map.defaultCapabilities);
   }
 
   DYNAMIC_RE.lastIndex = 0;

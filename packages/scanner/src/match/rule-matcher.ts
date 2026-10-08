@@ -30,6 +30,9 @@ export function isNomusApiError(err: unknown): err is NomusApiError {
   return err instanceof Error && err.name === 'NomusApiError';
 }
 
+/** The engine's generic action condition — satisfied by any AI capability. */
+const GENERIC_AI_ACTION = 'ai_operation';
+
 export interface MatchedRule {
   ruleKey: string;
   effect: string;
@@ -50,6 +53,16 @@ export interface Finding {
   evidence: string;
   rule: MatchedRule;
   suggestion?: string;
+}
+
+/** The SDK a signal is about, or undefined for signals that describe data, not an SDK. */
+function sdkOfSignal(signal: DetectorSignal): string | undefined {
+  if (signal.source === 'import-detector') return signal.target;
+  if (signal.source === 'sdk-usage-detector') {
+    const sdk = (signal.metadata as { sdk?: unknown } | undefined)?.sdk;
+    return typeof sdk === 'string' ? sdk : signal.target.split('.')[0];
+  }
+  return undefined;
 }
 
 /**
@@ -86,10 +99,15 @@ export async function matchRulesToSignals(
       timeout: 15000,
     }));
   } catch (err) {
-    throw new NomusApiError(
-      `Nomus API request failed: ${(err as Error).message}`,
-      err,
-    );
+    const status = (err as { response?: { status?: number } }).response?.status;
+    const reason = status === 401
+      ? 'the API key was rejected (401) — check NOMUS_API_KEY / api_key'
+      : status === 403
+        ? 'the API key lacks the "evaluate" scope (403)'
+        : status
+          ? `the engine returned HTTP ${status}`
+          : `the engine at ${apiUrl} could not be reached (${(err as Error).message})`;
+    throw new NomusApiError(`Nomus API request failed: ${reason}`, err);
   }
 
   if (!data || typeof data !== 'object' || !data.markets || typeof data.markets !== 'object') {
@@ -100,49 +118,69 @@ export async function matchRulesToSignals(
   }
   const marketRules = data.markets as Record<string, { rules: MatchedRule[] }>;
 
-  // Map rules back to code locations via signals
+  // Map rules back to code locations via signals.
+  // INTL rules are returned under every requested market, so the same rule can
+  // arrive more than once — report each (rule, file) pair once.
   const findings: Finding[] = [];
+  const reported = new Set<string>();
 
-  for (const [jurisdiction, market] of Object.entries(marketRules)) {
+  // The SDK a finding is attributed to. PHI/transparency/risk signals name a
+  // data pattern ("pii_var"), not an SDK, so they borrow the SDK found in the
+  // same file; SDK-usage signals carry the SDK in metadata.
+  const sdkByFile = new Map<string, string>();
+  for (const signal of signals) {
+    const sdk = sdkOfSignal(signal);
+    if (sdk && (!sdkByFile.has(signal.file) || signal.source === 'sdk-usage-detector')) {
+      sdkByFile.set(signal.file, sdk);
+    }
+  }
+
+  for (const market of Object.values(marketRules)) {
     for (const rule of market.rules) {
       // Compute confidence: how many of the rule's matched conditions align with detected capabilities
       // The engine emits matched conditions as `capability: ${cap}` (with a
       // space after the colon) — see engine/src/server/routes/simulate.ts.
       // Take everything after the first colon and trim, so both
       // 'capability:text_generation' and 'capability: text_generation' parse.
+      // `ai_operation` is the engine's generic action: any AI signal carries it.
       const relevantCaps = rule.matchedOn
         .filter((m) => m.startsWith('capability:'))
-        .map((m) => m.split(':').slice(1).join(':').trim());
+        .map((m) => m.split(':').slice(1).join(':').trim())
+        .filter((cap) => cap !== GENERIC_AI_ACTION);
 
       const matchCount = relevantCaps.filter((cap) => capabilities.includes(cap)).length;
       const confidence = relevantCaps.length > 0
         ? Math.round((matchCount / relevantCaps.length) * 100) / 100
         : 0.5; // Default confidence when no capability matching possible
 
-      const ruleWithConfidence = { ...rule, confidence };
-
-      // Find which signals triggered this rule — use the highest-confidence signal per file
-      const seenFiles = new Set<string>();
+      // Pick the highest-confidence signal per file that carries the capability.
+      const bestByFile = new Map<string, DetectorSignal>();
       for (const signal of signals) {
-        if (seenFiles.has(signal.file)) continue;
-
         const signalMatchesCap = relevantCaps.length === 0 ||
           relevantCaps.some((cap) => signal.capabilities.includes(cap));
-
-        if (signalMatchesCap) {
-          // Factor signal confidence into rule confidence
-          const combinedConfidence = Math.round(confidence * signal.confidence * 100) / 100;
-
-          findings.push({
-            file: signal.file,
-            line: signal.line,
-            sdk: signal.target,
-            detectorSource: signal.source,
-            evidence: signal.evidence,
-            rule: { ...ruleWithConfidence, confidence: combinedConfidence },
-          });
-          seenFiles.add(signal.file);
+        if (!signalMatchesCap) continue;
+        const incumbent = bestByFile.get(signal.file);
+        if (!incumbent || signal.confidence > incumbent.confidence) {
+          bestByFile.set(signal.file, signal);
         }
+      }
+
+      for (const [file, signal] of bestByFile) {
+        const key = `${rule.ruleKey}::${file}`;
+        if (reported.has(key)) continue;
+        reported.add(key);
+
+        // Factor signal confidence into rule confidence
+        const combinedConfidence = Math.round(confidence * signal.confidence * 100) / 100;
+
+        findings.push({
+          file: signal.file,
+          line: signal.line,
+          sdk: sdkOfSignal(signal) ?? sdkByFile.get(signal.file) ?? 'unknown',
+          detectorSource: signal.source,
+          evidence: signal.evidence,
+          rule: { ...rule, confidence: combinedConfidence },
+        });
       }
     }
   }
