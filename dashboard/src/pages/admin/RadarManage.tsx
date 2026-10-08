@@ -92,8 +92,9 @@ export default function RadarManage() {
         stage: form.stage as RegulatorySignal['stage'],
         likelihoodPercent: form.likelihoodPercent,
         summary: form.summary,
-        sourceUrl: form.sourceUrl || undefined,
-        expectedEffectiveDate: form.expectedEffectiveDate || undefined,
+        // null clears a field the admin emptied
+        sourceUrl: form.sourceUrl || null,
+        expectedEffectiveDate: form.expectedEffectiveDate || null,
       });
       setShowCreate(false);
       setEditingId(null);

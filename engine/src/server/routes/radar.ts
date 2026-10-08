@@ -20,13 +20,16 @@ const createSignalSchema = z.object({
   expectedEffectiveDate: z.string().optional(),
 });
 
+// jurisdiction is editable (it was silently dropped); sourceUrl and
+// expectedEffectiveDate accept null to clear them.
 const updateSignalSchema = z.object({
   title: z.string().min(3).optional(),
+  jurisdiction: z.string().min(2).optional(),
   stage: z.enum(['signal', 'draft', 'committee', 'adopted', 'active']).optional(),
   likelihoodPercent: z.number().min(0).max(100).optional(),
   summary: z.string().min(10).optional(),
-  sourceUrl: z.string().url().optional(),
-  expectedEffectiveDate: z.string().optional(),
+  sourceUrl: z.string().url().nullable().optional(),
+  expectedEffectiveDate: z.string().nullable().optional(),
 });
 
 export const radarRoutes = new Hono<AppEnv>();
@@ -104,11 +107,12 @@ radarRoutes.patch('/:id', async (c) => {
 
   const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (parsed.data.title) updates.title = parsed.data.title;
+  if (parsed.data.jurisdiction) updates.jurisdiction = parsed.data.jurisdiction;
   if (parsed.data.stage) updates.stage = parsed.data.stage;
   if (parsed.data.likelihoodPercent !== undefined) updates.likelihoodPercent = parsed.data.likelihoodPercent;
   if (parsed.data.summary) updates.summary = parsed.data.summary;
-  if (parsed.data.sourceUrl) updates.sourceUrl = parsed.data.sourceUrl;
-  if (parsed.data.expectedEffectiveDate) updates.expectedEffectiveDate = parsed.data.expectedEffectiveDate;
+  if (parsed.data.sourceUrl !== undefined) updates.sourceUrl = parsed.data.sourceUrl;
+  if (parsed.data.expectedEffectiveDate !== undefined) updates.expectedEffectiveDate = parsed.data.expectedEffectiveDate;
 
   const result = db.update(regulatorySignals)
     .set(updates)
