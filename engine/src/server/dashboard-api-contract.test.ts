@@ -231,7 +231,15 @@ describe('Dashboard customer page contracts', () => {
   describe('AiBom + BillDetail', () => {
     it('GET /api/v1/ai-bom', async () => {
       const res = await req('GET', '/api/v1/ai-bom');
-      expect(ROUTE_OK(res.status)).toBe(true);
+      expect(res.status).toBe(200);
+      // AiBom.tsx renders its summary cards from these fields; without them
+      // the cards showed 0 systems next to a populated table.
+      const body = await res.json() as { systems: unknown[]; summary: Record<string, unknown> };
+      expect(Array.isArray(body.systems)).toBe(true);
+      for (const k of ['total', 'highRisk', 'jurisdictions', 'unclassified']) {
+        expect(typeof body.summary[k]).toBe('number');
+      }
+      expect(body.summary.total).toBe(body.systems.length);
     });
   });
 

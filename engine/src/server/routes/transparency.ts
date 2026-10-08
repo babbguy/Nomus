@@ -6,6 +6,7 @@ import {
   shadowTestResults, stateHashes, chainAnchors,
 } from '../../db/schema.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
+import { computeCurrentStateHash } from '../../core/state-hasher.js';
 import { checkSlaBreaches, getSourceHealthStatus } from '../../hunter/source-health.js';
 import { getRuleAccuracyScores } from '../../feedback/refiner.js';
 
@@ -51,18 +52,24 @@ transparencyRoutes.get('/stats', (c) => {
   const successRuns = recentRuns
     .filter((r) => r.status !== 'error')
     .reduce((sum, r) => sum + r.count, 0);
-  const pipelineSuccessRate = totalRuns > 0 ? Math.round((successRuns / totalRuns) * 100) : 100;
+  // null when nothing ran: "100%" success with zero runs (and "0%" shadow
+  // tests before any test ran) presented absent data as a measurement.
+  const pipelineSuccessRate = totalRuns > 0 ? Math.round((successRuns / totalRuns) * 100) : null;
 
-  // Shadow test pass rate (latest run)
-  const latestTests = db.select().from(shadowTestResults)
+  // Shadow test pass rate of the latest run (every test of that run, not the
+  // newest 10 result rows).
+  const latestRunAt = db.select({ runAt: shadowTestResults.runAt }).from(shadowTestResults)
     .orderBy(desc(shadowTestResults.runAt))
-    .limit(10)
-    .all();
+    .limit(1)
+    .get()?.runAt;
+  const latestTests = latestRunAt
+    ? db.select().from(shadowTestResults).where(eq(shadowTestResults.runAt, latestRunAt)).all()
+    : [];
 
   const testsPassed = latestTests.filter((t) => t.passed).length;
   const shadowTestRate = latestTests.length > 0
     ? Math.round((testsPassed / latestTests.length) * 100)
-    : 0;
+    : null;
 
   // Latest state hash (exclude signing key entries)
   const latestHash = db.select().from(stateHashes).all()
@@ -101,6 +108,8 @@ transparencyRoutes.get('/stats', (c) => {
       shadowTestsRun: latestTests.length,
     },
     integrity: {
+      // The corpus as served now (the stored hash is a periodic snapshot).
+      currentStateHash: { ...computeCurrentStateHash(), computedAt: new Date().toISOString() },
       latestStateHash: latestHash ? {
         hash: latestHash.hash,
         ruleCount: latestHash.ruleCount,

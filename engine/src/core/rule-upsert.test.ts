@@ -85,4 +85,27 @@ describe('upsertExtractedRule', () => {
     expect(upsert(extracted({ severity: 'critical' }))).toBe('updated');
     expect(byKey('upsert.test.rule')).toMatchObject({ version: 3, severity: 'critical' });
   });
+
+  it('leaves an identical re-extraction alone: no version bump, event or re-signing', () => {
+    const before = byKey('upsert.test.rule');
+    const eventsBefore = getDb().select().from(policyEvents).where(eq(policyEvents.ruleId, before.id)).all().length;
+    const same = extracted({
+      severity: before.severity,
+      // Key order differs from the stored JSON; it is the same condition set.
+      conditions: { ...JSON.parse(before.conditions) },
+      industries: JSON.parse(before.industries ?? '["all"]'),
+    });
+    expect(upsert(same)).toBe('unchanged');
+    expect(byKey('upsert.test.rule')).toEqual(before);
+    expect(getDb().select().from(policyEvents).where(eq(policyEvents.ruleId, before.id)).all()).toHaveLength(eventsBefore);
+  });
+
+  it('stores every signed field, so an update that changes the category still verifies', () => {
+    expect(upsert(extracted({ severity: 'critical', category: 'accountability', industries: ['healthcare'] }))).toBe('updated');
+    const row = byKey('upsert.test.rule');
+    expect(row.category).toBe('accountability');
+    expect(JSON.parse(row.industries ?? '[]')).toEqual(['healthcare']);
+    expect(verifyRuleSignature(row)).toBe(true);
+  });
 });
+

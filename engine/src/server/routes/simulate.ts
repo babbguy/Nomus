@@ -8,6 +8,7 @@ import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeJson } from '../utils.js';
+import { matchRuleToProfile, normalizeDataType, normalizeSector } from '../../core/applicability.js';
 
 const simulateSchema = z.object({
   capabilities: z.array(z.string()).min(1),
@@ -36,6 +37,45 @@ export const simulateRoutes = new Hono<AppEnv>();
 
 simulateRoutes.use('*', requireSessionOrApiKey('evaluate'));
 simulateRoutes.use('*', rateLimit());
+
+/**
+ * GET /api/v1/simulate/vocabulary
+ * The capability, data-type and sector values the active rules are written
+ * in. A rule applies only when its conditions match exactly, so clients (the
+ * dashboard Simulator) must offer these values rather than a fixed list.
+ */
+simulateRoutes.get('/vocabulary', (c) => {
+  const rules = getDb().select({
+    conditions: policyRules.conditions,
+    industries: policyRules.industries,
+    jurisdiction: policyRules.jurisdiction,
+  }).from(policyRules).where(eq(policyRules.isActive, true)).all();
+
+  const capabilities = new Set<string>();
+  const dataTypes = new Set<string>(['personal_data', 'health', 'biometric', 'financial']);
+  const sectors = new Set<string>();
+  const markets = new Set<string>();
+  for (const rule of rules) {
+    markets.add(rule.jurisdiction);
+    let conditions: Record<string, unknown> = {};
+    try { conditions = JSON.parse(rule.conditions) ?? {}; } catch { /* skip malformed */ }
+    if (typeof conditions.action === 'string' && conditions.action !== 'ai_operation') capabilities.add(conditions.action);
+    if (typeof conditions.data_type === 'string') dataTypes.add(normalizeDataType(conditions.data_type));
+    if (typeof conditions.sector === 'string') sectors.add(normalizeSector(conditions.sector) ?? conditions.sector);
+    let industries: unknown = [];
+    try { industries = JSON.parse(rule.industries); } catch { /* skip */ }
+    if (Array.isArray(industries)) {
+      for (const i of industries) if (typeof i === 'string' && i !== 'all') sectors.add(i);
+    }
+  }
+  const sorted = (s: Set<string>) => [...s].sort();
+  return c.json({
+    capabilities: sorted(capabilities),
+    dataTypes: sorted(dataTypes),
+    sectors: sorted(sectors),
+    markets: sorted(markets),
+  });
+});
 
 simulateRoutes.post('/', async (c) => {
   const { data: body, error: jsonError } = await safeJson(c);
@@ -67,44 +107,15 @@ simulateRoutes.post('/', async (c) => {
     const triggered: MarketReport['rules'] = [];
 
     for (const rule of rules) {
-      let conditions: Record<string, string>;
+      let conditions: Record<string, unknown>;
       try { conditions = JSON.parse(rule.conditions); } catch { continue; }
-      const matchedOn: string[] = [];
+      if (!conditions || typeof conditions !== 'object') continue;
 
-      // Check if any capability matches the rule conditions
-      for (const cap of capabilities) {
-        if (conditions.action && (conditions.action === cap || conditions.action.includes(cap))) {
-          matchedOn.push(`capability: ${cap}`);
-        }
-      }
-
-      // Check data types
-      for (const dt of dataTypes) {
-        if (conditions.data_type && (conditions.data_type === dt || conditions.data_type.includes(dt))) {
-          matchedOn.push(`data_type: ${dt}`);
-        }
-      }
-
-      // Check model type
-      if (modelType && conditions.model_type && conditions.model_type === modelType) {
-        matchedOn.push(`model_type: ${modelType}`);
-      }
-
-      // Check sector
-      if (sector && conditions.sector && conditions.sector === sector) {
-        matchedOn.push(`sector: ${sector}`);
-      }
-
-      // Check region match
-      if (conditions.region && conditions.region === market) {
-        matchedOn.push(`region: ${market}`);
-      }
-
-      // If no specific conditions matched but the rule applies broadly to this jurisdiction
-      // (e.g., general transparency requirements), include it if capabilities overlap
-      if (matchedOn.length === 0 && Object.keys(conditions).length === 0) {
-        matchedOn.push('general_applicability');
-      }
+      // Every condition the rule declares must hold (same semantics as
+      // /evaluate) — see core/applicability.ts.
+      const matchedOn = matchRuleToProfile(conditions, rule.industries, {
+        capabilities, dataTypes, market, sector, modelType,
+      }) ?? [];
 
       if (matchedOn.length > 0) {
         triggered.push({
@@ -166,8 +177,12 @@ simulateRoutes.post('/', async (c) => {
   }
 
   // Gap analysis
-  const allJurisdictionsCovered = targetMarkets.every((m) => markets[m]?.totalRules > 0);
-  const uncoveredMarkets = targetMarkets.filter((m) => (markets[m]?.totalRules ?? 0) === 0);
+  // Coverage counts only rules of the market itself: INTL rules are added to
+  // every market, so a market with no rules of its own never showed as a gap.
+  const ownRuleCount = (m: string) => db.select({ id: policyRules.id }).from(policyRules)
+    .where(and(eq(policyRules.isActive, true), eq(policyRules.jurisdiction, m))).all().length;
+  const uncoveredMarkets = targetMarkets.filter((m) => m !== 'INTL' && ownRuleCount(m) === 0);
+  const allJurisdictionsCovered = uncoveredMarkets.length === 0;
 
   // Overall risk
   const overallRiskValues = Object.values(markets).map((m) => severityRank[m.riskLevel] ?? 0);

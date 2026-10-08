@@ -211,3 +211,43 @@ describe('capability-string parsing', () => {
     expect(findings[0].rule.confidence).toBe(1);
   });
 });
+
+describe('matchRulesToSignals — end-to-end audit regressions', () => {
+  beforeEach(() => mockedPost.mockReset());
+
+  it('reports an INTL rule once per file even though every market returns it', async () => {
+    const intl = makeRule({ ruleKey: 'iso27001.annex_a.5_1', matchedOn: ['capability: text_generation'] });
+    mockedPost.mockResolvedValueOnce({
+      data: { markets: { EU: { rules: [intl] }, 'US-FED': { rules: [intl] } } },
+    });
+    const findings = await matchRulesToSignals([makeSignal()], ['text_generation'], makeConfig());
+    expect(findings).toHaveLength(1);
+  });
+
+  it('attributes data-pattern findings to the SDK used in the file, not the pattern name', async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { markets: { EU: { rules: [makeRule({ ruleKey: 'gdpr.pii', matchedOn: ['capability: pii_in_ai_call'] })] } } },
+    });
+    const findings = await matchRulesToSignals([
+      makeSignal({ source: 'sdk-usage-detector', target: 'openai.chat.completions.create', metadata: { sdk: 'openai' } }),
+      makeSignal({ source: 'phi-pattern-detector', target: 'pii_var', line: 9, capabilities: ['pii_in_ai_call'] }),
+    ], ['text_generation', 'pii_in_ai_call'], makeConfig());
+    expect(findings).toHaveLength(1);
+    expect(findings[0].sdk).toBe('openai');
+    expect(findings[0].line).toBe(9);
+  });
+
+  it('maps a generic ai_operation rule onto the AI signals', async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { markets: { INTL: { rules: [makeRule({ ruleKey: 'trism.inventory', matchedOn: ['capability: ai_operation'] })] } } },
+    });
+    const findings = await matchRulesToSignals([makeSignal()], ['text_generation'], makeConfig());
+    expect(findings).toHaveLength(1);
+  });
+
+  it('names an auth failure instead of calling it unreachable', async () => {
+    mockedPost.mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 401'), { response: { status: 401 } }));
+    await expect(matchRulesToSignals([makeSignal()], ['text_generation'], makeConfig()))
+      .rejects.toThrow(/API key was rejected \(401\)/);
+  });
+});

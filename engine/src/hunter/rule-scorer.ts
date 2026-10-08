@@ -105,7 +105,7 @@ export async function scoreRules(
       data: {
         sourceId: context?.sourceId,
         sourceName: context?.sourceName ?? sourceName,
-        step: 3,
+        step: 4,
         stepName: `Scoring rules`,
         candidateRules: candidates.length,
         batch: batchNum,

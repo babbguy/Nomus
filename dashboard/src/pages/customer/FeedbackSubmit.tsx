@@ -5,7 +5,7 @@ import Button from '../../components/ui/Button';
 
 import Spinner from '../../components/ui/Spinner';
 import ErrorState from '../../components/ui/ErrorState';
-import { apiErrorMessage } from '../../lib/errors';
+import { apiErrorMessage, apiErrorWithDetails } from '../../lib/errors';
 import api from '../../api/client';
 import { getPolicies, type Policy } from '../../api/policies';
 
@@ -60,7 +60,7 @@ export default function FeedbackSubmit() {
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       // Keep the form contents so the user can retry
-      setSubmitError(apiErrorMessage(err, 'Failed to submit feedback'));
+      setSubmitError(apiErrorWithDetails(err, 'Failed to submit feedback'));
     }
     setSubmitting(false);
   }
@@ -131,6 +131,9 @@ export default function FeedbackSubmit() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
+              // The API accepts at most 1000 characters (it answered a bare
+              // "Invalid input" when exceeded).
+              maxLength={1000}
               placeholder="Any additional context..."
               className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted resize-none"
             />

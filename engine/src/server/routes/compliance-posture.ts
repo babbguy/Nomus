@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { computeCurrentStateHash } from '../../core/state-hasher.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
@@ -15,7 +16,16 @@ export const compliancePostureRoutes = new Hono<AppEnv>();
 compliancePostureRoutes.use('*', requireSessionOrApiKey('read:policies'));
 
 // 30-second score cache to avoid recomputing on rapid dashboard calls
-const scoreCache = new Map<string, { result: ReturnType<typeof calculateScore>; expiresAt: number }>();
+const scoreCache = new Map<string, { result: ReturnType<typeof calculateScore>; computedAt: string; expiresAt: number }>();
+
+/**
+ * Drop an org's cached score after an input to it changes (e.g. scan findings
+ * uploaded or dismissed), so the next read is not up to 30 s stale. The GitHub
+ * Action reads the score immediately after uploading findings.
+ */
+export function invalidateComplianceScore(orgId: string): void {
+  scoreCache.delete(orgId);
+}
 
 interface ScoreFactor {
   category: string;
@@ -198,7 +208,8 @@ function calculateScore(orgId: string): {
     count: sql<number>`count(*)`,
   })
     .from(scanFindings)
-    .leftJoin(policyRules, eq(scanFindings.ruleId, policyRules.id))
+    // Uploaded findings carry the rule key (rule_id is not set by uploads).
+    .leftJoin(policyRules, eq(scanFindings.ruleKey, policyRules.ruleKey))
     .where(and(eq(scanFindings.orgId, orgId), eq(scanFindings.status, 'open')))
     .groupBy(sql`coalesce(${policyRules.jurisdiction}, 'unknown')`, scanFindings.severity)
     .all();
@@ -234,7 +245,8 @@ function calculateScore(orgId: string): {
     count: sql<number>`count(*)`,
   })
     .from(scanFindings)
-    .leftJoin(policyRules, eq(scanFindings.ruleId, policyRules.id))
+    // Uploaded findings carry the rule key (rule_id is not set by uploads).
+    .leftJoin(policyRules, eq(scanFindings.ruleKey, policyRules.ruleKey))
     .where(and(eq(scanFindings.orgId, orgId), eq(scanFindings.status, 'open')))
     .groupBy(sql`coalesce(${policyRules.category}, 'uncategorized')`, scanFindings.severity)
     .all();
@@ -262,15 +274,9 @@ function calculateScore(orgId: string): {
     scoresByCategory[cat] = Math.max(0, Math.min(100, 100 - deduction));
   }
 
-  // Compute policy state hash for audit trail using SQL-fetched rule IDs
-  const ruleIdsForHash = db.select({ id: policyRules.id })
-    .from(policyRules)
-    .where(eq(policyRules.isActive, true))
-    .all()
-    .map((r) => r.id)
-    .sort()
-    .join(',');
-  const policyStateHash = createHash('sha256').update(ruleIdsForHash).digest('hex').slice(0, 16);
+  // The corpus state hash the rest of the API reports (it was a truncated
+  // hash of rule ids here, which matched nothing a customer could check).
+  const policyStateHash = computeCurrentStateHash().hash;
 
   return {
     overallScore: Math.round(score * 100) / 100,
@@ -290,20 +296,28 @@ function calculateScore(orgId: string): {
 }
 
 // Get current compliance score (cached for 30s)
-compliancePostureRoutes.get('/score', (c) => {
-  const orgId = c.get('orgId')!;
+/**
+ * The organization's compliance score (30 s cache). The single score every
+ * surface shows: Posture, the customer dashboard, the public badge, the
+ * GitHub Action and the VS Code extension.
+ */
+export function getComplianceScore(orgId: string): { result: ReturnType<typeof calculateScore>; computedAt: string } {
   const now = Date.now();
-  const cached = scoreCache.get(orgId);
-  let result: ReturnType<typeof calculateScore>;
-  if (cached && cached.expiresAt > now) {
-    result = cached.result;
-  } else {
-    result = calculateScore(orgId);
-    scoreCache.set(orgId, { result, expiresAt: now + 30_000 });
+  let entry = scoreCache.get(orgId);
+  if (!entry || entry.expiresAt <= now) {
+    entry = { result: calculateScore(orgId), computedAt: new Date(now).toISOString(), expiresAt: now + 30_000 };
+    scoreCache.set(orgId, entry);
   }
+  return entry;
+}
+
+compliancePostureRoutes.get('/score', (c) => {
+  const entry = getComplianceScore(c.get('orgId')!);
 
   return c.json({
-    ...result,
+    ...entry.result,
+    // When this score was calculated (it may be served from the 30 s cache).
+    computedAt: entry.computedAt,
     _disclaimer: LEGAL_DISCLAIMER,
   });
 });

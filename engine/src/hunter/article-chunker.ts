@@ -44,6 +44,9 @@ const CHARS_PER_TOKEN = 3.5;
 
 // ─── Article Detection Patterns ──────────────────────────────────
 
+/** EUR-Lex recital style: "(1) Whereas..." — a boundary only before the first article/section. */
+const RECITAL_PAREN_PATTERN = /^\((\d+)\)\s+(?=[A-Z])/m;
+
 /** Patterns that indicate an article/section boundary */
 const ARTICLE_PATTERNS = [
   // EU/UK style: "Article 1", "Article 1(2)", "Recital (1)"
@@ -53,13 +56,14 @@ const ARTICLE_PATTERNS = [
 
   // Recitals
   /^#{1,5}\s*(Recital\s*\(?\d+\)?)/i,
-  /^\((\d+)\)\s+(?=[A-Z])/m,  // EUR-Lex recital style: "(1) Whereas..."
+  RECITAL_PAREN_PATTERN,  // EUR-Lex recital style: "(1) Whereas..."
 
   // Chapter / Title / Part / Section (structural)
   /^#{1,5}\s*((?:Title|Chapter|Part|Section|TITLE|CHAPTER|PART|SECTION)\s+[IVXLCDM\d]+[a-z]?)/i,
 
-  // US style: "Section 1", "§ 1", "Sec. 1"
-  /^#{1,5}\s*((?:Section|Sec\.|§)\s*\d+[\w.]*)/i,
+  // US style: "Section 1", "§ 1", "Sec. 1" — optionally after a compiled-
+  // statute citation, as the Illinois code prints it: "(820 ILCS 42/5) Sec. 5."
+  /^#{1,5}\s*(?:\([^)\n]{1,40}\)\s*)?((?:Section|Sec\.|§)\s*\d+[\w.]*)/i,
   /^((?:Section|Sec\.|§)\s*\d+[\w.]*)\s*[-–—.]/im,
 
   // Numbered sections: "1.2.3" style
@@ -134,6 +138,8 @@ interface Boundary {
   ref: string;       // "Article 9" or "Section 3.2"
   level: number;     // hierarchy depth: 1=Title, 2=Chapter, 3=Section, 4=Article
   label: string;     // "Title", "Chapter", "Section", "Article"
+  /** Found by the preamble recital pattern "(n) ..." */
+  recital?: boolean;
 }
 
 function detectBoundaries(lines: string[]): Boundary[] {
@@ -161,6 +167,11 @@ function detectBoundaries(lines: string[]): Boundary[] {
     // If no hierarchy match, check article patterns
     if (!boundaries.some((b) => b.lineIndex === i)) {
       for (const ap of ARTICLE_PATTERNS) {
+        // "(1) Whereas ..." is a recital only in the preamble. Inside an
+        // article or section, "(1) Notify each applicant ..." is a numbered
+        // paragraph; treating it as a boundary filed the rest of the statute
+        // under legal reference "1", "2", "3".
+        if (ap === RECITAL_PAREN_PATTERN && boundaries.some((b) => !b.recital)) continue;
         const match = line.match(ap);
         if (match) {
           boundaries.push({
@@ -169,6 +180,7 @@ function detectBoundaries(lines: string[]): Boundary[] {
             ref: match[1]?.trim() || `Line ${i}`,
             level: 4,
             label: 'Article',
+            ...(ap === RECITAL_PAREN_PATTERN ? { recital: true } : {}),
           });
           break;
         }

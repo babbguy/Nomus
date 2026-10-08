@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { getScanRepos, getScanFindings, type ScanRepo, type ScanFinding } from '../../api/scans';
+import { getAdminScanSummary, type AdminScanSummary } from '../../api/scans';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import SeverityBadge from '../../components/domain/SeverityBadge';
@@ -10,21 +9,17 @@ import { SkeletonStats, SkeletonTable } from '../../components/ui/Skeleton';
 import { apiErrorMessage } from '../../lib/errors';
 import { GitBranch, ShieldAlert, CheckCircle } from 'lucide-react';
 
+/** Scan findings uploaded by every organization (platform-wide view). */
 export default function ScanAdmin() {
-  const [repos, setRepos] = useState<ScanRepo[]>([]);
-  const [recentFindings, setRecentFindings] = useState<ScanFinding[]>([]);
+  const [summary, setSummary] = useState<AdminScanSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    Promise.all([
-      getScanRepos(),
-      getScanFindings({ status: 'open', limit: '20' }),
-    ]).then(([repoData, findingsData]) => {
-      setRepos(repoData.repos);
-      setRecentFindings(findingsData.findings);
-    }).catch((err) => setLoadError(apiErrorMessage(err, 'Failed to load scan data')))
+    getAdminScanSummary()
+      .then(setSummary)
+      .catch((err) => setLoadError(apiErrorMessage(err, 'Failed to load scan data')))
       .finally(() => setLoading(false));
   }, [retryKey]);
 
@@ -37,36 +32,41 @@ export default function ScanAdmin() {
     );
   }
 
-  const totalOpen = repos.reduce((sum, r) => sum + r.openFindings, 0);
-  const totalAll = repos.reduce((sum, r) => sum + r.totalFindings, 0);
-  const criticalCount = recentFindings.filter((f) => f.severity === 'critical').length;
+  const totals = summary?.totals;
+  const repos = summary?.repos ?? [];
+  const recentFindings = summary?.recentFindings ?? [];
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-xl font-semibold text-text-primary">Scan Administration</h1>
       </div>
+      <p className="text-sm text-text-muted mb-6">
+        Findings uploaded by scanners and the GitHub Action, across all organizations.
+      </p>
 
       {/* Aggregate stats */}
-      {loading ? (
+      {loading || !totals ? (
         <SkeletonStats count={4} />
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <Card>
-            <p className="text-xs text-text-muted uppercase tracking-wide">Total Repos</p>
-            <p className="text-2xl font-bold text-text-primary mt-1">{repos.length}</p>
+            <p className="text-xs text-text-muted uppercase tracking-wide">Repositories</p>
+            <p className="text-2xl font-bold text-text-primary mt-1">{totals.repos}</p>
+            <p className="text-xs text-text-muted mt-1">{totals.organizations} organization{totals.organizations === 1 ? '' : 's'}</p>
           </Card>
           <Card>
             <p className="text-xs text-text-muted uppercase tracking-wide">Open Findings</p>
-            <p className="text-2xl font-bold text-warning mt-1">{totalOpen}</p>
+            <p className="text-2xl font-bold text-warning mt-1">{totals.openFindings}</p>
           </Card>
           <Card>
-            <p className="text-xs text-text-muted uppercase tracking-wide">Critical</p>
-            <p className="text-2xl font-bold text-danger mt-1">{criticalCount}</p>
+            <p className="text-xs text-text-muted uppercase tracking-wide">Critical Open</p>
+            <p className="text-2xl font-bold text-danger mt-1">{totals.criticalOpen}</p>
           </Card>
           <Card>
-            <p className="text-xs text-text-muted uppercase tracking-wide">Total Scanned</p>
-            <p className="text-2xl font-bold text-text-primary mt-1">{totalAll}</p>
+            <p className="text-xs text-text-muted uppercase tracking-wide">All Findings</p>
+            <p className="text-2xl font-bold text-text-primary mt-1">{totals.totalFindings}</p>
+            <p className="text-xs text-text-muted mt-1">open, resolved and dismissed</p>
           </Card>
         </div>
       )}
@@ -85,26 +85,31 @@ export default function ScanAdmin() {
           ) : (
             <div className="space-y-2">
               {repos.map((repo) => (
-                <Link
-                  key={repo.repo}
-                  to={`/scans/${encodeURIComponent(repo.repo)}`}
+                <div
+                  key={`${repo.orgId}:${repo.repo}`}
                   className="flex items-center justify-between p-2 rounded-lg hover:bg-surface-hover transition"
                 >
-                  <span className="text-sm text-text-primary">{repo.repo}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-text-primary truncate">{repo.repo}</p>
+                    <p className="text-[11px] text-text-muted truncate">
+                      {repo.orgName ?? 'Unknown organization'} · last scanned {new Date(repo.lastScanned).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {repo.criticalOpen > 0 && <Badge variant="danger">{repo.criticalOpen} critical</Badge>}
                     {repo.openFindings > 0 ? (
                       <Badge variant="warning">{repo.openFindings} open</Badge>
                     ) : (
                       <Badge variant="success">Clean</Badge>
                     )}
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           )}
         </Card>
 
-        {/* Recent critical/high findings */}
+        {/* Recent open findings */}
         <Card>
           <h2 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
             <ShieldAlert size={16} />
@@ -124,12 +129,12 @@ export default function ScanAdmin() {
                   <SeverityBadge severity={f.severity} />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-text-primary truncate">{f.ruleKey}</p>
-                    <p className="text-[11px] text-text-muted truncate">{f.repo} · {f.filePath}</p>
+                    <p className="text-[11px] text-text-muted truncate">{f.orgName ?? 'Unknown organization'} · {f.repo} · {f.filePath}:{f.lineNumber}</p>
                   </div>
                 </div>
               ))}
               {recentFindings.length > 10 && (
-                <p className="text-xs text-text-muted text-center pt-1">+{recentFindings.length - 10} more</p>
+                <p className="text-xs text-text-muted text-center pt-1">Showing the 10 most recent of {totals?.openFindings ?? recentFindings.length} open</p>
               )}
             </div>
           )}

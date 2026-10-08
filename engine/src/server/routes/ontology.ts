@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
 import { ontologyTerms } from '../../db/schema.js';
 import { importOntologyTerms, replaceOntologyTerms, getActiveOntologyTerms } from '../../db/ontology.js';
 import { requireSessionOrApiKey } from '../middleware/auth.js';
-import { safeJson } from '../utils.js';
+import { safeJson, safeParseInt } from '../utils.js';
 
 const ontologyTypeEnum = z.enum(['obligation', 'definition', 'risk_level', 'technical_requirement', 'penalty', 'applicability']);
 
@@ -36,17 +36,21 @@ ontologyRoutes.get('/', (c) => {
   const type = c.req.query('type');
   const jurisdiction = c.req.query('jurisdiction');
   const includeInactive = c.req.query('inactive') === 'true';
-  const limit = Math.min(parseInt(c.req.query('limit') || '500'), 2000);
-  const offset = parseInt(c.req.query('offset') || '0');
+  const limit = Math.min(Math.max(safeParseInt(c.req.query('limit'), 500), 1), 2000);
+  const offset = Math.max(safeParseInt(c.req.query('offset'), 0), 0);
+
+  // Filters run in SQL before the limit (they ran on the first 500 rows).
+  const filters = [];
+  if (!includeInactive) filters.push(eq(ontologyTerms.isActive, true));
+  if (type) filters.push(eq(ontologyTerms.type, type as typeof ontologyTerms.$inferSelect.type));
+  if (jurisdiction) filters.push(or(eq(ontologyTerms.jurisdiction, jurisdiction), eq(ontologyTerms.jurisdiction, 'universal'))!);
+  const where = filters.length > 0 ? and(...filters) : undefined;
 
   const db = getDb();
-  let terms = db.select().from(ontologyTerms).limit(limit).offset(offset).all();
+  const terms = db.select().from(ontologyTerms).where(where).orderBy(ontologyTerms.term).limit(limit).offset(offset).all();
+  const total = db.select({ n: sql<number>`count(*)` }).from(ontologyTerms).where(where).get()?.n ?? terms.length;
 
-  if (!includeInactive) terms = terms.filter((t) => t.isActive);
-  if (type) terms = terms.filter((t) => t.type === type);
-  if (jurisdiction) terms = terms.filter((t) => t.jurisdiction === jurisdiction || t.jurisdiction === 'universal');
-
-  return c.json({ count: terms.length, terms });
+  return c.json({ count: terms.length, total, terms });
 });
 
 // Bulk import from JSON (additive — skips duplicates)

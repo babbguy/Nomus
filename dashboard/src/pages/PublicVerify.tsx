@@ -479,6 +479,7 @@ function SubscribeCard({ attestationId }: { attestationId: string }) {
   const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
   const [subscriptionSecret, setSubscriptionSecret] = useState<string | null>(null);
   const [secretCopied, setSecretCopied] = useState<'idle' | 'ok' | 'failed'>('idle');
+  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -488,9 +489,10 @@ function SubscribeCard({ attestationId }: { attestationId: string }) {
     if (invalid) return;
     setSubmitting(true);
     try {
-      const { subscriptionId: id, secret } = await subscribeToAttestation(attestationId, channel, target.trim());
+      const { subscriptionId: id, secret, alreadySubscribed: existing } = await subscribeToAttestation(attestationId, channel, target.trim());
       setSubscriptionId(id);
       setSubscriptionSecret(secret ?? null);
+      setAlreadySubscribed(!!existing);
     } catch (err: unknown) {
       setServerError(err instanceof Error ? err.message : 'Subscription failed.');
     }
@@ -514,8 +516,15 @@ function SubscribeCard({ attestationId }: { attestationId: string }) {
           <Bell size={14} /> Subscribed
         </h2>
         <p className="text-sm text-[#f0f2f5] mb-1">
-          You'll be notified via {channel} if this attestation's status changes.
+          {alreadySubscribed
+            ? `This ${channel} target was already subscribed; it will be notified if this attestation's status changes.`
+            : `You'll be notified via ${channel} if this attestation's status changes.`}
         </p>
+        {alreadySubscribed && channel === 'webhook' && (
+          <p className="text-xs text-[#6b7280] mb-1">
+            The signing secret was shown once, when the subscription was created; it cannot be shown again.
+          </p>
+        )}
         <p className="text-xs text-[#6b7280]">
           Subscription ID: <span className="font-mono text-[#9ca3af]">{subscriptionId}</span> — keep
           this to reference or cancel the subscription.

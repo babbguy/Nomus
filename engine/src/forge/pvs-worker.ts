@@ -386,7 +386,7 @@ export async function processJob(job: ForgeJob): Promise<PvsResult> {
         );
         if (outcome === 'created') rulesCreated++;
         else if (outcome === 'updated') rulesUpdated++;
-        else rulesSkippedLocked++;
+        else if (outcome === 'skipped_locked') rulesSkippedLocked++;
       }
 
       // Update source metadata

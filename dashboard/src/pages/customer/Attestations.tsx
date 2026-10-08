@@ -17,7 +17,7 @@ import LifecycleBadge from '../../components/domain/LifecycleBadge';
 import JurisdictionTag from '../../components/domain/JurisdictionTag';
 import DataFreshness from '../../components/ui/DataFreshness';
 import { formatDateTime } from '../../lib/formatters';
-import { apiErrorMessage } from '../../lib/errors';
+import { apiErrorMessage, blobApiErrorMessage } from '../../lib/errors';
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -104,7 +104,7 @@ export default function Attestations() {
       triggerDownload(blob, `attestation-${a.id}.${format}`);
     } catch (err: unknown) {
       setExportError(
-        `Export (${format.toUpperCase()}) failed for attestation ${a.id.slice(0, 8)}…: ${apiErrorMessage(err, 'request failed')}`,
+        `Export (${format.toUpperCase()}) failed for attestation ${a.id.slice(0, 8)}…: ${await blobApiErrorMessage(err, 'request failed')}`,
       );
     }
     setExporting(null);

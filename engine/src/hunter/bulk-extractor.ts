@@ -95,7 +95,7 @@ export async function bulkExtract(
       data: {
         sourceId: context?.sourceId,
         sourceName: context?.sourceName,
-        step: 3,
+        step: 4,
         stepName: 'Extracting requirements',
         batch: batchNum,
         totalBatches,
@@ -187,9 +187,19 @@ async function extractChunk(
 
   // Parse JSON — lenient extraction
   let requirements: ExtractedRequirement[] = [];
+  let parseError: string | undefined;
   try {
     const jsonStr = response.content.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
+
+    if (!Array.isArray(parsed)) {
+      parseError = 'model response was not a JSON array';
+    } else if (parsed.length > 0 && !parsed.some((r: unknown) => {
+      const req = r as Record<string, unknown> | null;
+      return !!req && typeof req === 'object' && !!req.ref && typeof req.what === 'string';
+    })) {
+      parseError = `model returned ${parsed.length} item(s), none with a ref and requirement text`;
+    }
 
     if (Array.isArray(parsed)) {
       // Validate each requirement individually — salvage valid ones
@@ -213,6 +223,7 @@ async function extractChunk(
   } catch {
     logger.warn({ chunk: chunk.index, content: response.content.slice(0, 100) },
       'Failed to parse chunk extraction JSON');
+    parseError = 'model response was not a JSON array';
   }
 
   return {
@@ -221,6 +232,12 @@ async function extractChunk(
     requirements,
     tokensIn: response.tokensIn,
     tokensOut: response.tokensOut,
-    success: requirements.length > 0,
+    // A well-formed empty array is a successful extraction: sections such as a
+    // short title or a definitions-only article contain no requirements. They
+    // were counted as failed chunks, so a definitions-heavy text could cross
+    // the 80% failure threshold and abort a pipeline whose extraction worked.
+    // The pipeline still stops when the whole document yields zero requirements.
+    success: parseError === undefined,
+    ...(parseError !== undefined ? { error: parseError } : {}),
   };
 }

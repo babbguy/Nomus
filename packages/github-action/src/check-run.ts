@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { relative } from 'node:path';
+import { bySeverity, toRepoPath } from './findings.js';
 import type { ScanResult } from '@nomus/scanner';
 import type { ComplianceScoreResult } from './types.js';
 
@@ -47,11 +47,10 @@ export async function createCheckRun(
       '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*',
     ].join('\n');
 
-    // GitHub limits annotations to 50 per API call
-    const annotations = findings.slice(0, 50).map((f) => {
-      const relPath = relative(process.cwd(), f.file).replace(/\\/g, '/');
+    // GitHub limits annotations to 50 per API call: annotate the most severe.
+    const annotations = bySeverity(findings).slice(0, 50).map((f) => {
       return {
-        path: relPath,
+        path: toRepoPath(f.file),
         start_line: f.line,
         end_line: f.line,
         annotation_level: mapSeverityToAnnotation(f.rule.severity),

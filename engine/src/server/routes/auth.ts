@@ -8,6 +8,7 @@ import { getDb } from '../../db/client.js';
 import { users, sessions, organizations, passwordResetTokens } from '../../db/schema.js';
 import { safeJson } from '../utils.js';
 import { logger } from '../../logger.js';
+import { getResendApiKey } from '../../services/notifications.js';
 
 export const authRoutes = new Hono();
 
@@ -227,7 +228,9 @@ const profileUpdateSchema = z.object({
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8).max(256).optional(),
 }).refine(
-  (data) => !(data.currentPassword && !data.newPassword) && !(data.newPassword && !data.currentPassword),
+  // currentPassword is the step-up for an email change as well as a password
+  // change; rejecting it without newPassword made changing the email impossible.
+  (data) => !(data.newPassword && !data.currentPassword) && !(data.currentPassword && !data.newPassword && !data.email),
   { message: 'Both currentPassword and newPassword are required to change password' },
 );
 
@@ -268,9 +271,12 @@ authRoutes.patch('/profile', async (c) => {
     }
     const valid = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
     if (!valid) return c.json({ error: 'Current password is incorrect' }, 400);
-    const existing = db.select().from(users).where(eq(users.email, parsed.data.email)).get();
+    // Stored lowercased: login looks the address up lowercased, so a mixed-case
+    // address saved here could never sign in.
+    const newEmail = parsed.data.email.toLowerCase().trim();
+    const existing = db.select().from(users).where(eq(users.email, newEmail)).get();
     if (existing && existing.id !== session.userId) return c.json({ error: 'Email already in use' }, 409);
-    updates.email = parsed.data.email;
+    updates.email = newEmail;
   }
 
   if (parsed.data.currentPassword && parsed.data.newPassword) {
@@ -313,12 +319,12 @@ authRoutes.post('/forgot-password', authRateLimit(3), async (c) => {
   const resetUrl = `${appUrl}/reset-password?token=${resetToken}`;
 
   // Send via Resend if configured, otherwise log to console
-  if (config.NOMUS_RESEND_API_KEY) {
+  if (getResendApiKey()) {
     try {
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${config.NOMUS_RESEND_API_KEY}`,
+          Authorization: `Bearer ${getResendApiKey()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

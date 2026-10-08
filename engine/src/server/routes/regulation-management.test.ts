@@ -183,6 +183,14 @@ describe('custom sources', () => {
     expect(res.json.selectorConfig).toEqual({});
   });
 
+  it('creates an inactive source when the Active box is unchecked', async () => {
+    const res = await call('POST', '/api/v1/sources', {
+      name: `Inactive Source ${uniq()}`, jurisdiction: 'ZZ', url: 'https://example.com/inactive', isActive: false,
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.isActive).toBe(false);
+  });
+
   it('requires an admin', async () => {
     expect((await call('POST', '/api/v1/sources', { name: 'x', jurisdiction: 'ZZ', url: 'https://example.com' }, null)).status).toBe(401);
     expect((await call('POST', '/api/v1/sources', { name: 'x', jurisdiction: 'ZZ', url: 'https://example.com' }, READER_KEY)).status).toBe(403);

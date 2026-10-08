@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runScan, isNomusApiError } from './scan.js';
 import { formatConsoleReport, formatJsonReport } from './output/reporter.js';
+import { parseCliArgs, USAGE } from './cli-args.js';
 
 /**
  * Exit codes:
@@ -28,11 +29,23 @@ function getVersion(): string {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
-  // The scan root is the first positional argument; flags may come in any order.
-  const rootDir = resolve(args.find((a) => !a.startsWith('--')) ?? '.');
-  const outputFormat = args.includes('--json') ? 'json' : args.includes('--sarif') ? 'sarif' : 'console';
-  const failOn = args.find((a) => a.startsWith('--fail-on='))?.split('=')[1] ?? 'critical';
+  const parsed = parseCliArgs(process.argv.slice(2));
+  if (parsed.kind === 'help') {
+    console.log(USAGE);
+    return;
+  }
+  if (parsed.kind === 'version') {
+    console.log(getVersion());
+    return;
+  }
+  if (parsed.kind === 'error') {
+    console.error(`${parsed.message}
+
+${USAGE}`);
+    process.exit(EXIT_ERROR);
+  }
+  const { failOn, outputFormat } = parsed;
+  const rootDir = resolve(parsed.rootArg);
 
   if (outputFormat === 'console') {
     console.log(`🛡️  Nomus Regulatory Applicability Engine v${getVersion()}`);
@@ -42,7 +55,7 @@ async function main() {
   const result = await runScan({ rootDir, failOn });
 
   if (outputFormat === 'json') {
-    console.log(JSON.stringify(formatJsonReport(result.findings), null, 2));
+    console.log(JSON.stringify(formatJsonReport(result.findings, { failOn, rootDir }), null, 2));
   } else if (outputFormat === 'sarif') {
     const { formatSarifReport } = await import('./output/sarif.js');
     console.log(JSON.stringify(formatSarifReport(result.findings, rootDir), null, 2));
@@ -52,7 +65,7 @@ async function main() {
       console.log(`   Detected ${result.importCount} AI SDK import(s)`);
       console.log(`   Capabilities: ${result.capabilities.join(', ')}\n`);
     }
-    console.log(formatConsoleReport(result.findings));
+    console.log(formatConsoleReport(result.findings, { failOn, rootDir }));
   }
 
   if (result.status === 'fail') process.exit(EXIT_FINDINGS);
@@ -60,9 +73,12 @@ async function main() {
 
 main().catch((err) => {
   if (isNomusApiError(err)) {
-    console.error(`Nomus API unreachable — compliance status UNKNOWN; failing closed. (${err.message})`);
+    console.error(`Nomus API unavailable — compliance status UNKNOWN; failing closed. (${err.message})`);
     process.exit(EXIT_API_UNAVAILABLE);
   }
-  console.error('Nomus scan failed:', err);
+  // Configuration and usage errors are reported by message; the stack trace is
+  // only useful when debugging the scanner itself.
+  console.error(`Nomus scan failed: ${err instanceof Error ? err.message : String(err)}`);
+  if (process.env.NOMUS_DEBUG) console.error(err);
   process.exit(EXIT_ERROR);
 });

@@ -8,7 +8,7 @@ import { benchmarkRuns, benchmarkDefinitions } from '../../db/schema.js';
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
-import { safeJson } from '../utils.js';
+import { safeJson, safeParseInt } from '../utils.js';
 
 const startBenchmarkSchema = z.object({
   modelName: z.string().min(1),
@@ -18,7 +18,7 @@ const startBenchmarkSchema = z.object({
 });
 
 const uploadResultsSchema = z.object({
-  overallScore: z.number(),
+  overallScore: z.number().min(0).max(100),
   resultsByPrinciple: z.record(z.unknown()).optional(),
   rawResults: z.array(z.unknown()).optional(),
   benchmarksPassed: z.number().int().optional(),
@@ -101,7 +101,7 @@ benchmarkRoutes.get('/runs', (c) => {
   const orgId = c.get('orgId')!;
   const status = c.req.query('status');
   const modelName = c.req.query('modelName');
-  const limit = Math.min(parseInt(c.req.query('limit') || '50'), 200);
+  const limit = Math.min(Math.max(safeParseInt(c.req.query('limit'), 50), 1), 200);
 
   let runs = db.select().from(benchmarkRuns)
     .where(eq(benchmarkRuns.orgId, orgId))
@@ -111,9 +111,21 @@ benchmarkRoutes.get('/runs', (c) => {
   if (status) runs = runs.filter((r) => r.status === status);
   if (modelName) runs = runs.filter((r) => r.modelName === modelName);
 
+  // JSON columns are served parsed, as GET /runs/:id serves them: the list
+  // sent resultsByPrinciple as the string "{}", which the Benchmarks page
+  // iterated character by character ("0 % / passed", "1 % / passed").
+  const parse = (v: string | null): unknown => {
+    if (!v) return null;
+    try { return JSON.parse(v); } catch { return null; }
+  };
+
   return c.json({
     count: runs.length,
-    runs: runs.slice(0, limit),
+    runs: runs.slice(0, limit).map((r) => ({
+      ...r,
+      resultsByPrinciple: parse(r.resultsByPrinciple),
+      rawResults: parse(r.rawResults),
+    })),
     _disclaimer: LEGAL_DISCLAIMER,
   });
 });
@@ -251,7 +263,7 @@ benchmarkRoutes.get('/summary', (c) => {
   return c.json({
     modelsTested: modelsTested.length,
     models: modelsTested,
-    averageScore: avgResult?.avgScore ? Math.round(avgResult.avgScore * 100) / 100 : null,
+    averageScore: avgResult?.avgScore != null ? Math.round(avgResult.avgScore * 100) / 100 : null,
     totalRuns,
     recentRunCount: recentRuns.length,
     bestPrinciple,

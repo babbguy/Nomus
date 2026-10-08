@@ -9,10 +9,12 @@ interface ApiKeyRowProps {
   scopes: string[];
   lastUsedAt: string | null;
   createdAt: string;
+  /** Set when the key is past its expiry (it no longer authenticates). */
+  expired?: boolean;
   onRevoke: (id: string) => void;
 }
 
-export default function ApiKeyRow({ id, prefix, label, scopes, lastUsedAt, createdAt, onRevoke }: ApiKeyRowProps) {
+export default function ApiKeyRow({ id, prefix, label, scopes, lastUsedAt, createdAt, expired, onRevoke }: ApiKeyRowProps) {
   function copyPrefix() {
     navigator.clipboard.writeText(prefix + '...');
   }
@@ -23,6 +25,7 @@ export default function ApiKeyRow({ id, prefix, label, scopes, lastUsedAt, creat
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium text-text-primary">{label}</p>
+            {expired && <Badge variant="warning">Expired</Badge>}
             <button onClick={copyPrefix} className="text-text-muted hover:text-accent transition" title="Copy prefix">
               <Copy size={12} />
             </button>

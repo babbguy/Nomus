@@ -194,6 +194,27 @@ describe('bulkExtract', () => {
     expect(results[0].requirements).toHaveLength(2);
     expect(results[0].requirements.map((r) => r.ref)).toEqual(['Art 1', 'Art 2']);
   });
+
+  it('treats a well-formed empty array as a successful chunk with no requirements', async () => {
+    // A short-title or definitions-only section has nothing to extract; it is
+    // not a failed chunk (failed chunks count toward the 80% abort threshold).
+    stubGenerate.mockResolvedValue(llmReply('[]'));
+    const results = await bulkExtract(makeChunks(1));
+    expect(results[0].success).toBe(true);
+    expect(results[0].requirements).toEqual([]);
+    expect(results[0].error).toBeUndefined();
+  });
+
+  it('fails a chunk whose response is not an array or has no usable items', async () => {
+    stubGenerate.mockResolvedValueOnce(llmReply('{"requirements": "none"}'));
+    stubGenerate.mockResolvedValueOnce(llmReply('[{"foo":"bar"}]'));
+    stubGenerate.mockResolvedValueOnce(llmReply('not json'));
+    const results = await bulkExtract(makeChunks(3));
+    expect(results.map((r) => r.success)).toEqual([false, false, false]);
+    expect(results[0].error).toMatch(/not a JSON array/);
+    expect(results[1].error).toMatch(/none with a ref/);
+    expect(results[2].error).toMatch(/not a JSON array/);
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════

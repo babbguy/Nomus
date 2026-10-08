@@ -29,6 +29,7 @@ function ConfidenceBar({ value }: { value: number | null }) {
 
 export default function ScoutReview() {
   const [items, setItems] = useState<ScoutItem[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
   const [stats, setStats] = useState<ScoutStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('pending');
@@ -57,6 +58,7 @@ export default function ScoutReview() {
       getStats(),
     ]).then(([itemsRes, statsRes]) => {
       setItems(itemsRes.items);
+      setTotalItems(itemsRes.total ?? itemsRes.items.length);
       setStats(statsRes);
       setSelected(new Set());
       setLoading(false);
@@ -165,7 +167,7 @@ export default function ScoutReview() {
           <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer">
             <input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleAll}
               className="rounded border-border" />
-            Select all ({items.length})
+            Select all ({items.length}){totalItems > items.length ? ` · showing the newest ${items.length} of ${totalItems}` : ''}
           </label>
           {selected.size > 0 && (
             <>

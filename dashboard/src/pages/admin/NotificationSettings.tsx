@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Bell, Mail, MessageSquare, Smartphone, Plus, X, RefreshCw, Check, Key } from 'lucide-react';
-import { apiErrorMessage } from '../../lib/errors';
+import { apiErrorWithDetails } from '../../lib/errors';
 import api from '../../api/client';
 
 interface NotificationConfig {
@@ -34,7 +34,9 @@ export default function NotificationSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
+  const [message, setMessageState] = useState('');
+  const [messageIsError, setMessageIsError] = useState(false);
+  const setMessage = (text: string, isError = false) => { setMessageState(text); setMessageIsError(isError); };
   const [newEmail, setNewEmail] = useState('');
   const [newTopic, setNewTopic] = useState('');
   const [ntfyUrl, setNtfyUrl] = useState('');
@@ -47,7 +49,7 @@ export default function NotificationSettings() {
       setConfig(data);
       setNtfyUrl(data.push?.ntfyUrl || 'https://ntfy.sh');
     } catch (err) {
-      setMessage(apiErrorMessage(err, 'Failed to load settings'));
+      setMessage(apiErrorWithDetails(err, 'Failed to load settings'), true);
     } finally {
       setLoading(false);
     }
@@ -79,7 +81,7 @@ export default function NotificationSettings() {
       setMessage('Settings saved');
       loadConfig();
     } catch (err) {
-      setMessage(apiErrorMessage(err, 'Failed to save'));
+      setMessage(apiErrorWithDetails(err, 'Failed to save'), true);
     } finally {
       setSaving(false);
     }
@@ -89,10 +91,10 @@ export default function NotificationSettings() {
     setTesting(channel);
     try {
       const { data } = await api.post('/settings/notifications/test', { channel });
-      setMessage(data.ok ? `Test ${channel} sent` : `Test failed: ${data.error}`);
+      setMessage(data.ok ? `Test ${channel} sent` : `Test failed: ${data.error ?? 'the channel did not accept the message'}`, !data.ok);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setMessage(axiosErr?.response?.data?.error ?? `Test ${channel} failed`);
+      setMessage(axiosErr?.response?.data?.error ?? `Test ${channel} failed`, true);
     } finally {
       setTesting(null);
     }
@@ -338,7 +340,7 @@ export default function NotificationSettings() {
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
         {message && (
-          <span className={`text-sm ${message.includes('Failed') || message.includes('failed') ? 'text-danger' : 'text-success'}`}>
+          <span className={`text-sm ${messageIsError ? 'text-danger' : 'text-success'}`} role={messageIsError ? 'alert' : 'status'}>
             {message}
           </span>
         )}

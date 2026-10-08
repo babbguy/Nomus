@@ -12,6 +12,7 @@ import { policyEvents, policyRules } from '../db/schema.js';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
 import { signRule } from './rule-signing.js';
+import { canonicalJSON } from './policy-compiler.js';
 import type { DbHandle } from './rule-management.js';
 
 export interface ExtractedRule {
@@ -30,7 +31,37 @@ export interface ExtractedRule {
   industryNotes?: string;
 }
 
-export type UpsertOutcome = 'created' | 'updated' | 'skipped_locked';
+export type UpsertOutcome = 'created' | 'updated' | 'unchanged' | 'skipped_locked';
+
+/** Key-order-independent serialisation for comparing JSON values. */
+const canon = (value: unknown): string => canonicalJSON({ value });
+
+/** Stored JSON column -> value, tolerating legacy non-JSON text. */
+function parseStored(value: string | null): unknown {
+  if (value == null) return null;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+/**
+ * True when re-extraction produced exactly the stored rule. Re-processing an
+ * unchanged document used to bump every rule's version, re-sign it, emit a
+ * policy.updated event to every subscriber, move the corpus state hash and
+ * create a duplicate "Regulation Change" radar signal.
+ */
+function sameAsStored(existing: typeof policyRules.$inferSelect, rule: ExtractedRule): boolean {
+  return existing.jurisdiction === rule.jurisdiction
+    && existing.category === rule.category
+    && canon(parseStored(existing.conditions)) === canon(rule.conditions)
+    && existing.effect === rule.effect
+    && existing.severity === rule.severity
+    && existing.humanSummary === rule.humanSummary
+    && existing.legalReference === rule.legalReference
+    && existing.effectiveDate === rule.effectiveDate
+    && (existing.expiresAt ?? null) === (rule.expiresAt ?? null)
+    && canon(parseStored(existing.industries) ?? ['all']) === canon(rule.industries ?? ['all'])
+    && (existing.industryScope ?? 'global') === (rule.industryScope ?? 'global')
+    && (existing.industryNotes ?? '') === (rule.industryNotes ?? '');
+}
 
 export function upsertExtractedRule(
   tx: DbHandle,
@@ -49,11 +80,18 @@ export function upsertExtractedRule(
     return 'skipped_locked';
   }
 
+  if (existing && sameAsStored(existing, rule)) return 'unchanged';
+
   if (existing) {
     const newVersion = existing.version + 1;
     const signature = signRule({ ...rule, version: newVersion });
     tx.update(policyRules).set({
       version: newVersion,
+      // Every signed field is stored: jurisdiction and category were signed
+      // from the new extraction but never written, so a re-extraction that
+      // changed the category left a rule whose signature no longer verified.
+      jurisdiction: rule.jurisdiction,
+      category: rule.category,
       conditions: JSON.stringify(rule.conditions),
       // Extracted rules carry effect/severity as free strings; the DB column
       // constrains them to the policy enums (validated upstream).
@@ -63,6 +101,9 @@ export function upsertExtractedRule(
       legalReference: rule.legalReference,
       effectiveDate: rule.effectiveDate,
       expiresAt: rule.expiresAt ?? null,
+      industries: JSON.stringify(rule.industries ?? ['all']),
+      industryScope: rule.industryScope ?? 'global',
+      industryNotes: rule.industryNotes ?? '',
       signature,
       updatedAt: ctx.now,
     }).where(eq(policyRules.id, existing.id)).run();

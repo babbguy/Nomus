@@ -113,7 +113,7 @@ export async function getItems(params?: {
   feedId?: string;
   limit?: number;
   offset?: number;
-}): Promise<{ count: number; items: ScoutItem[] }> {
+}): Promise<{ count: number; total: number; items: ScoutItem[] }> {
   const { data } = await api.get('/scout/items', { params });
   return data;
 }

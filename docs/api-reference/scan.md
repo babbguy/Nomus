@@ -18,6 +18,8 @@ rate limited per organization (see the [overview](./README.md#rate-limiting)). E
 
 Upload findings from a scan. Returns `201`.
 
+The scanner reports one finding per rule per file, so a finding is identified by repository, file and rule key. Uploading a finding that is already stored refreshes it (line, commit, PR, text and scan time) instead of adding a duplicate: a finding you dismissed stays dismissed, and a resolved finding that is reported again is reopened. Optional fields may be omitted or sent as `null`.
+
 ```bash
 curl -X POST http://localhost:3100/api/v1/scan/findings \
   -H "Authorization: Bearer $NOMUS_API_KEY" \
@@ -30,13 +32,13 @@ curl -X POST http://localhost:3100/api/v1/scan/findings \
       {
         "file": "src/chat.ts",
         "line": 12,
-        "ruleKey": "eu_ai_act.art52.transparency",
+        "ruleKey": "eu_ai_act.art50.1.chatbot_disclosure",
         "severity": "high",
         "sdk": "openai",
         "capability": "text_generation",
         "summary": "Users must be told they are interacting with an AI system.",
         "suggestion": "Add a visible AI disclosure to the chat UI.",
-        "legalReference": "EU AI Act Art. 52"
+        "legalReference": "EU AI Act Art. 50(1)"
       }
     ]
   }'
@@ -69,6 +71,7 @@ Each finding:
 ```json
 {
   "created": 1,
+  "updated": 0,
   "clauseCorrelation": { "created": 1, "suppressed": 0, "evaluated": 1 },
   "clauseCorrelationError": null
 }
@@ -90,7 +93,7 @@ List stored findings for your organization, newest first.
 |-------|---------|-------|
 | `repo` | all | Exact match |
 | `severity` | all | `critical`, `high`, `medium`, `low` |
-| `status` | `open` | `open`, `resolved`, `dismissed` |
+| `status` | `open` | `open`, `resolved`, `dismissed`, or `all` |
 | `limit` | 100 | Max 500 |
 
 ```json
@@ -105,14 +108,14 @@ List stored findings for your organization, newest first.
       "commitSha": "abc1234",
       "filePath": "src/chat.ts",
       "lineNumber": 12,
-      "ruleKey": "eu_ai_act.art52.transparency",
+      "ruleKey": "eu_ai_act.art50.1.chatbot_disclosure",
       "severity": "high",
       "effect": "flag",
       "capabilityDetected": "openai",
       "humanSummary": "Users must be told they are interacting with an AI system.",
       "suggestion": "Add a visible AI disclosure to the chat UI.",
       "detectorSource": null,
-      "legalReference": "EU AI Act Art. 52",
+      "legalReference": "EU AI Act Art. 50(1)",
       "status": "open",
       "scannedAt": "2026-04-04T10:00:00.000Z"
     }
@@ -192,7 +195,7 @@ nomus:
   api_url: http://localhost:3100     # default
   api_key: nk_live_...               # or set NOMUS_API_KEY
   jurisdictions: [EU, US-FED]        # required, at least one
-  sector: fintech                    # optional
+  sector: finance                    # optional: healthcare, finance, education, government, ...
   data_types: [personal_data]        # optional
   ignore: [node_modules/**, dist/**] # optional glob list
 ```

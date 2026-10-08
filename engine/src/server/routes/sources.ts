@@ -36,6 +36,8 @@ const createSourceSchema = z.object({
   category: categorySchema.default('ai_regulation'),
   tier: z.number().int().min(1).max(4).default(1),
   needsHeadless: z.boolean().default(false),
+  // The Add Source form's Active checkbox (a new source was always active).
+  isActive: z.boolean().default(true),
 });
 
 const updateSourceSchema = z.object({
@@ -172,7 +174,7 @@ sourceRoutes.post('/', async (c) => {
     provenanceGrade: provenanceGradeFor(parsed.data.url, parsed.data.parserType),
     origin: 'custom' as const,
     registryKey: null,
-    isActive: true,
+    isActive: parsed.data.isActive,
     createdAt: now,
     updatedAt: now,
   };
@@ -521,7 +523,7 @@ sourceRoutes.post('/upload-content/:sourceId', async (c) => {
   // Save to content cache for future fallback
   try {
     const { saveCacheContent } = await import('../../hunter/content-cache.js');
-    saveCacheContent(sourceId, content, source.parserType, source.url);
+    saveCacheContent(sourceId, content, effectiveParserType, source.url);
   } catch (err) {
     logger.warn({ sourceId, error: (err as Error).message }, 'Failed to save upload to content cache');
   }

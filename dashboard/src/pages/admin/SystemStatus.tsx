@@ -53,6 +53,10 @@ function timeAgo(dateStr: string): string {
 const statusColors: Record<string, string> = {
   completed: 'bg-success/15 text-success',
   no_change: 'bg-accent/15 text-accent',
+  // Pipeline run statuses as the engine records them (it never writes
+  // 'failed' or 'running'; errors were shown in neutral grey).
+  typo_only: 'bg-accent/15 text-accent',
+  error: 'bg-danger/15 text-danger',
   failed: 'bg-danger/15 text-danger',
   running: 'bg-warning/15 text-warning',
 };

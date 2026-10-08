@@ -104,10 +104,13 @@ export default function BadgePage() {
         <h2 className="text-sm font-semibold text-text-secondary mb-4">Badge Preview</h2>
         <div className="flex justify-center py-6 bg-white/5 rounded-lg">
           {config?.isPublic && org ? (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface border border-border text-sm">
-              <img src="/logo-icon.svg" alt="Nomus" className="w-4 h-4" />
-              <span className="text-text-primary font-medium">Nomus Verified</span>
-            </div>
+            // The badge visitors will see (it showed a static "Nomus Verified"
+            // pill, which the published badge never says).
+            <img
+              src={`/api/v1/badge/${encodeURIComponent(org.slug)}/svg?style=${config.style}`}
+              alt="AI compliance score badge"
+              className="h-7"
+            />
           ) : (
             <p className="text-sm text-text-muted">Enable your badge to see the preview</p>
           )}

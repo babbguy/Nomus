@@ -21,10 +21,12 @@ function heatColor(count: number): string {
 interface Stats {
   rules: number;
   sources: number;
+  totalSources: number;
   tenants: number;
   connectedClients: number;
   lastPipelineRun: { status: string; completedAt: string } | null;
   latestStateHash: { hash: string; ruleCount: number; computedAt: string } | null;
+  currentStateHash: { hash: string; ruleCount: number; computedAt: string };
 }
 
 function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string | number; accent?: boolean }) {
@@ -103,9 +105,9 @@ export default function AdminDashboard() {
       <h1 className="text-xl font-semibold text-text-primary mb-6">Platform Dashboard</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={<Activity size={18} />} label="Policy Rules" value={stats.rules} accent />
-        <StatCard icon={<Database size={18} />} label="Sources" value={stats.sources} />
-        <StatCard icon={<Users size={18} />} label="Tenants" value={stats.tenants} />
+        <StatCard icon={<Activity size={18} />} label="Active Policy Rules" value={stats.rules} accent />
+        <StatCard icon={<Database size={18} />} label="Active Sources" value={`${stats.sources} of ${stats.totalSources}`} />
+        <StatCard icon={<Users size={18} />} label="Active Tenants" value={stats.tenants} />
         <StatCard icon={<Wifi size={18} />} label="Connected Clients" value={stats.connectedClients} />
       </div>
 
@@ -116,7 +118,7 @@ export default function AdminDashboard() {
             <div>
               <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${
                 stats.lastPipelineRun.status === 'completed' ? 'bg-success/15 text-success' :
-                stats.lastPipelineRun.status === 'no_change' ? 'bg-info/15 text-info' :
+                stats.lastPipelineRun.status === 'no_change' || stats.lastPipelineRun.status === 'typo_only' ? 'bg-info/15 text-info' :
                 'bg-danger/15 text-danger'
               }`}>
                 {stats.lastPipelineRun.status}
@@ -131,17 +133,20 @@ export default function AdminDashboard() {
         </div>
 
         <div className="glass rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-text-secondary mb-3">Integrity Status</h2>
-          {stats.latestStateHash ? (
-            <div>
-              <p className="font-mono text-xs text-accent break-all">{stats.latestStateHash.hash}</p>
-              <p className="text-text-muted text-sm mt-1">
-                {stats.latestStateHash.ruleCount} rules verified
-              </p>
-            </div>
-          ) : (
-            <p className="text-text-muted text-sm">No state hash computed yet</p>
-          )}
+          <h2 className="text-sm font-semibold text-text-secondary mb-3">Corpus State Hash</h2>
+          <div>
+            <p className="font-mono text-xs text-accent break-all">{stats.currentStateHash.hash}</p>
+            <p className="text-text-muted text-sm mt-1">
+              Current, over {stats.currentStateHash.ruleCount} active rules
+            </p>
+            <p className="text-text-muted text-xs mt-1">
+              {stats.latestStateHash
+                ? stats.latestStateHash.hash === stats.currentStateHash.hash
+                  ? `Matches the last stored snapshot (${new Date(stats.latestStateHash.computedAt).toLocaleString()})`
+                  : `Changed since the last stored snapshot (${new Date(stats.latestStateHash.computedAt).toLocaleString()}, ${stats.latestStateHash.ruleCount} rules)`
+                : 'No snapshot stored yet'}
+            </p>
+          </div>
         </div>
       </div>
 

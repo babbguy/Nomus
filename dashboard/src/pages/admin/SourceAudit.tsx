@@ -170,7 +170,8 @@ export default function SourceAudit() {
             </Badge>
           )}
           <span className="text-xs text-text-muted ml-auto">
-            {ruleCount} rules extracted
+            {/* Retired rules are listed too, so the count says which are live. */}
+            {rules.filter((x) => x.isActive).length} active rules{ruleCount > rules.filter((x) => x.isActive).length ? ` (${ruleCount - rules.filter((x) => x.isActive).length} retired)` : ''}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -271,6 +272,7 @@ export default function SourceAudit() {
                         {rule.severity}
                       </Badge>
                       <Badge variant="default">{rule.effect}</Badge>
+                      {!rule.isActive && <Badge variant="warning">retired</Badge>}
                     </div>
                     <p className="text-xs font-medium text-accent mb-1">{rule.legalReference}</p>
                     <p className="text-xs text-text-primary leading-relaxed">{rule.humanSummary}</p>

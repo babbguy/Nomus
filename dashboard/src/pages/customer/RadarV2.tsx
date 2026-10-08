@@ -19,38 +19,18 @@ import {
   type RadarStats,
   type BillMover,
 } from '../../api/radar-v2';
+import { BILL_STAGES, ENACTED_BILL_STAGES, ENDED_BILL_STAGES, billStageLabel } from '@nomus/shared';
 
 // ─── Stage Configuration ────────────────────────────────────────
 
-const STAGES = [
-  'rumor', 'introduced', 'committee', 'floor_vote',
-  'passed_one_chamber', 'conference', 'enrolled', 'signed', 'enacted', 'dead',
-] as const;
-
-const stageLabels: Record<string, string> = {
-  rumor: 'Rumor',
-  introduced: 'Introduced',
-  committee: 'Committee',
-  floor_vote: 'Floor Vote',
-  passed_one_chamber: 'Passed Chamber',
-  conference: 'Conference',
-  enrolled: 'Enrolled',
-  signed: 'Signed',
-  enacted: 'Enacted',
-  dead: 'Dead',
-};
-
+// Stage ids are the engine's lifecycle stages (@nomus/shared BILL_STAGES).
 function stageBadgeVariant(stage: string): 'default' | 'info' | 'warning' | 'success' | 'danger' | 'accent' {
-  switch (stage) {
-    case 'enacted':
-    case 'signed': return 'success';
-    case 'floor_vote':
-    case 'conference': return 'warning';
-    case 'dead': return 'danger';
-    case 'introduced':
-    case 'committee': return 'info';
-    default: return 'default';
-  }
+  if (ENACTED_BILL_STAGES.includes(stage)) return 'success';
+  if (ENDED_BILL_STAGES.includes(stage) || stage === 'vetoed') return 'danger';
+  const phase = BILL_STAGES.find((s) => s.id === stage)?.phase;
+  if (phase === 'floor' || phase === 'second_chamber' || phase === 'executive') return 'warning';
+  if (phase === 'drafting' || phase === 'committee') return 'info';
+  return 'default';
 }
 
 // ─── Score Badge ────────────────────────────────────────────────
@@ -121,7 +101,7 @@ function AlertsFeed({ bills }: { bills: TrackedBill[] }) {
           <div key={b.id} className="flex items-center gap-2 text-xs">
             <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
             <span className="text-text-secondary truncate flex-1">{b.title}</span>
-            <Badge variant={stageBadgeVariant(b.currentStage)}>{stageLabels[b.currentStage] ?? b.currentStage}</Badge>
+            <Badge variant={stageBadgeVariant(b.currentStage)}>{billStageLabel(b.currentStage)}</Badge>
             {b.lastActionDate && <span className="text-text-muted shrink-0">{formatRelative(b.lastActionDate)}</span>}
           </div>
         ))}
@@ -148,7 +128,7 @@ function StatsBar({ stats }: { stats: RadarStats }) {
         <p className="text-xs text-text-muted">Avg Passage Score</p>
       </Card>
       <Card className="p-3 text-center">
-        <p className="text-2xl font-bold text-text-primary">{stats.byStage['enacted'] ?? 0}</p>
+        <p className="text-2xl font-bold text-text-primary">{ENACTED_BILL_STAGES.reduce((n, st) => n + (stats.byStage[st] ?? 0), 0)}</p>
         <p className="text-xs text-text-muted">Enacted</p>
       </Card>
     </div>
@@ -273,8 +253,8 @@ export default function RadarV2() {
                 className="text-sm bg-surface border border-border rounded-lg px-3 py-1.5 text-text-primary"
               >
                 <option value="">All Stages</option>
-                {STAGES.map((s) => (
-                  <option key={s} value={s}>{stageLabels[s]}</option>
+                {BILL_STAGES.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
               </select>
               <div className="flex items-center gap-2">
@@ -296,7 +276,9 @@ export default function RadarV2() {
           {loading ? (
             <div className="flex justify-center py-20"><Spinner /></div>
           ) : bills.length === 0 ? (
-            <EmptyState title="No bills found" description="Adjust your filters or wait for the Scout pipeline to discover bills." />
+            // Nothing in this version writes tracked bills (Scout records news
+            // signals, shown on the Radar page), so do not promise that it will.
+            <EmptyState title="No bills tracked" description="Bills appear here once they are recorded in the bill tracker. Scout's news signals are on the Radar page." />
           ) : (
             <>
               <Card className="p-0 overflow-hidden">
@@ -325,7 +307,7 @@ export default function RadarV2() {
                         <td className="px-4 py-3"><JurisdictionTag code={bill.jurisdiction} /></td>
                         <td className="px-4 py-3">
                           <Badge variant={stageBadgeVariant(bill.currentStage)}>
-                            {stageLabels[bill.currentStage] ?? bill.currentStage}
+                            {billStageLabel(bill.currentStage)}
                           </Badge>
                         </td>
                         <td className="px-4 py-3"><ScoreBadge score={bill.passageScore} /></td>

@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
-import { relative } from 'node:path';
-import type { ScanResult } from '@nomus/scanner';
+import type { Finding, ScanResult } from '@nomus/scanner';
 import type { ComplianceScoreResult } from './types.js';
+import { bySeverity, commentableLines, toRepoPath } from './findings.js';
 
 type Octokit = ReturnType<typeof import('@actions/github').getOctokit>;
 
@@ -20,9 +20,31 @@ const EFFECT_LABELS: Record<string, string> = {
 };
 
 const COMMENT_MARKER = '<!-- nomus-scan -->';
+const DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
+
+/** GitHub accepts a limited number of comments per review. */
+const MAX_INLINE_COMMENTS = 25;
+
+function findingBlock(f: Finding): string {
+  const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
+  const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
+  let body = `${icon} **Nomus: ${f.rule.severity.toUpperCase()}** — ${effect}\n\n`;
+  body += `**${f.rule.ruleKey}**\n`;
+  body += `${f.rule.humanSummary}\n\n`;
+  body += `📜 ${f.rule.legalReference}\n`;
+  body += `🔧 SDK: \`${f.sdk}\`\n`;
+  if (f.suggestion) {
+    body += `\n<details><summary>💡 Suggested fix</summary>\n\n\`\`\`\n${f.suggestion}\n\`\`\`\n</details>\n`;
+  }
+  return body;
+}
 
 /**
  * Post inline review comments on lines with applicable regulatory obligations.
+ *
+ * Only lines inside the PR's diff hunks are commented (GitHub rejects the
+ * whole review otherwise), all obligations on one line share one comment, and
+ * the most severe lines are commented first.
  */
 export async function postInlineComments(
   result: ScanResult,
@@ -34,42 +56,40 @@ export async function postInlineComments(
   if (result.findings.length === 0) return;
 
   try {
-    // Get the PR diff to know which files/lines are in the diff
-    const { data: files } = await octokit.rest.pulls.listFiles({
+    const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
       ...repo,
       pull_number: prNumber,
+      per_page: 100,
     });
-    const diffFiles = new Set(files.map((f) => f.filename));
+    const diffLines = new Map<string, Set<number> | null>();
+    for (const f of files) diffLines.set(f.filename, commentableLines(f.patch));
 
-    // Only comment on files that are in the PR diff
-    const comments = result.findings
-      .filter((f) => {
-        // Normalize path — strip leading ./ or absolute path prefix
-        const relPath = relative(process.cwd(), f.file).replace(/\\/g, '/');
-        return diffFiles.has(relPath);
-      })
-      .slice(0, 25) // GitHub limits to ~30 comments per review
-      .map((f) => {
-        const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
-        const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
-        const relPath = relative(process.cwd(), f.file).replace(/\\/g, '/');
+    // Group by (path, line), keeping severity order.
+    const byLocation = new Map<string, { path: string; line: number; findings: Finding[] }>();
+    for (const f of bySeverity(result.findings)) {
+      const path = toRepoPath(f.file);
+      if (!diffLines.has(path)) continue;
+      const lines = diffLines.get(path);
+      if (!lines || !lines.has(f.line)) continue;
+      const key = `${path}:${f.line}`;
+      const entry = byLocation.get(key) ?? { path, line: f.line, findings: [] };
+      entry.findings.push(f);
+      byLocation.set(key, entry);
+    }
 
-        let body = `${icon} **Nomus: ${f.rule.severity.toUpperCase()}** — ${effect}\n\n`;
-        body += `**${f.rule.ruleKey}**\n`;
-        body += `${f.rule.humanSummary}\n\n`;
-        body += `📜 ${f.rule.legalReference}\n`;
-        body += `🔧 SDK: \`${f.sdk}\`\n`;
+    const comments = [...byLocation.values()]
+      .slice(0, MAX_INLINE_COMMENTS)
+      .map(({ path, line, findings }) => ({
+        path,
+        line,
+        side: 'RIGHT' as const,
+        body: `${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
+      }));
 
-        if (f.suggestion) {
-          body += `\n<details><summary>💡 Suggested fix</summary>\n\n\`\`\`\n${f.suggestion}\n\`\`\`\n</details>\n`;
-        }
-
-        body += `\n---\n*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*`;
-
-        return { path: relPath, line: f.line, body };
-      });
-
-    if (comments.length === 0) return;
+    if (comments.length === 0) {
+      core.info('   No obligations on lines changed in this pull request — no inline comments');
+      return;
+    }
 
     await octokit.rest.pulls.createReview({
       ...repo,
@@ -88,6 +108,9 @@ export async function postInlineComments(
 /**
  * Post or update a single summary comment on the PR.
  * Uses a hidden marker to find and update existing comments.
+ *
+ * `badgeOrgSlug` is the Nomus organization whose public badge to embed, or
+ * null to embed none (the caller checks that the badge is actually served).
  */
 export async function postSummaryComment(
   result: ScanResult,
@@ -95,14 +118,14 @@ export async function postSummaryComment(
   repo: { owner: string; repo: string },
   apiUrl: string,
   prNumber: number,
-  badgeEmbed: boolean,
+  badgeOrgSlug: string | null,
   complianceScore?: ComplianceScoreResult,
 ): Promise<void> {
   try {
-    const body = buildSummaryBody(result, repo, apiUrl, badgeEmbed, complianceScore);
+    const body = buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore);
 
     // Find existing Nomus comment
-    const { data: comments } = await octokit.rest.issues.listComments({
+    const comments = await octokit.paginate(octokit.rest.issues.listComments, {
       ...repo,
       issue_number: prNumber,
       per_page: 100,
@@ -131,9 +154,8 @@ export async function postSummaryComment(
 
 function buildSummaryBody(
   result: ScanResult,
-  repo: { owner: string; repo: string },
   apiUrl: string,
-  badgeEmbed: boolean,
+  badgeOrgSlug: string | null,
   complianceScore?: ComplianceScoreResult,
 ): string {
   const { counts, status, findings } = result;
@@ -163,14 +185,13 @@ function buildSummaryBody(
   // Files scanned
   body += `📁 ${result.fileCount} files scanned · ${result.importCount} AI SDK imports detected\n\n`;
 
-  // Top findings (max 10)
+  // Top findings (max 10), most severe first
   if (findings.length > 0) {
     body += `### Applicable Obligations\n\n`;
-    const top = findings.slice(0, 10);
+    const top = bySeverity(findings).slice(0, 10);
     for (const f of top) {
       const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
-      const relPath = relative(process.cwd(), f.file).replace(/\\/g, '/');
-      body += `${icon} **${f.rule.ruleKey}** — \`${relPath}:${f.line}\`\n`;
+      body += `${icon} **${f.rule.ruleKey}** — \`${toRepoPath(f.file)}:${f.line}\`\n`;
       body += `   ${f.rule.humanSummary}\n\n`;
     }
     if (findings.length > 10) {
@@ -179,13 +200,14 @@ function buildSummaryBody(
   }
 
   // Badge
-  if (badgeEmbed) {
+  if (badgeOrgSlug) {
+    const slug = encodeURIComponent(badgeOrgSlug);
     body += `---\n`;
-    body += `[![Nomus Regulatory](${apiUrl}/api/v1/badge/${repo.owner}/svg)](${apiUrl}/api/v1/badge/${repo.owner})\n\n`;
+    body += `[![Nomus Regulatory](${apiUrl}/api/v1/badge/${slug}/svg)](${apiUrl}/api/v1/badge/${slug})\n\n`;
   }
 
   body += `---\n`;
-  body += `*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*\n`;
+  body += `${DISCLAIMER}\n`;
 
   return body;
 }

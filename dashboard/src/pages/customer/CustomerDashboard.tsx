@@ -50,7 +50,10 @@ interface CustomerStats {
     actionContext: Record<string, string>;
     evaluatedAt: string;
   }>;
-  complianceRate: number;
+  /** Share of the recent attestations whose obligations are clear (-1: none yet). */
+  clearRate: number;
+  /** The organization's compliance score, as on the Compliance Posture page (null if unavailable). */
+  complianceScore: number | null;
 }
 
 function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
@@ -80,13 +83,16 @@ export default function CustomerDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [policies, attestations, orgRes] = await Promise.all([
-          api.get('/policies'),
+        const [policyHash, attestations, orgRes, scoreRes] = await Promise.all([
+          // The active-rule count; GET /policies returns at most one page of rules.
+          api.get('/policies/hash'),
           api.get('/attestations', { params: { limit: 10 } }),
           api.get('/org').catch(() => {
             setOrgFailed(true);
             return { data: {} as { industry?: string | null } };
           }),
+          // Same score as the Compliance Posture page, so the two never disagree.
+          api.get('/compliance/score').catch(() => ({ data: null as { overallScore?: number } | null })),
         ]);
 
         const atts: CustomerStats['recentAttestations'] = Array.isArray(attestations.data?.attestations)
@@ -94,12 +100,14 @@ export default function CustomerDashboard() {
           : [];
         const compliant = atts.filter((a: { result: string }) => a.result === 'compliant').length;
         const rate = atts.length > 0 ? Math.round((compliant / atts.length) * 100) : -1; // -1 = not yet assessed
+        const score = scoreRes.data?.overallScore;
 
         setStats({
-          policyCount: policies.data?.count ?? 0,
-          attestationCount: attestations.data?.count ?? atts.length,
+          policyCount: policyHash.data?.ruleCount ?? 0,
+          attestationCount: attestations.data?.total ?? attestations.data?.count ?? atts.length,
           recentAttestations: atts,
-          complianceRate: rate,
+          clearRate: rate,
+          complianceScore: typeof score === 'number' ? Math.round(score) : null,
         });
 
         const orgIndustry = orgRes.data?.industry;
@@ -183,18 +191,18 @@ export default function CustomerDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
         <Card className="lg:col-span-1 flex justify-center py-6" glow>
-          <ScoreGauge score={stats.complianceRate < 0 ? 0 : stats.complianceRate} />
-          {stats.complianceRate < 0 && (
-            <p className="text-xs text-text-muted mt-2 text-center">Not yet assessed</p>
+          <ScoreGauge score={stats.complianceScore ?? 0} />
+          {stats.complianceScore === null && (
+            <p className="text-xs text-text-muted mt-2 text-center">Score unavailable</p>
           )}
         </Card>
         <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard icon={<FileText size={18} />} label="Active Policies" value={stats.policyCount} />
           <StatCard icon={<ClipboardCheck size={18} />} label="Attestations" value={stats.attestationCount} />
           <StatCard
-            icon={stats.complianceRate >= 80 ? <ShieldCheck size={18} /> : <AlertTriangle size={18} />}
-            label="Compliance Rate"
-            value={stats.complianceRate < 0 ? 'N/A' : `${stats.complianceRate}%`}
+            icon={stats.clearRate >= 80 ? <ShieldCheck size={18} /> : <AlertTriangle size={18} />}
+            label={`Obligations clear (last ${stats.recentAttestations.length})`}
+            value={stats.clearRate < 0 ? 'N/A' : `${stats.clearRate}%`}
           />
         </div>
       </div>
