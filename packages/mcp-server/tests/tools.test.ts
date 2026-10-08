@@ -147,13 +147,16 @@ describe('nomus MCP tools (stubbed engine)', () => {
         capabilities: string[];
         signals: Array<{ detector: string; target: string; evidence: string; line: number }>;
       };
-      expect(detection.capabilities).toEqual(
-        expect.arrayContaining(['text_generation', 'tool_use', 'content_analysis']),
-      );
-      const importSignal = detection.signals.find((s) => s.detector === 'import-detector');
-      expect(importSignal).toBeDefined();
-      expect(importSignal!.target).toBe('@anthropic-ai/sdk');
-      expect(importSignal!.evidence).toContain('@anthropic-ai/sdk');
+      // The SDK call that was actually made is the evidence; the import's
+      // speculative SDK-wide capabilities (tool_use, content_analysis) are
+      // not reported for code that only calls messages.create.
+      expect(detection.capabilities).toContain('text_generation');
+      expect(detection.capabilities).not.toContain('tool_use');
+      expect(detection.capabilities).not.toContain('content_analysis');
+      const callSignal = detection.signals.find((s) => s.detector === 'sdk-usage-detector');
+      expect(callSignal).toBeDefined();
+      expect(callSignal!.target).toBe('anthropic.messages.create');
+      expect(callSignal!.line).toBe(5);
 
       // The derived capabilities were what the engine was asked about.
       const simulateCall = requestsFor('/api/v1/simulate').at(-1)!;

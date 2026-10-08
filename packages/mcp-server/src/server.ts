@@ -191,7 +191,7 @@ export function buildNomusMcpServer(config: NomusMcpConfig): McpServer {
         capabilities: z
           .array(z.string().min(1))
           .optional()
-          .describe('AI capabilities to check, e.g. ["text_generation", "biometric_identification"].'),
+          .describe('AI capabilities to check, using the rule-condition vocabulary, e.g. ["text_generation", "ai_user_interaction", "phi_in_ai_call", "high_risk_biometric"]. Unknown names match no rule.'),
         code: z
           .string()
           .min(1)
@@ -206,7 +206,7 @@ export function buildNomusMcpServer(config: NomusMcpConfig): McpServer {
         dataTypes: z
           .array(z.string().min(1))
           .optional()
-          .describe('Data types processed, e.g. ["phi", "pii", "biometric"].'),
+          .describe('Data types processed, e.g. ["health", "personal_data", "biometric"] ("phi" and "pii" are accepted as aliases).'),
       },
     },
     async (args): Promise<CallToolResult> => {
@@ -286,7 +286,7 @@ export function buildNomusMcpServer(config: NomusMcpConfig): McpServer {
       title: 'Get a Nomus rule',
       description:
         'Fetch the full detail of one Nomus policy rule by its rule key (e.g. ' +
-        '"eu_ai_act.art52.transparency") or internal rule id. Returns conditions, effect, severity, ' +
+        '"eu_ai_act.art50.1.chatbot_disclosure") or internal rule id. Returns conditions, effect, severity, ' +
         'legal reference, and per-rule provenance (Ed25519 signature, timestamps). ' +
         'Calls GET /api/v1/policies/:id, falling back to a rule-key search over GET /api/v1/policies.',
       inputSchema: {
