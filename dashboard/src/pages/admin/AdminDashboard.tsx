@@ -118,7 +118,7 @@ export default function AdminDashboard() {
             <div>
               <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${
                 stats.lastPipelineRun.status === 'completed' ? 'bg-success/15 text-success' :
-                stats.lastPipelineRun.status === 'no_change' ? 'bg-info/15 text-info' :
+                stats.lastPipelineRun.status === 'no_change' || stats.lastPipelineRun.status === 'typo_only' ? 'bg-info/15 text-info' :
                 'bg-danger/15 text-danger'
               }`}>
                 {stats.lastPipelineRun.status}
