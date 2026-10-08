@@ -21,7 +21,9 @@ export default function Login() {
     try {
       await login(email, password);
 
-      if (deviceState) {
+      // A temporary-password session cannot complete device sign-in; force the
+      // password change first (the extension flow can be restarted afterwards).
+      if (deviceState && !useAuthStore.getState().user?.mustChangePassword) {
         window.location.href = `/api/v1/auth/device/callback?device_state=${encodeURIComponent(deviceState)}`;
         return;
       }
