@@ -177,8 +177,12 @@ simulateRoutes.post('/', async (c) => {
   }
 
   // Gap analysis
-  const allJurisdictionsCovered = targetMarkets.every((m) => markets[m]?.totalRules > 0);
-  const uncoveredMarkets = targetMarkets.filter((m) => (markets[m]?.totalRules ?? 0) === 0);
+  // Coverage counts only rules of the market itself: INTL rules are added to
+  // every market, so a market with no rules of its own never showed as a gap.
+  const ownRuleCount = (m: string) => db.select({ id: policyRules.id }).from(policyRules)
+    .where(and(eq(policyRules.isActive, true), eq(policyRules.jurisdiction, m))).all().length;
+  const uncoveredMarkets = targetMarkets.filter((m) => m !== 'INTL' && ownRuleCount(m) === 0);
+  const allJurisdictionsCovered = uncoveredMarkets.length === 0;
 
   // Overall risk
   const overallRiskValues = Object.values(markets).map((m) => severityRank[m.riskLevel] ?? 0);

@@ -199,3 +199,11 @@ describe('GET /api/v1/simulate/vocabulary', () => {
     }
   });
 });
+
+describe('POST /api/v1/simulate — gap analysis', () => {
+  it('reports a market with no rules of its own as uncovered, even though INTL rules apply there', async () => {
+    const r = await simulate({ capabilities: ['text_generation'], targetMarkets: ['EU', 'KR'] }) as any;
+    expect(r.gapAnalysis.uncoveredMarkets).toEqual(['KR']);
+    expect(r.gapAnalysis.allJurisdictionsCovered).toBe(false);
+  });
+});
