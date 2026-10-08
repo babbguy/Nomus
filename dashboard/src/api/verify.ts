@@ -106,6 +106,8 @@ export interface SubscribeResponse {
    * retrievable again; the UI must display it with a save-it-now warning.
    */
   secret?: string;
+  /** True when this target was already subscribed (no new secret is issued). */
+  alreadySubscribed?: boolean;
 }
 
 /**
