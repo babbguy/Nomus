@@ -12,6 +12,10 @@ export default function Profile() {
   const [email, setEmail] = useState(user?.email ?? '');
   const [savingInfo, setSavingInfo] = useState(false);
   const [nameMsg, setNameMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  // Changing the sign-in email requires the current password (the API rejects
+  // the change without it; the page never sent it, so every email change failed).
+  const [emailPassword, setEmailPassword] = useState('');
+  const emailChanged = email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -28,7 +32,15 @@ export default function Profile() {
     try {
       const payload: Record<string, string> = {};
       if (name.trim() !== (user?.name ?? '')) payload.name = name.trim();
-      if (email.trim() !== (user?.email ?? '')) payload.email = email.trim();
+      if (emailChanged) {
+        if (!emailPassword) {
+          setNameMsg({ type: 'err', text: 'Enter your current password to change your email.' });
+          setSavingInfo(false);
+          return;
+        }
+        payload.email = email.trim();
+        payload.currentPassword = emailPassword;
+      }
       if (Object.keys(payload).length === 0) {
         setNameMsg({ type: 'ok', text: 'No changes to save.' });
         setSavingInfo(false);
@@ -36,10 +48,11 @@ export default function Profile() {
       }
       await api.patch('/auth/profile', payload);
       await checkSession();
-      setNameMsg({ type: 'ok', text: 'Name updated.' });
+      setEmailPassword('');
+      setNameMsg({ type: 'ok', text: payload.email ? 'Profile updated. Sign in with your new email from now on.' : 'Profile updated.' });
     } catch (e: unknown) {
       const axiosErr = e as { response?: { data?: { error?: string } } };
-      setNameMsg({ type: 'err', text: axiosErr?.response?.data?.error ?? 'Failed to update name.' });
+      setNameMsg({ type: 'err', text: axiosErr?.response?.data?.error ?? 'Failed to update profile.' });
     }
     setSavingInfo(false);
   }
@@ -108,6 +121,19 @@ export default function Profile() {
               placeholder="Your email"
             />
           </div>
+          {emailChanged && (
+            <div>
+              <label className="block text-xs text-text-muted mb-1">Current password (required to change email)</label>
+              <input
+                type="password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+                className={inputCls}
+                placeholder="Enter current password"
+                autoComplete="current-password"
+              />
+            </div>
+          )}
           {nameMsg && (
             <p className={`text-xs ${nameMsg.type === 'ok' ? 'text-success' : 'text-danger'}`}>
               {nameMsg.text}
