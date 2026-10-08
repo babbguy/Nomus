@@ -225,7 +225,14 @@ simulationRoutes.post('/run', async (c) => {
       createdAt: now,
     }).run();
 
-    return c.json({ id, status: 'completed', systemsAnalyzed: 0, systemsImpacted: 0 }, 201);
+    return c.json({
+      id,
+      status: 'completed',
+      systemsAnalyzed: 0,
+      systemsImpacted: 0,
+      overallRiskLevel: 'none',
+      estimatedRemediationCost: centsToNumeric8(0),
+    }, 201);
   }
 
   // Run impact evaluation
