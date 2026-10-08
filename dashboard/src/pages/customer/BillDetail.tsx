@@ -19,39 +19,28 @@ import {
   type BillScoreHistoryEntry,
   type BillNewsArticle,
 } from '../../api/radar-v2';
+import { BILL_STAGES, ENACTED_BILL_STAGES, ENDED_BILL_STAGES, billStageLabel } from '@nomus/shared';
 
 // ─── Stage Definitions (for timeline) ───────────────────────────
 
-const LIFECYCLE_STAGES = [
-  'rumor', 'introduced', 'committee', 'floor_vote',
-  'passed_one_chamber', 'conference', 'enrolled', 'signed', 'enacted',
-] as const;
-
-const stageLabels: Record<string, string> = {
-  rumor: 'Rumor',
-  introduced: 'Introduced',
-  committee: 'Committee',
-  floor_vote: 'Floor Vote',
-  passed_one_chamber: 'Passed Chamber',
-  conference: 'Conference',
-  enrolled: 'Enrolled',
-  signed: 'Signed',
-  enacted: 'Enacted',
-  dead: 'Dead',
-};
+// The timeline follows the engine's lifecycle stages, excluding the
+// terminal and veto branches, which are shown as a badge instead.
+const TIMELINE_STAGES = BILL_STAGES
+  .filter((st) => st.phase !== 'terminal' && st.id !== 'vetoed' && st.id !== 'veto_override')
+  .map((st) => st.id as string);
 
 // ─── SD3: Stage Timeline Visualization ──────────────────────────
 
 function StageTimeline({ currentStage, stages }: { currentStage: string; stages: BillStageHistoryEntry[] }) {
   const completedStages = new Set(stages.map((s) => s.stage));
-  const currentIdx = LIFECYCLE_STAGES.indexOf(currentStage as typeof LIFECYCLE_STAGES[number]);
-  const isDead = currentStage === 'dead';
+  const currentIdx = TIMELINE_STAGES.indexOf(currentStage);
+  const isDead = ENDED_BILL_STAGES.includes(currentStage);
 
   return (
     <Card className="p-4">
       <h3 className="text-sm font-semibold text-text-primary mb-4">Legislative Timeline</h3>
       <div className="flex items-center gap-0 overflow-x-auto pb-2">
-        {LIFECYCLE_STAGES.map((stage, i) => {
+        {TIMELINE_STAGES.map((stage, i) => {
           const isCompleted = completedStages.has(stage) || (currentIdx >= 0 && i < currentIdx);
           const isCurrent = stage === currentStage;
 
@@ -76,7 +65,7 @@ function StageTimeline({ currentStage, stages }: { currentStage: string; stages:
                 <span className={`absolute top-5 text-[10px] whitespace-nowrap transition ${
                   isCurrent ? 'text-accent font-semibold opacity-100' : 'text-text-muted opacity-0 group-hover:opacity-100'
                 } ${isDead && isCurrent ? 'text-danger' : ''}`}>
-                  {stageLabels[stage] ?? stage}
+                  {billStageLabel(stage)}
                 </span>
                 {/* Stage date if available */}
                 {stages.find((s) => s.stage === stage) && (
@@ -91,7 +80,7 @@ function StageTimeline({ currentStage, stages }: { currentStage: string; stages:
       </div>
       {isDead && (
         <div className="mt-3">
-          <Badge variant="danger">Bill is Dead</Badge>
+          <Badge variant="danger">{billStageLabel(currentStage)}</Badge>
         </div>
       )}
     </Card>
@@ -133,7 +122,8 @@ function ScoreBreakdown({ bill }: { bill: TrackedBill }) {
       </div>
       <div className="space-y-3">
         {components.map((comp) => {
-          const pct = comp.value !== null ? Math.round(comp.value * 100) : 0;
+          // Components are stored on a 0-100 scale (scout/passage-score.ts).
+          const pct = comp.value !== null ? Math.max(0, Math.min(100, Math.round(comp.value))) : 0;
           return (
             <div key={comp.key}>
               <div className="flex items-center justify-between mb-1">
@@ -276,7 +266,7 @@ function StageAlerts({ stages }: { stages: BillStageHistoryEntry[] }) {
         {recent.map((s) => (
           <div key={s.id} className="flex items-center gap-2 text-xs">
             <div className="w-1.5 h-1.5 rounded-full bg-info shrink-0" />
-            <Badge variant="info">{stageLabels[s.stage] ?? s.stage}</Badge>
+            <Badge variant="info">{billStageLabel(s.stage)}</Badge>
             <span className="text-text-muted">{formatDate(s.enteredAt)}</span>
             {s.source && <span className="text-text-muted truncate">via {s.source}</span>}
           </div>
@@ -386,11 +376,11 @@ export default function BillDetail() {
               <div className="text-3xl font-bold text-text-primary">{bill.passageScore}%</div>
             )}
             <Badge variant={
-              bill.currentStage === 'enacted' || bill.currentStage === 'signed' ? 'success'
-              : bill.currentStage === 'dead' ? 'danger'
+              ENACTED_BILL_STAGES.includes(bill.currentStage) ? 'success'
+              : ENDED_BILL_STAGES.includes(bill.currentStage) || bill.currentStage === 'vetoed' ? 'danger'
               : 'info'
             }>
-              {stageLabels[bill.currentStage] ?? bill.currentStage}
+              {billStageLabel(bill.currentStage)}
             </Badge>
             {bill.sourceUrl && (
               <a
