@@ -69,3 +69,20 @@ describe('corpus state hash', () => {
     expect(stats.totalSources).toBeGreaterThanOrEqual(stats.sources);
   });
 });
+
+describe('GET /api/v1/policies totals (Policies page)', () => {
+  it('reports the total beside a capped page', async () => {
+    const page = await get('/api/v1/policies?limit=5');
+    const hash = await get('/api/v1/policies/hash');
+    expect(page.count).toBe(5);
+    expect(page.total).toBe(hash.ruleCount);
+  });
+
+  it('labels each industry with the number of rules its filter returns', async () => {
+    const { industries } = await get('/api/v1/policies/industries');
+    for (const ind of industries.filter((i: any) => i.name !== 'all')) {
+      const filtered = await get(`/api/v1/policies?industry=${ind.name}&limit=1000`);
+      expect(ind.matchingRuleCount, ind.name).toBe(filtered.total);
+    }
+  });
+});

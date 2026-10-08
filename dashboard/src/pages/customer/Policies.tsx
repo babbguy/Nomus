@@ -24,6 +24,7 @@ const INDUSTRY_LABELS: Record<string, string> = {
 export default function Policies() {
   const [searchParams] = useSearchParams();
   const [policies, setPolicies] = useState<Policy[]>([]);
+  const [total, setTotal] = useState(0);
   const [industries, setIndustries] = useState<IndustrySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export default function Policies() {
     getPolicies(params)
       .then((r) => {
         setPolicies(r.policies);
+        setTotal(r.total ?? r.policies.length);
         setFetchedAt(new Date().toISOString());
         setLoading(false);
       })
@@ -81,7 +83,9 @@ export default function Policies() {
           <h1 className="text-xl font-semibold text-text-primary">Policy Rules</h1>
           <DataFreshness fetchedAt={fetchedAt} dataTimestamp={lastPolicyUpdate} className="mt-1" />
         </div>
-        <Badge variant="accent">{policies.length} rules</Badge>
+        <Badge variant="accent">
+          {total > policies.length ? `showing ${policies.length} of ${total} rules` : `${total} rules`}
+        </Badge>
       </div>
 
       {industriesError && <ErrorState compact message={industriesError} onRetry={loadIndustries} />}
@@ -116,7 +120,7 @@ export default function Policies() {
           <option value="">All Industries</option>
           {industries.filter((i) => i.name !== 'all').map((ind) => (
             <option key={ind.name} value={ind.name}>
-              {INDUSTRY_LABELS[ind.name] ?? ind.name} ({ind.ruleCount})
+              {INDUSTRY_LABELS[ind.name] ?? ind.name} ({ind.matchingRuleCount})
             </option>
           ))}
         </select>
@@ -132,7 +136,7 @@ export default function Policies() {
               className="px-2.5 py-1 text-xs rounded-full bg-surface border border-border text-text-secondary hover:bg-accent-dim hover:text-accent hover:border-accent-border transition"
             >
               {INDUSTRY_LABELS[ind.name] ?? ind.name}
-              <span className="ml-1 text-text-muted">{ind.ruleCount}</span>
+              <span className="ml-1 text-text-muted">{ind.matchingRuleCount}</span>
             </button>
           ))}
         </div>

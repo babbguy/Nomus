@@ -52,6 +52,7 @@ policyRoutes.get('/', (c) => {
   // Apply LIMIT in SQL when there's no industry filter — saves loading 10k+
   // rows into JS heap on every request.
   let rules;
+  let total: number;
   if (industry) {
     // Industry filter requires JSON array introspection — load with a generous
     // cap, then filter, then take `limit`. The cap matches POLICIES_HARD_LIMIT
@@ -60,19 +61,24 @@ policyRoutes.get('/', (c) => {
       .where(and(...conditions))
       .limit(POLICIES_HARD_LIMIT * 4)
       .all();
-    rules = fetched.filter((r) => {
+    const matching = fetched.filter((r) => {
       const industries = safeParseJson<string[]>(r.industries, ['all']);
       return industries.includes(industry) || industries.includes('all');
-    }).slice(0, limit);
+    });
+    total = matching.length;
+    rules = matching.slice(0, limit);
   } else {
     rules = db.select().from(policyRules)
       .where(and(...conditions))
       .limit(limit)
       .all();
+    total = db.select({ n: sql<number>`count(*)` }).from(policyRules).where(and(...conditions)).get()?.n ?? rules.length;
   }
 
   return c.json({
     count: rules.length,
+    // Every matching rule, also when count is capped by limit.
+    total,
     policies: rules.map((r) => ({
       ...r,
       conditions: safeParseJson<unknown[]>(r.conditions, []),
@@ -109,10 +115,15 @@ policyRoutes.get('/industries', (c) => {
     }
   }
 
+  // Rules the industry filter of GET /policies returns for this industry: the
+  // ones tagged with it plus the ones tagged 'all'. (ruleCount counts only
+  // the specifically tagged rules, so the filter showed more than its label.)
+  const parsedIndustries = rules.map((r) => safeParseJson<string[]>(r.industries, ['all']));
   const industries = Object.entries(industryMap)
     .map(([name, data]) => ({
       name,
       ruleCount: data.count,
+      matchingRuleCount: parsedIndustries.filter((list) => list.includes(name) || list.includes('all')).length,
       jurisdictions: Array.from(data.jurisdictions),
       severities: data.severities,
     }))

@@ -22,7 +22,10 @@ export interface Policy {
 
 export interface IndustrySummary {
   name: string;
+  /** Rules tagged with this industry. */
   ruleCount: number;
+  /** Rules the industry filter returns: tagged with it, or with 'all'. */
+  matchingRuleCount: number;
   jurisdictions: string[];
   severities: Record<string, number>;
 }
@@ -32,7 +35,7 @@ export async function getPolicies(params?: {
   category?: string;
   industry?: string;
   since?: string;
-}): Promise<{ count: number; policies: Policy[] }> {
+}): Promise<{ count: number; total: number; policies: Policy[] }> {
   const { data } = await api.get('/policies', { params });
   return data;
 }
