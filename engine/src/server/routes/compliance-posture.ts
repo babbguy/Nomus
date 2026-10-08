@@ -15,7 +15,7 @@ export const compliancePostureRoutes = new Hono<AppEnv>();
 compliancePostureRoutes.use('*', requireSessionOrApiKey('read:policies'));
 
 // 30-second score cache to avoid recomputing on rapid dashboard calls
-const scoreCache = new Map<string, { result: ReturnType<typeof calculateScore>; expiresAt: number }>();
+const scoreCache = new Map<string, { result: ReturnType<typeof calculateScore>; computedAt: string; expiresAt: number }>();
 
 /**
  * Drop an org's cached score after an input to it changes (e.g. scan findings
@@ -302,17 +302,16 @@ function calculateScore(orgId: string): {
 compliancePostureRoutes.get('/score', (c) => {
   const orgId = c.get('orgId')!;
   const now = Date.now();
-  const cached = scoreCache.get(orgId);
-  let result: ReturnType<typeof calculateScore>;
-  if (cached && cached.expiresAt > now) {
-    result = cached.result;
-  } else {
-    result = calculateScore(orgId);
-    scoreCache.set(orgId, { result, expiresAt: now + 30_000 });
+  let entry = scoreCache.get(orgId);
+  if (!entry || entry.expiresAt <= now) {
+    entry = { result: calculateScore(orgId), computedAt: new Date(now).toISOString(), expiresAt: now + 30_000 };
+    scoreCache.set(orgId, entry);
   }
 
   return c.json({
-    ...result,
+    ...entry.result,
+    // When this score was calculated (it may be served from the 30 s cache).
+    computedAt: entry.computedAt,
     _disclaimer: LEGAL_DISCLAIMER,
   });
 });
