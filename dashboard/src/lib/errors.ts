@@ -35,3 +35,23 @@ export function apiErrorWithDetails(err: unknown, fallback: string): string {
     .filter(Boolean);
   return lines.length > 0 ? `${base} (${lines.join('; ')})` : base;
 }
+
+/**
+ * apiErrorMessage for requests made with responseType 'blob' (downloads):
+ * the error body arrives as a Blob, so the server's message has to be read
+ * out of it first, or users only ever see the generic fallback.
+ */
+export async function blobApiErrorMessage(err: unknown, fallback: string): Promise<string> {
+  const data = (err as { response?: { data?: unknown } } | null)?.response?.data;
+  if (data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text()) as { error?: unknown; message?: unknown };
+      if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error;
+      if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message;
+    } catch {
+      // not JSON: fall through to the fallback
+    }
+    return fallback;
+  }
+  return apiErrorMessage(err, fallback);
+}
