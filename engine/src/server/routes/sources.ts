@@ -36,6 +36,8 @@ const createSourceSchema = z.object({
   category: categorySchema.default('ai_regulation'),
   tier: z.number().int().min(1).max(4).default(1),
   needsHeadless: z.boolean().default(false),
+  // The Add Source form's Active checkbox (a new source was always active).
+  isActive: z.boolean().default(true),
 });
 
 const updateSourceSchema = z.object({
@@ -172,7 +174,7 @@ sourceRoutes.post('/', async (c) => {
     provenanceGrade: provenanceGradeFor(parsed.data.url, parsed.data.parserType),
     origin: 'custom' as const,
     registryKey: null,
-    isActive: true,
+    isActive: parsed.data.isActive,
     createdAt: now,
     updatedAt: now,
   };
