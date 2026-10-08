@@ -82,3 +82,6 @@ docs/internal/
 **/DOD*
 **/BACKLOG*
 **/*_PROGRAM*
+
+# Release gate output (screenshots, logs, results; e2e/README.md)
+e2e/out/
