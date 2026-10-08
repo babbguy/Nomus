@@ -52,12 +52,28 @@ summarize or "clean up" stored regulatory text in code paths that ingest it. Whe
 adding or changing a rule set, cite the source and the effective date from the
 source, not the date the rule was seeded.
 
+## Branches and releases
+
+The project follows git flow:
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Released code only. Every commit on `main` is a tagged release (`vX.Y.Z`). |
+| `develop` | Integration branch and the repository's default branch. |
+| `feat/<topic>`, `fix/<topic>` | Work branches, created from `develop` and merged back into it by pull request. |
+| `release/X.Y.Z` | Created from `develop` to prepare a release (version bump, changelog), merged into `main` by pull request, tagged, then merged back into `develop`. |
+| `hotfix/X.Y.Z` | Created from `main` for an urgent fix to a release, merged into `main` (tagged) and into `develop`. |
+
+`main` and `develop` are protected: changes land only through pull requests whose
+CI checks pass, and direct or force pushes are refused.
+
 ## Commit and PR style
 
 - Use conventional-style commit messages (`feat:`, `fix:`, `docs:`, `refactor:`,
   `test:`, `chore:`) with a short imperative summary and, when useful, a body
   explaining why.
-- Open pull requests against `main` and fill in the template.
+- Branch from `develop` (`feat/<topic>` or `fix/<topic>`), open pull requests against
+  `develop`, and fill in the template.
 
 ## Reporting bugs and requesting features
 
