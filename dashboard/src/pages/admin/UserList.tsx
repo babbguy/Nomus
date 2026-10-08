@@ -264,7 +264,7 @@ export default function UserList() {
             </div>
             <div className="col-span-2 flex items-center gap-2">
               <Button type="submit" disabled={creating}>{creating ? 'Creating...' : 'Create & Send Invitation'}</Button>
-              <p className="text-xs text-text-muted flex items-center gap-1"><Mail size={12} /> Invitation email sent automatically</p>
+              <p className="text-xs text-text-muted flex items-center gap-1"><Mail size={12} /> Emailed when an email provider is configured; otherwise you get a temporary password to share</p>
             </div>
           </form>
         </Card>
