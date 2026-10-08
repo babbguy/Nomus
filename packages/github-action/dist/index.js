@@ -264102,13 +264102,37 @@ function offsetToLine(content, offset) {
     return line;
 }
 /**
+ * Express `file` relative to `rootDir` using POSIX separators.
+ * Relative inputs (in-memory paths) are returned as-is; absolute paths outside
+ * the root fall back to the full normalised path.
+ */
+function toRootRelative(file, rootDir) {
+    const posixFile = file.replace(/\\/g, '/');
+    if (!rootDir)
+        return posixFile;
+    const posixRoot = rootDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (posixRoot === '')
+        return posixFile;
+    const windowsStyle = /^[a-z]:/i.test(posixRoot);
+    const f = windowsStyle ? posixFile.toLowerCase() : posixFile;
+    const r = windowsStyle ? posixRoot.toLowerCase() : posixRoot;
+    if (f.startsWith(r + '/'))
+        return posixFile.slice(posixRoot.length + 1);
+    return posixFile;
+}
+/**
  * Detect whether a file is a test file (best-effort).
  * Used by detectors to suppress false positives in test fixtures.
+ *
+ * When `rootDir` is given, only the part of the path below the scan root is
+ * inspected, so a repository checked out under a directory that happens to be
+ * called `tests` or `fixtures` is not mistaken for test code.
  */
-function isTestFile(file) {
-    return /[\/\\](?:tests?|__tests__|spec|specs|fixtures|__fixtures__|mocks|__mocks__)[\/\\]/i.test(file)
-        || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|py|java|go)$/i.test(file)
-        || /[\/\\]\.env\.example$/i.test(file);
+function isTestFile(file, rootDir) {
+    const path = '/' + toRootRelative(file, rootDir).replace(/^\/+/, '');
+    return /\/(?:tests?|__tests__|spec|specs|fixtures|__fixtures__|mocks|__mocks__)\//i.test(path)
+        || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|py|java|go)$/i.test(path)
+        || /\/\.env\.example$/i.test(path);
 }
 /**
  * Strip line and block comments from a JS/TS/Java/Go file before pattern matching.
@@ -264896,7 +264920,7 @@ class SdkUsageDetector {
     async detect(ctx) {
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             let hits;
             let engine;
@@ -265174,7 +265198,7 @@ class PhiPatternDetector {
     async detect(ctx) {
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             // Strip comments to suppress findings buried in example documentation
             const stripped = stripComments(file, content);
@@ -265356,7 +265380,7 @@ class RiskClassifier {
         const signals = [];
         const sector = ctx.config.sector?.toLowerCase();
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             const stripped = stripComments(file, content);
             const hits = risk_classifier_findHits(stripped);
@@ -265484,7 +265508,7 @@ class TransparencyDetector {
     async detect(ctx) {
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             const stripped = stripComments(file, content);
             const hits = transparency_detector_findHits(stripped);
@@ -265614,7 +265638,7 @@ class DataFlowDetector {
         const maxDepth = this.config.maxTaintDepth ?? DEFAULT_MAX_DEPTH;
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             const stripped = stripComments(file, content);
             const lines = stripped.split('\n');
