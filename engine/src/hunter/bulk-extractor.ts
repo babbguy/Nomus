@@ -192,6 +192,15 @@ async function extractChunk(
     const jsonStr = response.content.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
 
+    if (!Array.isArray(parsed)) {
+      parseError = 'model response was not a JSON array';
+    } else if (parsed.length > 0 && !parsed.some((r: unknown) => {
+      const req = r as Record<string, unknown> | null;
+      return !!req && typeof req === 'object' && !!req.ref && typeof req.what === 'string';
+    })) {
+      parseError = `model returned ${parsed.length} item(s), none with a ref and requirement text`;
+    }
+
     if (Array.isArray(parsed)) {
       // Validate each requirement individually — salvage valid ones
       requirements = parsed.filter((r: unknown) => {
@@ -223,8 +232,12 @@ async function extractChunk(
     requirements,
     tokensIn: response.tokensIn,
     tokensOut: response.tokensOut,
-    success: requirements.length > 0,
-    // Name the reason so pipeline errors are not 'Errors: ; ;'.
-    ...(requirements.length === 0 ? { error: parseError ?? 'no requirements in model response' } : {}),
+    // A well-formed empty array is a successful extraction: sections such as a
+    // short title or a definitions-only article contain no requirements. They
+    // were counted as failed chunks, so a definitions-heavy text could cross
+    // the 80% failure threshold and abort a pipeline whose extraction worked.
+    // The pipeline still stops when the whole document yields zero requirements.
+    success: parseError === undefined,
+    ...(parseError !== undefined ? { error: parseError } : {}),
   };
 }
