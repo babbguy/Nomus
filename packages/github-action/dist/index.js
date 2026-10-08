@@ -273478,6 +273478,29 @@ function sdkOfSignal(signal) {
     return undefined;
 }
 /**
+ * The SDK a non-SDK signal (PHI pattern, transparency, risk, data flow) belongs
+ * to: the SDK call on the same line, else the closest SDK call in the file
+ * (ties go to the earlier line). Import signals are only consulted when the
+ * file has no SDK-usage signal at all.
+ */
+function nearestSdk(sites, line) {
+    if (!sites)
+        return undefined;
+    const candidates = sites.usage.length > 0 ? sites.usage : sites.imports;
+    let best;
+    for (const site of candidates) {
+        if (!best) {
+            best = site;
+            continue;
+        }
+        const d = Math.abs(site.line - line);
+        const bd = Math.abs(best.line - line);
+        if (d < bd || (d === bd && site.line < best.line))
+            best = site;
+    }
+    return best?.sdk;
+}
+/**
  * Query the Nomus API with detected capabilities to get matching rules,
  * then map them back to the specific code locations using detector signals.
  *
@@ -273525,15 +273548,17 @@ async function rule_matcher_matchRulesToSignals(signals, capabilities, config) {
     // arrive more than once — report each (rule, file) pair once.
     const findings = [];
     const reported = new Set();
-    // The SDK a finding is attributed to. PHI/transparency/risk signals name a
-    // data pattern ("pii_var"), not an SDK, so they borrow the SDK found in the
-    // same file; SDK-usage signals carry the SDK in metadata.
-    const sdkByFile = new Map();
+    // SDK-naming signals grouped per file, used to attribute signals that do not
+    // name an SDK themselves (see nearestSdk).
+    const sdkSignalsByFile = new Map();
     for (const signal of signals) {
         const sdk = sdkOfSignal(signal);
-        if (sdk && (!sdkByFile.has(signal.file) || signal.source === 'sdk-usage-detector')) {
-            sdkByFile.set(signal.file, sdk);
-        }
+        if (!sdk)
+            continue;
+        const entry = sdkSignalsByFile.get(signal.file) ?? { usage: [], imports: [] };
+        (signal.source === 'sdk-usage-detector' ? entry.usage : entry.imports)
+            .push({ line: signal.line, sdk });
+        sdkSignalsByFile.set(signal.file, entry);
     }
     for (const market of Object.values(marketRules)) {
         for (const rule of market.rules) {
@@ -273573,7 +273598,7 @@ async function rule_matcher_matchRulesToSignals(signals, capabilities, config) {
                 findings.push({
                     file: signal.file,
                     line: signal.line,
-                    sdk: sdkOfSignal(signal) ?? sdkByFile.get(signal.file) ?? 'unknown',
+                    sdk: sdkOfSignal(signal) ?? nearestSdk(sdkSignalsByFile.get(signal.file), signal.line) ?? 'unknown',
                     detectorSource: signal.source,
                     evidence: signal.evidence,
                     rule: { ...rule, confidence: combinedConfidence },
