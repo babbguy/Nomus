@@ -168,3 +168,27 @@ describe('uploaded documents', () => {
     expect(staged.pipelineError).toBeNull();
   });
 });
+
+describe('pipeline end announcement', () => {
+  it('every run ends with one done event carrying its outcome, including early rejections', async () => {
+    const { broadcastEvent } = await import('../sse/manager.js');
+    const sent = vi.mocked(broadcastEvent);
+
+    const id = randomUUID();
+    insertUploadedSource(id);
+    vi.mocked(scoreDocumentQuality).mockReturnValueOnce({ overallGrade: 'D', structureScore: 0.3, textScore: 0.45, issues: [], wordCount: 30 } as any);
+    sent.mockClear();
+    await runPipeline(id);
+    let done = sent.mock.calls.map(([e]) => e.data as Record<string, unknown>).filter((d) => d.done === true);
+    expect(done).toHaveLength(1);
+    expect(done[0]).toMatchObject({ sourceId: id, outcome: 'error', step: 5 });
+    expect(String(done[0].error)).toMatch(/Uploaded document scored quality grade D/);
+
+    reupload(id);
+    sent.mockClear();
+    await runPipeline(id);
+    done = sent.mock.calls.map(([e]) => e.data as Record<string, unknown>).filter((d) => d.done === true);
+    expect(done).toHaveLength(1);
+    expect(done[0]).toMatchObject({ sourceId: id, outcome: 'completed' });
+  });
+});

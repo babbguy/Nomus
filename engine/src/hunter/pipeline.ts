@@ -83,7 +83,62 @@ const PIPELINE_TIMEOUT_MS = 120 * 60 * 1000; // 2 hours
 const activePipelines = new Map<string, number>();
 const STALE_PIPELINE_MS = 120 * 60 * 1000;
 
+/**
+ * Run the pipeline for a source and announce how it ended.
+ *
+ * Every run ends with one `pipeline.progress` event carrying `done: true` and
+ * an `outcome` (completed / no_change / error), whichever path it took. The
+ * dashboard used to infer completion from step numbers, so runs that stopped
+ * early (rejected upload, grade C review, verification failure, a thrown
+ * error) left their source card spinning and every Scrape button disabled.
+ */
 export async function runPipeline(sourceId: string): Promise<PipelineResult> {
+  let result: PipelineResult;
+  try {
+    result = await runPipelineSteps(sourceId);
+  } catch (err) {
+    announcePipelineEnd(sourceId, {
+      sourceId, sourceName: 'unknown', status: 'error', stepReached: 0,
+      rulesCreated: 0, rulesUpdated: 0, durationMs: 0,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+  // A refused concurrent start must not end the run that is in progress.
+  if (!(result.stepReached === 0 && result.error?.startsWith('Pipeline already running'))) {
+    announcePipelineEnd(sourceId, result);
+  }
+  return result;
+}
+
+function announcePipelineEnd(sourceId: string, result: PipelineResult): void {
+  const source = getDb().select({ name: regulatorySources.name, jurisdiction: regulatorySources.jurisdiction })
+    .from(regulatorySources).where(eq(regulatorySources.id, sourceId)).get();
+  const outcome = result.status === 'completed' ? 'completed'
+    : result.status === 'error' ? 'error'
+    : 'no_change';
+  broadcastEvent({
+    id: randomUUID(),
+    type: 'pipeline.progress',
+    data: {
+      sourceId,
+      sourceName: source?.name ?? result.sourceName,
+      step: 5,
+      stepName: outcome === 'completed' ? 'Complete' : outcome === 'error' ? 'Failed' : 'No changes detected',
+      done: true,
+      outcome,
+      stepReached: result.stepReached,
+      rulesCreated: result.rulesCreated,
+      rulesUpdated: result.rulesUpdated,
+      durationMs: result.durationMs,
+      ...(result.error ? { error: result.error } : {}),
+      percentComplete: 100,
+    },
+    jurisdiction: source?.jurisdiction ?? '*',
+  });
+}
+
+async function runPipelineSteps(sourceId: string): Promise<PipelineResult> {
   const existing = activePipelines.get(sourceId);
   if (existing) {
     const age = Date.now() - existing;

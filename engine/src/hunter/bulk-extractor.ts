@@ -95,7 +95,7 @@ export async function bulkExtract(
       data: {
         sourceId: context?.sourceId,
         sourceName: context?.sourceName,
-        step: 3,
+        step: 4,
         stepName: 'Extracting requirements',
         batch: batchNum,
         totalBatches,

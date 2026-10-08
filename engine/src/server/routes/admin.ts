@@ -132,7 +132,8 @@ adminRoutes.post('/scrape-all', (c) => {
       id: randomUUID(),
       type: 'pipeline.progress',
       data: {
-        step: 4,
+        step: 5,
+        done: true,
         stepName: 'Scrape All complete',
         scrapeAllSummary: {
           total: sources.length,
