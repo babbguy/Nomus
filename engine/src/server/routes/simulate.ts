@@ -8,6 +8,7 @@ import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeJson } from '../utils.js';
+import { matchRuleToProfile } from '../../core/applicability.js';
 
 const simulateSchema = z.object({
   capabilities: z.array(z.string()).min(1),
@@ -67,44 +68,15 @@ simulateRoutes.post('/', async (c) => {
     const triggered: MarketReport['rules'] = [];
 
     for (const rule of rules) {
-      let conditions: Record<string, string>;
+      let conditions: Record<string, unknown>;
       try { conditions = JSON.parse(rule.conditions); } catch { continue; }
-      const matchedOn: string[] = [];
+      if (!conditions || typeof conditions !== 'object') continue;
 
-      // Check if any capability matches the rule conditions
-      for (const cap of capabilities) {
-        if (conditions.action && (conditions.action === cap || conditions.action.includes(cap))) {
-          matchedOn.push(`capability: ${cap}`);
-        }
-      }
-
-      // Check data types
-      for (const dt of dataTypes) {
-        if (conditions.data_type && (conditions.data_type === dt || conditions.data_type.includes(dt))) {
-          matchedOn.push(`data_type: ${dt}`);
-        }
-      }
-
-      // Check model type
-      if (modelType && conditions.model_type && conditions.model_type === modelType) {
-        matchedOn.push(`model_type: ${modelType}`);
-      }
-
-      // Check sector
-      if (sector && conditions.sector && conditions.sector === sector) {
-        matchedOn.push(`sector: ${sector}`);
-      }
-
-      // Check region match
-      if (conditions.region && conditions.region === market) {
-        matchedOn.push(`region: ${market}`);
-      }
-
-      // If no specific conditions matched but the rule applies broadly to this jurisdiction
-      // (e.g., general transparency requirements), include it if capabilities overlap
-      if (matchedOn.length === 0 && Object.keys(conditions).length === 0) {
-        matchedOn.push('general_applicability');
-      }
+      // Every condition the rule declares must hold (same semantics as
+      // /evaluate) — see core/applicability.ts.
+      const matchedOn = matchRuleToProfile(conditions, rule.industries, {
+        capabilities, dataTypes, market, sector, modelType,
+      }) ?? [];
 
       if (matchedOn.length > 0) {
         triggered.push({

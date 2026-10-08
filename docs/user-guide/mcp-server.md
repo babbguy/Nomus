@@ -9,7 +9,7 @@ Ask your coding agent things like:
 
 - *"Does this file trigger EU AI Act obligations?"*
 - *"What changed in the regulations Nomus tracks since last Monday?"*
-- *"Show me the exact rule and legal citation for `eu_ai_act.art52.transparency`."*
+- *"Show me the exact rule and legal citation for `eu_ai_act.art50.1.chatbot_disclosure`."*
 - *"Which tracked bills over a 70% passage score could affect us in California?"*
 
 ---

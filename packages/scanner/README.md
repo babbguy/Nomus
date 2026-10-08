@@ -56,7 +56,7 @@ nomus:
   jurisdictions:                      # Required, at least one
     - EU
     - US-FED
-  sector: fintech                     # Optional: sector-specific rules
+  sector: finance                     # Optional: sector-specific rules (healthcare, finance, education, government, ...)
   data_types:                         # Optional: data types your app handles
     - personal_data
     - biometric

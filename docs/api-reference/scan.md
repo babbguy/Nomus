@@ -30,13 +30,13 @@ curl -X POST http://localhost:3100/api/v1/scan/findings \
       {
         "file": "src/chat.ts",
         "line": 12,
-        "ruleKey": "eu_ai_act.art52.transparency",
+        "ruleKey": "eu_ai_act.art50.1.chatbot_disclosure",
         "severity": "high",
         "sdk": "openai",
         "capability": "text_generation",
         "summary": "Users must be told they are interacting with an AI system.",
         "suggestion": "Add a visible AI disclosure to the chat UI.",
-        "legalReference": "EU AI Act Art. 52"
+        "legalReference": "EU AI Act Art. 50(1)"
       }
     ]
   }'
@@ -105,14 +105,14 @@ List stored findings for your organization, newest first.
       "commitSha": "abc1234",
       "filePath": "src/chat.ts",
       "lineNumber": 12,
-      "ruleKey": "eu_ai_act.art52.transparency",
+      "ruleKey": "eu_ai_act.art50.1.chatbot_disclosure",
       "severity": "high",
       "effect": "flag",
       "capabilityDetected": "openai",
       "humanSummary": "Users must be told they are interacting with an AI system.",
       "suggestion": "Add a visible AI disclosure to the chat UI.",
       "detectorSource": null,
-      "legalReference": "EU AI Act Art. 52",
+      "legalReference": "EU AI Act Art. 50(1)",
       "status": "open",
       "scannedAt": "2026-04-04T10:00:00.000Z"
     }
@@ -192,7 +192,7 @@ nomus:
   api_url: http://localhost:3100     # default
   api_key: nk_live_...               # or set NOMUS_API_KEY
   jurisdictions: [EU, US-FED]        # required, at least one
-  sector: fintech                    # optional
+  sector: finance                    # optional: healthcare, finance, education, government, ...
   data_types: [personal_data]        # optional
   ignore: [node_modules/**, dist/**] # optional glob list
 ```

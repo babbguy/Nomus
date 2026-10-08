@@ -117,7 +117,7 @@ Add a `.nomus.yml` to the scanned directory (required; the API key and URL come 
 ```yaml
 nomus:
   jurisdictions: [EU, US-FED, UK]
-  sector: fintech
+  sector: finance
   data_types: [user_prompts, financial]
   ignore:
     - tests/**
