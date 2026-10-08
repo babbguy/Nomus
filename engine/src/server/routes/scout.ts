@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { eq, desc, sql } from 'drizzle-orm';
+import { and, eq, desc, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
@@ -170,14 +170,20 @@ scoutRoutes.get('/items', (c) => {
   const limit = Math.min(safeParseInt(c.req.query('limit'), 50), 200);
   const offset = safeParseInt(c.req.query('offset'), 0);
 
-  let items = db.select().from(scoutItems)
+  // Filter in SQL, before the limit: filtering the newest `limit` rows of
+  // every status afterwards showed 9 of 879 pending items in the review queue.
+  const filters = [];
+  if (status) filters.push(eq(scoutItems.status, status as typeof scoutItems.$inferSelect.status));
+  if (feedId) filters.push(eq(scoutItems.feedId, feedId));
+  const where = filters.length > 0 ? and(...filters) : undefined;
+
+  const items = db.select().from(scoutItems)
+    .where(where)
     .orderBy(desc(scoutItems.discoveredAt))
     .limit(limit)
     .offset(offset)
     .all();
-
-  if (status) items = items.filter((i) => i.status === status);
-  if (feedId) items = items.filter((i) => i.feedId === feedId);
+  const total = db.select({ n: sql<number>`count(*)` }).from(scoutItems).where(where).get()?.n ?? 0;
 
   // Parse extractedSignal JSON for convenience
   const enriched = items.map((item) => ({
@@ -185,7 +191,7 @@ scoutRoutes.get('/items', (c) => {
     extractedSignal: (() => { if (!item.extractedSignal) return null; try { return JSON.parse(item.extractedSignal); } catch { return item.extractedSignal; } })(),
   }));
 
-  return c.json({ count: enriched.length, items: enriched });
+  return c.json({ count: enriched.length, total, items: enriched });
 });
 
 // Accept item — promote to Radar
