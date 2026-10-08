@@ -64,6 +64,7 @@ export function mockOctokit() {
           // A newly added 40-line file: every line 1-40 is commentable.
           data: [{ filename: 'src/app.ts', patch: addedFilePatch(40) }],
         }),
+        listReviewComments: async () => ({ data: [] as any[] }),
         createReview: async (params: any) => ({ data: { id: 1, ...params } }),
       },
       issues: {
