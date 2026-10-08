@@ -56,10 +56,10 @@ beforeAll(() => {
 });
 
 /** Read the stream until the `connected` event, then disconnect. */
-async function readUntilConnected(path: string): Promise<string> {
+async function readUntilConnected(path: string, lastEventId: string = String(base)): Promise<string> {
   const controller = new AbortController();
   const res = await app.request(path, {
-    headers: { Authorization: `Bearer ${KEY}`, 'Last-Event-ID': String(base) },
+    headers: { Authorization: `Bearer ${KEY}`, 'Last-Event-ID': lastEventId },
     signal: controller.signal,
   });
   expect(res.status).toBe(200);
@@ -87,6 +87,15 @@ describe('GET /api/v1/stream replay', () => {
   it('replays everything without a jurisdiction filter', async () => {
     const text = await readUntilConnected('/api/v1/stream');
     for (const k of ['replay.rule_0', 'replay.rule_1', 'replay.rule_2']) expect(text).toContain(k);
+  });
+
+  it('does not replay for a Last-Event-ID that is not a sequence number', async () => {
+    // parseInt('37a1f412-...') is 37, which replayed the wrong range; other
+    // UUIDs parsed as NaN. Neither is a policy event sequence.
+    for (const bad of ['37a1f412-0000-4000-8000-000000000000', 'a69d0000-0000-4000-8000-000000000000', '12abc', '-5']) {
+      const text = await readUntilConnected('/api/v1/stream', bad);
+      expect(text, bad).not.toContain('replay.rule_');
+    }
   });
 
   it('eventJurisdiction tolerates bad payloads', () => {

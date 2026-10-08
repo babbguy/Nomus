@@ -55,7 +55,7 @@ Response `200`:
 | 401 | `{"error":"Invalid email or password"}` (response time is padded to blunt user enumeration) |
 | 429 | per-IP limit exceeded |
 
-If `mustChangePassword` is `true` the dashboard routes the user to `/change-password`.
+If `mustChangePassword` is `true` the dashboard routes the user to `/change-password`. The API enforces this too: until the password is changed, the session may only call `GET /auth/me`, `POST /auth/force-change-password` and `POST /auth/logout`. Every other session-authenticated endpoint (including `PATCH /auth/profile`, the `/org` routes, and the VS Code device sign-in callback) answers `403` with `{ "error": "...", "status": 403, "code": "password_change_required" }`. API keys are not affected.
 
 ---
 

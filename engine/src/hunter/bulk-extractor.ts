@@ -90,7 +90,6 @@ export async function bulkExtract(
 
     // Broadcast progress via SSE for live dashboard updates
     broadcastEvent({
-      id: randomUUID(),
       type: 'pipeline.progress',
       data: {
         sourceId: context?.sourceId,

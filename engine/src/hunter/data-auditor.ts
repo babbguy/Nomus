@@ -444,7 +444,6 @@ export async function runFullAudit(
       // Only broadcast warnings and errors — silently log passes
       if (report.overallVerdict !== 'pass') {
         broadcastEvent({
-          id: randomUUID(),
           type: 'audit.result',
           data: {
             sourceId: source.id,

@@ -1,23 +1,36 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { policyRules, attestationReceipts } from '../db/schema.js';
 import { signData } from './signing.js';
 import { canonicalJSON } from './policy-compiler.js';
 import { ATTESTATION_SCHEMA_VERSION } from './attestation-lifecycle.js';
 import type { PolicyConditions } from '@nomus/shared';
-import { isDescriptiveConditionKey, normalizeDataType, normalizeSector } from './applicability.js';
+import {
+  impliedDataType, industriesExcludeSector, isDescriptiveConditionKey, normalizeDataType, normalizeSector,
+} from './applicability.js';
 
 /**
  * Whether a rule's conditions hold for an action context: every machine
  * condition must equal the context (sector and data type accept the aliases
  * /simulate accepts; 'ai_operation' covers any action); descriptive keys are
- * ignored. Shared by /evaluate and the shadow tests.
+ * ignored. Same semantics as /simulate (core/applicability.ts): a data_type
+ * condition is also satisfied by the data type the action implies (PHI in an
+ * AI call handles health data), and a rule scoped to industries that exclude
+ * the context's sector does not match. Shared by /evaluate and the shadow tests.
  */
-export function ruleMatchesContext(conditions: Record<string, string>, actionContext: PolicyConditions): boolean {
+export function ruleMatchesContext(
+  conditions: Record<string, string>,
+  actionContext: PolicyConditions,
+  industries?: string | string[] | null,
+): boolean {
+  if (industriesExcludeSector(industries, normalizeSector(actionContext.sector))) return false;
+  const implied = impliedDataType(actionContext.action);
   for (const [key, value] of Object.entries(conditions)) {
     if (isDescriptiveConditionKey(key)) continue;
-    if (value && !conditionHolds(key, value, actionContext[key])) return false;
+    if (!value) continue;
+    if (key === 'data_type' && implied && normalizeDataType(value) === implied) continue;
+    if (!conditionHolds(key, value, actionContext[key])) return false;
   }
   return true;
 }
@@ -49,7 +62,8 @@ export interface EvaluationResult {
 }
 
 /**
- * Evaluate an action context against all active policies for a jurisdiction.
+ * Evaluate an action context against all active policies for a jurisdiction,
+ * plus the INTL rules, which apply in every market (as in /simulate).
  * Returns a signed attestation receipt.
  *
  * options.expiresAt (UTC ISO-8601 Z, validated at the route boundary) sets a
@@ -74,11 +88,12 @@ export function evaluateCompliance(
     ? requestedContext
     : { ...requestedContext, region: jurisdiction };
 
-  // Get all active rules for the jurisdiction
+  // Active rules for the jurisdiction, plus INTL rules, which apply globally.
+  // policyStateHash covers exactly these evaluated rules.
   const rules = db.select().from(policyRules)
     .where(and(
       eq(policyRules.isActive, true),
-      eq(policyRules.jurisdiction, jurisdiction),
+      or(eq(policyRules.jurisdiction, jurisdiction), eq(policyRules.jurisdiction, 'INTL')),
     ))
     .all();
 
@@ -92,7 +107,7 @@ export function evaluateCompliance(
   };
 
   for (const rule of rules) {
-    const matched = ruleMatchesContext(JSON.parse(rule.conditions) as Record<string, string>, actionContext);
+    const matched = ruleMatchesContext(JSON.parse(rule.conditions) as Record<string, string>, actionContext, rule.industries);
 
     evaluated.push({
       ruleKey: rule.ruleKey,
