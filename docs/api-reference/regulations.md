@@ -261,8 +261,12 @@ After any successful source or rule change above:
   `sector` does not apply. Any other context key must equal the rule's value exactly. The
   attestation's `policyStateHash` covers the evaluated rules (jurisdiction plus `INTL`).
 - Rule events are appended to `policy_events` with the next sequence number and broadcast to
-  `GET /api/v1/stream` subscribers (`policy.created`, `policy.updated`, `policy.revoked`); clients
-  reconnecting with `Last-Event-ID` receive the ones they missed. The payload includes `actor`
+  `GET /api/v1/stream` subscribers (`policy.created`, `policy.updated`, `policy.revoked`),
+  whether the rule was changed by an admin or created or updated by a regulation scrape,
+  upload or Forge run. The SSE `id` of these events is their sequence number; other stream
+  events (such as `pipeline.progress`) carry no `id`. Clients reconnecting with `Last-Event-ID`
+  receive the policy events they missed; a value that is not a plain integer replays nothing.
+  The payload includes `actor`
   (`user:<id>` for a dashboard session, `apikey:<id>` for a key, `system:registry-sync` for the
   startup sync) and, for retirements, `reason` (`manual` or `source_deactivated`).
 - `POST /api/v1/admin/verify-integrity` verifies edited rules like any other.

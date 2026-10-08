@@ -90,11 +90,12 @@ vi.mock('../services/webhook-dispatcher.js', () => ({
 
 import { getDb, closeDb } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
-import { regulatorySources, rawSnapshots, stagedContent } from '../db/schema.js';
+import { regulatorySources, rawSnapshots, stagedContent, policyEvents } from '../db/schema.js';
 import { runPipeline } from './pipeline.js';
 import { scrapeSource } from './scraper.js';
 import { healContent } from './scrape-healer.js';
 import { scoreDocumentQuality } from './quality-scorer.js';
+import { scoreRules } from './rule-scorer.js';
 
 beforeAll(() => {
   closeDb();
@@ -190,5 +191,39 @@ describe('pipeline end announcement', () => {
     done = sent.mock.calls.map(([e]) => e.data as Record<string, unknown>).filter((d) => d.done === true);
     expect(done).toHaveLength(1);
     expect(done[0]).toMatchObject({ sourceId: id, outcome: 'completed' });
+  });
+});
+
+describe('live policy events', () => {
+  it('a run that creates rules sends one policy.created per rule, with its stored sequence as the SSE id', async () => {
+    const { broadcastEvent } = await import('../sse/manager.js');
+    const sent = vi.mocked(broadcastEvent);
+
+    const id = randomUUID();
+    insertUploadedSource(id);
+    // A rule key no earlier test created, so the run creates a new rule.
+    const ruleKey = `us_il.live_events.${id.slice(0, 8)}`;
+    vi.mocked(scoreRules).mockResolvedValueOnce({
+      rules: [{ ruleKey, jurisdiction: 'US-IL', category: 'accountability', conditions: { action: 'ai_operation', region: 'US-IL' }, effect: 'allow_with_audit', severity: 'high', humanSummary: 'Employers must notify applicants', legalReference: 'Sec. 5', effectiveDate: '2025-01-01', expiresAt: null, industries: ['all'], industryScope: 'global', industryNotes: '' }],
+      overallScore: 8, tokensIn: 1, tokensOut: 1,
+    } as any);
+    sent.mockClear();
+    const result = await runPipeline(id);
+    expect(result.status).toBe('completed');
+
+    const created = sent.mock.calls.map(([e]) => e).filter((e) => e.type === 'policy.created');
+    expect(created).toHaveLength(1);
+    const stored = getDb().select().from(policyEvents)
+      .where(eq(policyEvents.eventType, 'policy.created')).all()
+      .filter((e) => (JSON.parse(e.payload) as { ruleKey: string }).ruleKey === ruleKey);
+    expect(stored).toHaveLength(1);
+    expect(created[0].id).toBe(String(stored[0].sequence));
+    expect(created[0].jurisdiction).toBe('US-IL');
+    expect(created[0].data).toMatchObject({ ruleKey, version: 1 });
+
+    // Everything else the run announces is ephemeral and carries no SSE id.
+    const others = sent.mock.calls.map(([e]) => e).filter((e) => !e.type.startsWith('policy.'));
+    expect(others.length).toBeGreaterThan(0);
+    for (const e of others) expect(e.id).toBeUndefined();
   });
 });

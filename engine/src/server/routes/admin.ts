@@ -88,7 +88,6 @@ adminRoutes.post('/scrape-all', (c) => {
 
       // Broadcast which source is being processed
       broadcastEvent({
-        id: randomUUID(),
         type: 'pipeline.progress',
         data: {
           step: 1,
@@ -129,7 +128,6 @@ adminRoutes.post('/scrape-all', (c) => {
     const noChange = results.filter((r) => r.status === 'no_change' || r.status === 'typo_only');
 
     broadcastEvent({
-      id: randomUUID(),
       type: 'pipeline.progress',
       data: {
         step: 5,
