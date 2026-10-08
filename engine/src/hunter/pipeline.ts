@@ -1490,7 +1490,7 @@ async function resumeFromStaged(
         );
         if (outcome === 'created') rulesCreated++;
         else if (outcome === 'updated') rulesUpdated++;
-        else rulesSkippedLocked++;
+        else if (outcome === 'skipped_locked') rulesSkippedLocked++;
       }
 
       // 3. Update lastContentHash on source (THE CRITICAL LINE)
