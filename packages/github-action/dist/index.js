@@ -274112,6 +274112,8 @@ const EFFECT_LABELS = {
     flag: 'FLAGGED',
 };
 const COMMENT_MARKER = '<!-- nomus-scan -->';
+/** Hidden marker identifying inline review comments posted by Nomus. */
+const FINDING_MARKER = '<!-- nomus-finding -->';
 const DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
 /** GitHub accepts a limited number of comments per review. */
 const MAX_INLINE_COMMENTS = 25;
@@ -274161,18 +274163,44 @@ async function postInlineComments(result, octokit, repo, prNumber, sha) {
             entry.findings.push(f);
             byLocation.set(key, entry);
         }
-        const comments = [...byLocation.values()]
-            .slice(0, MAX_INLINE_COMMENTS)
-            .map(({ path, line, findings }) => ({
+        const candidates = [...byLocation.values()].map(({ path, line, findings }) => ({
             path,
             line,
             side: 'RIGHT',
-            body: `${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
+            body: `${FINDING_MARKER}\n${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
         }));
-        if (comments.length === 0) {
+        if (candidates.length === 0) {
             info('   No obligations on lines changed in this pull request — no inline comments');
             return;
         }
+        // Skip locations already carrying an identical Nomus comment from a
+        // previous run, so re-runs and new pushes do not stack duplicates.
+        const posted = new Set();
+        try {
+            const existing = await octokit.paginate(octokit.rest.pulls.listReviewComments, {
+                ...repo,
+                pull_number: prNumber,
+                per_page: 100,
+            });
+            for (const c of existing) {
+                if (!c.body?.includes(FINDING_MARKER))
+                    continue;
+                if (c.side && c.side !== 'RIGHT')
+                    continue;
+                if (c.line == null)
+                    continue;
+                posted.add(`${c.path}:${c.line}:${c.body}`);
+            }
+        }
+        catch (err) {
+            warning(`Could not list existing review comments, posting all: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        const fresh = candidates.filter((c) => !posted.has(`${c.path}:${c.line}:${c.body}`));
+        if (fresh.length === 0) {
+            info('   Inline review comments already up to date — nothing new to post');
+            return;
+        }
+        const comments = fresh.slice(0, MAX_INLINE_COMMENTS);
         await octokit.rest.pulls.createReview({
             ...repo,
             pull_number: prNumber,
