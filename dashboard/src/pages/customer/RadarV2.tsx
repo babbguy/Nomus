@@ -276,7 +276,9 @@ export default function RadarV2() {
           {loading ? (
             <div className="flex justify-center py-20"><Spinner /></div>
           ) : bills.length === 0 ? (
-            <EmptyState title="No bills found" description="Adjust your filters or wait for the Scout pipeline to discover bills." />
+            // Nothing in this version writes tracked bills (Scout records news
+            // signals, shown on the Radar page), so do not promise that it will.
+            <EmptyState title="No bills tracked" description="Bills appear here once they are recorded in the bill tracker. Scout's news signals are on the Radar page." />
           ) : (
             <>
               <Card className="p-0 overflow-hidden">

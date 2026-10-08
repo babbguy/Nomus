@@ -201,7 +201,7 @@ export default function GraphExplorer() {
       </div>
 
       {nodes.length === 0 ? (
-        <EmptyState title="No graph nodes yet" description="Run the pipeline to populate the knowledge graph with regulatory cross-references." />
+        <EmptyState title="No graph nodes yet" description="Cross-references appear here once they are recorded in the knowledge graph. Running the regulation pipeline does not add them in this version." />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Canvas */}
