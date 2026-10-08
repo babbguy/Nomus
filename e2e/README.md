@@ -20,10 +20,12 @@ npm run gate                           # = node e2e/run-gate.mjs
 `npm run gate` builds first if a build output is missing (`--build` forces a
 rebuild, `--no-build` never builds). It prints a PASS/FAIL table, writes
 `e2e/out/`, and exits non-zero if any check fails. It runs on Windows, macOS and
-Linux; a run takes about 5 minutes on a laptop. CI runs it as the required
-**Release gate** check (`.github/workflows/release-gate.yml`) on pull requests to
-and pushes on `develop` and `main`, uploads `e2e/out/` as an artifact and writes
-the table to the job summary.
+Linux; a run takes 2 to 4 minutes on a laptop after the build. CI runs it as the
+required **Release gate** check (`.github/workflows/release-gate.yml`) on pull
+requests to and pushes on `develop` and `main`, uploads `e2e/out/` as an artifact
+and writes the table to the job summary. Before the gate, the CI job also checks
+that the committed GitHub Action bundle (`packages/github-action/dist/index.js`)
+is exactly what the source builds to, so the gate tests the bundle that ships.
 
 ## What runs
 
