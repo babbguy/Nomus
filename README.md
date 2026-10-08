@@ -148,6 +148,7 @@ npm run lint              # lint all workspaces
 npm run build:all         # build packages, extensions, engine and dashboard
 npm run test:engine       # engine tests (Vitest)
 npm run test:extensions   # scanner, GitHub Action, VS Code extension, MCP server tests
+npm run test:dashboard    # dashboard tests (Vitest)
 ```
 
 The engine tests use in-memory SQLite and mocked LLM calls, so they need no LLM API keys.

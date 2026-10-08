@@ -35,6 +35,7 @@ npm run lint
 npm run build:all
 npm run test:engine
 npm run test:extensions
+npm run test:dashboard
 ```
 
 - Add or update tests for behavior you change.
