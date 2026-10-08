@@ -296,14 +296,23 @@ function calculateScore(orgId: string): {
 }
 
 // Get current compliance score (cached for 30s)
-compliancePostureRoutes.get('/score', (c) => {
-  const orgId = c.get('orgId')!;
+/**
+ * The organization's compliance score (30 s cache). The single score every
+ * surface shows: Posture, the customer dashboard, the public badge, the
+ * GitHub Action and the VS Code extension.
+ */
+export function getComplianceScore(orgId: string): { result: ReturnType<typeof calculateScore>; computedAt: string } {
   const now = Date.now();
   let entry = scoreCache.get(orgId);
   if (!entry || entry.expiresAt <= now) {
     entry = { result: calculateScore(orgId), computedAt: new Date(now).toISOString(), expiresAt: now + 30_000 };
     scoreCache.set(orgId, entry);
   }
+  return entry;
+}
+
+compliancePostureRoutes.get('/score', (c) => {
+  const entry = getComplianceScore(c.get('orgId')!);
 
   return c.json({
     ...entry.result,

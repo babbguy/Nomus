@@ -7,6 +7,8 @@ import { organizations, badgeConfigs, attestationReceipts, policyRules } from '.
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeJson } from '../utils.js';
+import { getComplianceScore } from './compliance-posture.js';
+import { env } from '../../config/env.js';
 
 export const badgeRoutes = new Hono<AppEnv>();
 
@@ -59,11 +61,13 @@ badgeRoutes.get('/:orgSlug/svg', (c) => {
   const color = score.score >= 80 ? '#00e5a0' : score.score >= 50 ? '#f59e0b' : '#ef4444';
   const width = 240;
   const height = 28;
+  // The configured badge style (it was saved but never applied to the SVG).
+  const radius = config.style === 'flat' ? 0 : config.style === 'pill' ? height / 2 : 4;
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="${width}" height="${height}" rx="4" fill="#0f1117"/>
-  <rect x="0" y="0" width="140" height="${height}" rx="4" fill="#161922"/>
-  <rect x="140" y="0" width="100" height="${height}" rx="4" fill="${color}20"/>
+  <rect width="${width}" height="${height}" rx="${radius}" fill="#0f1117"/>
+  <rect x="0" y="0" width="140" height="${height}" rx="${radius}" fill="#161922"/>
+  <rect x="140" y="0" width="100" height="${height}" rx="${radius}" fill="${color}20"/>
   <text x="8" y="18" font-family="system-ui,sans-serif" font-size="11" fill="#9ca3af">AI Compliance</text>
   <text x="148" y="18" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="${color}">Score: ${score.score}</text>
   <text x="84" y="18" font-family="system-ui,sans-serif" font-size="9" fill="#6b7280">Nomus</text>
@@ -98,7 +102,13 @@ badgeRoutes.get('/:orgSlug/embed.js', (c) => {
 
   // Use JSON.stringify for values interpolated into JavaScript to prevent XSS
   const safeSvgUrl = JSON.stringify(`${baseUrl}/api/v1/badge/${slug}/svg`);
-  const safeVerifyUrl = JSON.stringify(`${baseUrl}/verify/${slug}`);
+  // The badge links to the public transparency page on the dashboard. It
+  // linked to /verify/<slug>, a route that takes an attestation id, so every
+  // click landed on "Attestation not found".
+  const dashboardOrigin = (() => {
+    try { return new URL(env().NOMUS_CORS_ORIGIN).origin; } catch { return baseUrl; }
+  })();
+  const safeVerifyUrl = JSON.stringify(`${dashboardOrigin}/transparency`);
 
   const script = `(function(){
   var d=document,s=d.createElement('a'),i=d.createElement('img');
@@ -170,7 +180,15 @@ badgeRoutes.patch('/:orgSlug/config', requireSessionOrApiKey('read:policies'), a
   if (jsonError) return c.json({ error: jsonError }, 400);
   const body = rawBody as Record<string, any>;
   const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
-  if (body.style) updates.style = body.style;
+  if (body.style !== undefined) {
+    if (!['flat', 'rounded', 'pill'].includes(body.style)) {
+      return c.json({ error: 'Invalid style. Must be one of: flat, rounded, pill' }, 400);
+    }
+    updates.style = body.style;
+  }
+  if (body.isPublic !== undefined && typeof body.isPublic !== 'boolean') {
+    return c.json({ error: 'isPublic must be a boolean' }, 400);
+  }
   if (body.jurisdictions) updates.jurisdictions = JSON.stringify(body.jurisdictions);
   if (body.showScore !== undefined) updates.showScore = body.showScore;
   if (body.showJurisdictions !== undefined) updates.showJurisdictions = body.showJurisdictions;
@@ -197,17 +215,13 @@ function computeComplianceScore(orgId: string) {
     .orderBy(desc(attestationReceipts.evaluatedAt))
     .all();
 
-  const recentAttestations = attestations.filter((a) => a.evaluatedAt >= since);
-  const compliant = recentAttestations.filter((a) => a.result === 'compliant').length;
-  const total = recentAttestations.length;
+  const total = attestations.filter((a) => a.evaluatedAt >= since).length;
 
-  // Score based on compliance rate + evaluation frequency
-  let score = 0;
-  if (total > 0) {
-    const complianceRate = compliant / total;
-    const frequencyBonus = Math.min(total / 100, 0.2); // Up to 20% bonus for frequent checks
-    score = Math.round((complianceRate * 80) + (frequencyBonus * 100));
-  }
+  // The organization's compliance score, as its Compliance Posture page and
+  // dashboard show it. (The badge used to compute its own score from the
+  // share of compliant attestations, so the public badge read 27 while the
+  // organization's own pages read 0.)
+  const score = Math.round(getComplianceScore(orgId).result.overallScore);
 
   // Get jurisdictions from attestations
   const jurisdictions = [...new Set(attestations.map((a) => a.jurisdiction))];
