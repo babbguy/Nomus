@@ -8,7 +8,7 @@ import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeJson } from '../utils.js';
-import { matchRuleToProfile } from '../../core/applicability.js';
+import { matchRuleToProfile, normalizeDataType, normalizeSector } from '../../core/applicability.js';
 
 const simulateSchema = z.object({
   capabilities: z.array(z.string()).min(1),
@@ -37,6 +37,45 @@ export const simulateRoutes = new Hono<AppEnv>();
 
 simulateRoutes.use('*', requireSessionOrApiKey('evaluate'));
 simulateRoutes.use('*', rateLimit());
+
+/**
+ * GET /api/v1/simulate/vocabulary
+ * The capability, data-type and sector values the active rules are written
+ * in. A rule applies only when its conditions match exactly, so clients (the
+ * dashboard Simulator) must offer these values rather than a fixed list.
+ */
+simulateRoutes.get('/vocabulary', (c) => {
+  const rules = getDb().select({
+    conditions: policyRules.conditions,
+    industries: policyRules.industries,
+    jurisdiction: policyRules.jurisdiction,
+  }).from(policyRules).where(eq(policyRules.isActive, true)).all();
+
+  const capabilities = new Set<string>();
+  const dataTypes = new Set<string>(['personal_data', 'health', 'biometric', 'financial']);
+  const sectors = new Set<string>();
+  const markets = new Set<string>();
+  for (const rule of rules) {
+    markets.add(rule.jurisdiction);
+    let conditions: Record<string, unknown> = {};
+    try { conditions = JSON.parse(rule.conditions) ?? {}; } catch { /* skip malformed */ }
+    if (typeof conditions.action === 'string' && conditions.action !== 'ai_operation') capabilities.add(conditions.action);
+    if (typeof conditions.data_type === 'string') dataTypes.add(normalizeDataType(conditions.data_type));
+    if (typeof conditions.sector === 'string') sectors.add(normalizeSector(conditions.sector) ?? conditions.sector);
+    let industries: unknown = [];
+    try { industries = JSON.parse(rule.industries); } catch { /* skip */ }
+    if (Array.isArray(industries)) {
+      for (const i of industries) if (typeof i === 'string' && i !== 'all') sectors.add(i);
+    }
+  }
+  const sorted = (s: Set<string>) => [...s].sort();
+  return c.json({
+    capabilities: sorted(capabilities),
+    dataTypes: sorted(dataTypes),
+    sectors: sorted(sectors),
+    markets: sorted(markets),
+  });
+});
 
 simulateRoutes.post('/', async (c) => {
   const { data: body, error: jsonError } = await safeJson(c);

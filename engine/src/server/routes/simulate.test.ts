@@ -175,3 +175,27 @@ describe('core/applicability — pipeline-extracted rules', () => {
     expect(matchRuleToProfile(extracted, '["all"]', { capabilities: ['text_generation'], dataTypes: [], market: 'EU' })).toBeNull();
   });
 });
+
+describe('GET /api/v1/simulate/vocabulary', () => {
+  it('lists the values the active rules use, and each listed capability can trigger a rule', async () => {
+    const res = await app.request('/api/v1/simulate/vocabulary', { headers: { Authorization: `Bearer ${KEY}` } });
+    expect(res.status).toBe(200);
+    const vocab = await res.json() as { capabilities: string[]; dataTypes: string[]; sectors: string[]; markets: string[] };
+    expect(vocab.capabilities).toContain('ai_user_interaction');
+    expect(vocab.capabilities).toContain('high_risk_biometric');
+    expect(vocab.capabilities).not.toContain('ai_operation');
+    expect(vocab.dataTypes).toContain('health');
+    expect(vocab.sectors).toEqual(expect.arrayContaining(['education', 'finance', 'healthcare']));
+    expect(vocab.markets).toContain('EU');
+
+    // Every listed capability triggers a rule for at least one sector.
+    for (const cap of vocab.capabilities) {
+      let hit = false;
+      for (const sector of [undefined, ...vocab.sectors]) {
+        const r = await simulate({ capabilities: [cap], targetMarkets: vocab.markets, sector, dataTypes: vocab.dataTypes });
+        if (Object.values(r.markets).flatMap((m) => m.rules).some((x) => x.matchedOn.includes(`capability: ${cap}`))) { hit = true; break; }
+      }
+      expect(hit, cap).toBe(true);
+    }
+  });
+});

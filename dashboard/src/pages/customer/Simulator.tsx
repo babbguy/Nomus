@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Zap, AlertTriangle, CheckCircle, XCircle, Globe, ChevronDown, ChevronUp } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -6,27 +6,12 @@ import Button from '../../components/ui/Button';
 import SeverityBadge from '../../components/domain/SeverityBadge';
 import EffectBadge from '../../components/domain/EffectBadge';
 import JurisdictionTag from '../../components/domain/JurisdictionTag';
-import { runSimulation, type SimulateResult, type SimulateInput } from '../../api/simulate';
+import { runSimulation, getSimulationVocabulary, type SimulateResult, type SimulateInput, type SimulationVocabulary } from '../../api/simulate';
 import { apiErrorMessage } from '../../lib/errors';
 import { JURISDICTIONS } from '@nomus/shared';
 
-const CAPABILITIES = [
-  'text_generation', 'image_generation', 'code_generation', 'speech_synthesis',
-  'facial_recognition', 'sentiment_analysis', 'data_classification', 'automated_decision',
-  'content_moderation', 'translation', 'summarization', 'embeddings',
-  'recommendation', 'prediction', 'anomaly_detection', 'voice_cloning',
-];
-
-const DATA_TYPES = [
-  'user_prompts', 'personal_data', 'financial', 'health', 'biometric',
-  'children_data', 'employment', 'legal', 'location', 'behavioral',
-];
-
-const SECTORS = [
-  'healthcare', 'fintech', 'education', 'legal', 'government',
-  'retail', 'manufacturing', 'media', 'transportation', 'energy',
-];
-
+// Capabilities, data types and sectors are the values the active rules are
+// written in (GET /simulate/vocabulary): a rule applies only on an exact match.
 function TagSelector({ options, selected, onToggle, label }: {
   options: string[];
   selected: string[];
@@ -129,6 +114,14 @@ export default function Simulator() {
   const [result, setResult] = useState<SimulateResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [vocab, setVocab] = useState<SimulationVocabulary | null>(null);
+  const [vocabError, setVocabError] = useState('');
+
+  useEffect(() => {
+    getSimulationVocabulary()
+      .then(setVocab)
+      .catch((err) => setVocabError(apiErrorMessage(err, 'Failed to load the capability vocabulary')));
+  }, []);
 
   function toggle(arr: string[], val: string, setter: (v: string[]) => void) {
     setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
@@ -169,6 +162,9 @@ export default function Simulator() {
         </div>
       </div>
 
+      {vocabError && (
+        <div className="mb-4 p-3 bg-danger/10 border border-danger/30 text-danger text-sm rounded-lg">{vocabError}</div>
+      )}
       {error && (
         <div className="mb-4 p-3 bg-danger/10 border border-danger/30 text-danger text-sm rounded-lg">{error}</div>
       )}
@@ -178,7 +174,7 @@ export default function Simulator() {
         <div className="space-y-5">
           <TagSelector
             label="AI Capabilities *"
-            options={CAPABILITIES}
+            options={vocab?.capabilities ?? []}
             selected={capabilities}
             onToggle={(v) => toggle(capabilities, v, setCapabilities)}
           />
@@ -205,7 +201,7 @@ export default function Simulator() {
 
           <TagSelector
             label="Data Types Processed"
-            options={DATA_TYPES}
+            options={vocab?.dataTypes ?? []}
             selected={dataTypes}
             onToggle={(v) => toggle(dataTypes, v, setDataTypes)}
           />
@@ -219,7 +215,7 @@ export default function Simulator() {
                 className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
               >
                 <option value="">Any sector</option>
-                {SECTORS.map((s) => <option key={s} value={s}>{s}</option>)}
+                {(vocab?.sectors ?? []).map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
