@@ -377,7 +377,9 @@ describe('create rule', () => {
     });
     expect(hit.status).toBe(200);
     expect(hit.json.result).toBe('non_compliant');
-    expect(hit.json.rulesEvaluated).toEqual([expect.objectContaining({ ruleKey: body.ruleKey, matched: true })]);
+    // INTL rules are evaluated in every market; only the jurisdiction's own rule is under test.
+    expect(hit.json.rulesEvaluated.filter((r: any) => r.ruleKey === body.ruleKey))
+      .toEqual([expect.objectContaining({ ruleKey: body.ruleKey, matched: true })]);
     const miss = await call('POST', '/api/v1/evaluate', {
       action: 'publish_generated_content', jurisdiction: 'ZQ', context: { sector: 'finance' },
     });
@@ -563,7 +565,7 @@ describe('retire and reactivate rule', () => {
     expect(hashRetired.ruleCount).toBe(hashActive.ruleCount - 1);
     expect(verifyIntegrity().total).toBe(totalBefore - 1);
     const ev = await call('POST', '/api/v1/evaluate', { action: rule.conditions.action, jurisdiction: 'ZR', context: { probe: 'x' } });
-    expect(ev.json.rulesEvaluated).toEqual([]);
+    expect(ev.json.rulesEvaluated.filter((r: any) => r.ruleKey === rule.ruleKey)).toEqual([]);
 
     const again = await call('POST', `/api/v1/admin/rules/${rule.id}/retire`);
     expect(again.status).toBe(200);
