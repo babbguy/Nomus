@@ -8,6 +8,7 @@ import { API_KEY_PREFIX_LIVE } from '@nomus/shared';
 import { env } from '../../config/env.js';
 import { logger } from '../../logger.js';
 import { safeJson } from '../utils.js';
+import { passwordChangeRequiredResponse } from '../middleware/auth.js';
 import {
   setState,
   getState,
@@ -93,6 +94,11 @@ deviceAuthRoutes.get('/callback', (c) => {
 
   if (!user) {
     return c.json({ error: 'User not found' }, 401);
+  }
+
+  // A temporary-password session must not mint an extension API key.
+  if (user.mustChangePassword) {
+    return passwordChangeRequiredResponse(c);
   }
 
   // Generate short-lived auth code (60-second TTL, single use)

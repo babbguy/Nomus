@@ -131,7 +131,7 @@ export const SIGNED_PAYLOAD_DESCRIPTION =
 export function verificationInstructions(): string[] {
   return [
     'Obtain the evidence bundle from the attestation owner (GET /api/v1/attestations/:id/export?format=json, authenticated). It contains the exact signed payload string (verification.signedPayloadCanonicalJson).',
-    'Fetch the Ed25519 public key from GET /.well-known/nomus-keys on this Nomus instance and confirm it matches verification.publicKey (base64-encoded SPKI DER).',
+    `Fetch GET /.well-known/nomus-keys on this Nomus instance and confirm the Ed25519 key matches verification.publicKey (base64-encoded SPKI DER): either compare it with the "spki" member of the key (a Nomus extension to the JWK, identical encoding), or import the standard RFC 8037 JWK ("x" is the base64url raw 32-byte key, e.g. Node.js crypto.createPublicKey({ key: jwk, format: 'jwk' })) and export it as SPKI DER to compare.`,
     'Verify the Ed25519 signature (base64) over the UTF-8 bytes of the signed payload string with any standard cryptography library (e.g. Node.js crypto.verify with key format der, type spki).',
     'Re-check the lifecycle status at GET /api/v1/verify/:attestationId. A valid signature does NOT mean the attestation is currently valid: revoked, superseded, and expired attestations keep verifiable signatures but must not be relied upon.',
   ];

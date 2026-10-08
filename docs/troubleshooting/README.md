@@ -132,7 +132,7 @@ Other things to check:
 
 - The session cookie is named `nomus_session` (browser dev tools, Application, Cookies). If it is missing after a successful login, see the `Secure` cookie note under Docker Compose above.
 - Login is rate limited per client; repeated failures return HTTP 429. Wait a minute and retry.
-- An account flagged `mustChangePassword` is redirected to the change-password page before anything else works.
+- An account flagged `mustChangePassword` is redirected to the change-password page before anything else works; API calls made with its session return `403 password_change_required` until the password is changed.
 - `POST /api/v1/auth/forgot-password` sends mail through Resend when `NOMUS_RESEND_API_KEY` is set (sender: `NOMUS_FROM_EMAIL`); otherwise no email is sent and the reset link is not recorded anywhere, so an admin has to reset the password (`POST /api/v1/users/:id/reset-password`).
 
 ### Google or GitHub sign-in fails

@@ -221,4 +221,49 @@ describe('postInlineComments', () => {
 
     expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('rate limit'));
   });
+
+  /** Make the mock stateful: createReview stores its comments, listReviewComments returns them. */
+  function statefulReviews() {
+    const stored: any[] = [];
+    octokit.rest.pulls.createReview = async (params: any) => {
+      for (const c of params.comments) stored.push({ id: stored.length + 1, ...c });
+      return { data: { id: 1 } } as any;
+    };
+    octokit.rest.pulls.listReviewComments = async () => ({ data: stored });
+    return stored;
+  }
+
+  it('does not re-post identical comments on a second run', async () => {
+    const stored = statefulReviews();
+    const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
+    const result = makeScanResult({
+      findings: [makeFinding({ line: 5 }), makeFinding({ line: 9, ruleKey: 'eu-ai-act.other' })],
+    });
+
+    await postInlineComments(result, octokit as any, repo, 42, sha);
+    await postInlineComments(result, octokit as any, repo, 42, 'def456');
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(stored).toHaveLength(2);
+  });
+
+  it('posts a new comment where the findings at a location changed', async () => {
+    const stored = statefulReviews();
+    await postInlineComments(makeScanResult({ findings: [makeFinding({ line: 5 })] }), octokit as any, repo, 42, sha);
+    await postInlineComments(
+      makeScanResult({ findings: [makeFinding({ line: 5, ruleKey: 'eu-ai-act.changed' }), makeFinding({ line: 7 })] }),
+      octokit as any, repo, 42, sha,
+    );
+    expect(stored).toHaveLength(3);
+  });
+
+  it('posts anyway and warns when listing existing comments fails', async () => {
+    octokit.rest.pulls.listReviewComments = async () => { throw new Error('boom'); };
+    const spy = vi.spyOn(octokit.rest.pulls, 'createReview');
+
+    await postInlineComments(makeScanResult({ findings: [makeFinding()] }), octokit as any, repo, 42, sha);
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('boom'));
+  });
 });
