@@ -236,31 +236,46 @@ export default function AiBom() {
     setGenerating(false);
   }
 
-  function exportJson() {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ai-bom-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  async function exportPdf() {
+  // Exports go through GET /ai-bom/export/:format, which records a hashed
+  // snapshot for the audit trail. (JSON used to dump the page's list response
+  // and "PDF" saved that endpoint's JSON envelope under a .pdf name.)
+  async function exportJson() {
+    setActionError(null);
     try {
-      const response = await api.get('/ai-bom/export/pdf', { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data);
+      const { data: snapshot } = await api.get('/ai-bom/export/json');
+      const blob = new Blob([JSON.stringify(snapshot.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ai-bom-${Date.now()}.pdf`;
+      a.download = `ai-bom-${snapshot.generatedAt.slice(0, 10)}-${snapshot.bomHash.slice(0, 8)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
+      setActionError(apiErrorMessage(err, 'Failed to export JSON'));
+    }
+  }
+
+  // The engine renders the report as HTML; open it and use the browser's
+  // print dialog to save it as PDF. The window is opened before the request
+  // so pop-up blockers treat it as the user's click.
+  async function exportPdf() {
+    setActionError(null);
+    const win = window.open('', '_blank');
+    try {
+      const { data: snapshot } = await api.get('/ai-bom/export/pdf');
+      if (!win) {
+        setActionError('Allow pop-ups for this site to open the printable AI-BOM report.');
+        return;
+      }
+      win.document.open();
+      win.document.write(snapshot.data);
+      win.document.close();
+      win.focus();
+      win.print();
+    } catch (err) {
+      win?.close();
       setActionError(apiErrorMessage(err, 'Failed to export PDF'));
     }
   }
