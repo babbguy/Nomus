@@ -17,6 +17,7 @@ import { runMigrations } from '../../db/migrate.js';
 import { apiKeys, organizations, policyEvents } from '../../db/schema.js';
 import type { AppEnv } from '../app.js';
 import { streamRoutes, eventJurisdiction } from './stream.js';
+import { getClientCount } from '../../sse/manager.js';
 
 const app = new Hono<AppEnv>();
 app.route('/api/v1/stream', streamRoutes);
@@ -91,5 +92,18 @@ describe('GET /api/v1/stream replay', () => {
   it('eventJurisdiction tolerates bad payloads', () => {
     expect(eventJurisdiction('{"jurisdiction":"EU"}')).toBe('EU');
     expect(eventJurisdiction('not json')).toBe('');
+  });
+});
+
+describe('GET /api/v1/stream disconnect', () => {
+  it('deregisters the client when the subscriber disconnects', async () => {
+    const before = getClientCount();
+    await readUntilConnected('/api/v1/stream');
+    // Closed connections stayed registered until a keepalive write threw,
+    // which never happens: the client count only ever grew.
+    for (let i = 0; i < 20 && getClientCount() > before; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(getClientCount()).toBe(before);
   });
 });
