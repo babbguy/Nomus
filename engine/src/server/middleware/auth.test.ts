@@ -23,6 +23,7 @@ vi.mock('../../tenant/usage.js', () => ({
 
 // Per-test role mock — flipped between admin/member to verify session-path scope checks.
 let __mockUserRole: 'platform_admin' | 'member' = 'platform_admin';
+let __mockMustChangePassword = false;
 
 vi.mock('../../db/client.js', () => {
   return {
@@ -49,6 +50,7 @@ vi.mock('../../db/client.js', () => {
                   orgId: 'org-1',
                   isActive: true,
                   role: __mockUserRole,
+                  mustChangePassword: __mockMustChangePassword,
                 };
               }
               return null;
@@ -186,6 +188,63 @@ describe('auth middleware', () => {
         headers: { Cookie: 'nomus_session=any-token' },
       });
       expect(res.status).toBe(200);
+    });
+
+    it('rejects a temporary-password session with 403 password_change_required', async () => {
+      __mockMustChangePassword = true;
+      try {
+        const app = new Hono();
+        app.use('*', requireSessionOrApiKey());
+        app.get('/', (c) => c.json({ ok: true }));
+
+        const res = await app.request('/', { headers: { Cookie: 'nomus_session=any-token' } });
+        expect(res.status).toBe(403);
+        const body = await res.json() as { code: string; error: string };
+        expect(body.code).toBe('password_change_required');
+        expect(body.error).toMatch(/password change/i);
+      } finally {
+        __mockMustChangePassword = false;
+      }
+    });
+
+    it('does not apply the password-change gate to API keys', async () => {
+      __mockMustChangePassword = true;
+      try {
+        const app = new Hono();
+        app.use('*', requireSessionOrApiKey());
+        app.get('/', (c) => c.json({ ok: true }));
+
+        const res = await app.request('/', { headers: { Authorization: 'Bearer valid-key' } });
+        expect(res.status).toBe(200);
+      } finally {
+        __mockMustChangePassword = false;
+      }
+    });
+  });
+
+  describe('requireSession', () => {
+    it('allows a normal session', async () => {
+      const app = new Hono();
+      app.use('*', requireSession());
+      app.get('/', (c) => c.json({ ok: true }));
+      const res = await app.request('/', { headers: { Cookie: 'nomus_session=any-token' } });
+      expect(res.status).toBe(200);
+    });
+
+    it('rejects a temporary-password session with 403 password_change_required', async () => {
+      __mockMustChangePassword = true;
+      try {
+        const app = new Hono();
+        app.use('*', requireSession());
+        app.get('/', (c) => c.json({ ok: true }));
+
+        const res = await app.request('/', { headers: { Cookie: 'nomus_session=any-token' } });
+        expect(res.status).toBe(403);
+        const body = await res.json() as { code: string };
+        expect(body.code).toBe('password_change_required');
+      } finally {
+        __mockMustChangePassword = false;
+      }
     });
   });
 });
