@@ -400,7 +400,9 @@ export async function runPipeline(sourceId: string): Promise<PipelineResult> {
     }
 
     // Check if a previous staged entry already rejected this exact content
-    if (existingStaged && existingStaged.pipelineStatus === 'rejected' && existingStaged.contentHash === scrapeResult.contentHash) {
+    // (Not for uploads: an admin re-processing an uploaded file asked for it,
+    // and silently answering "no change" left the upload unprocessed.)
+    if (!hasPendingUpload && existingStaged && existingStaged.pipelineStatus === 'rejected' && existingStaged.contentHash === scrapeResult.contentHash) {
       const duration = Math.round(performance.now() - startTime);
       logger.info({ sourceId, contentHash: scrapeResult.contentHash },
         'Step 1: Content was previously evaluated and rejected — skipping');
@@ -778,6 +780,29 @@ async function resumeFromStaged(
         warnings: cleanResult.warnings,
       }, `Step 2: Content cleaned (${cleaningProfile}) — Grade ${quality.overallGrade}, ${cleanResult.wordCount} words, ${cleanResult.articlesFound.length} articles`);
 
+      if ((quality.overallGrade === 'F' || quality.overallGrade === 'D') && staged.provenanceMode === 'upload') {
+        // A manually uploaded document is processed on its own path. Self-
+        // healing would refetch the live URL or an archive copy and process
+        // THAT instead of the file the admin uploaded, so it never runs for
+        // uploads: the upload is rejected with the reason, and the source's
+        // scrape-health counters are left alone (no scrape happened).
+        const diagnostic = diagnoseQualityFailure(cleanResult.cleanText, quality);
+        const rejectError = `Uploaded document scored quality grade ${quality.overallGrade}: ${diagnostic}. ` +
+          'Upload a copy containing the full legal text (without site navigation or scanned images) and process it again.';
+        updateStaged({ pipelineStatus: 'rejected', qualityDiagnostic: diagnostic, pipelineError: rejectError });
+        const duration = Math.round(performance.now() - startTime);
+        recordPipelineRun(db, sourceId, 'error', 2, false, null, 0, 0, duration,
+          llmProvider, llmModel, llmTokensIn, llmTokensOut, llmCostCents, rejectError);
+        logger.warn({ sourceId, grade: quality.overallGrade, diagnostic }, 'Step 2: Uploaded document rejected on quality');
+        progress(2, 'Uploaded document rejected', { grade: quality.overallGrade, diagnostic });
+        return {
+          sourceId, sourceName: source.name,
+          status: 'error', stepReached: 2,
+          rulesCreated: 0, rulesUpdated: 0, durationMs: duration,
+          error: rejectError,
+        };
+      }
+
       if (quality.overallGrade === 'F' || quality.overallGrade === 'D') {
         // Before rejecting, try self-healing pipeline
         const diagnostic = diagnoseQualityFailure(cleanResult.cleanText, quality);
@@ -911,7 +936,8 @@ async function resumeFromStaged(
             `*${source.name}*: Content scored Grade C after cleaning — requires admin review.\nDiagnostic: ${diagnostic}`,
             'Pipeline Quality Review',
           ).catch(() => {});
-          n.sendPush([], `Quality Review: ${source.name}`, `Grade C — ${diagnostic}`).catch(() => {});
+          // Configured push topics (an empty list delivered to nobody).
+          n.sendPush(n.getPushTopics(), `Quality Review: ${source.name}`, `Grade C — ${diagnostic}`).catch(() => {});
         }).catch(() => {});
 
         const duration = Math.round(performance.now() - startTime);
@@ -1423,6 +1449,8 @@ async function resumeFromStaged(
       tx.update(stagedContent).set({
         pipelineStatus: 'promoted',
         pipelineStep: 5,
+        // An earlier failed attempt's error must not linger on a promoted entry.
+        pipelineError: null,
         updatedAt: promoteNow,
       }).where(eq(stagedContent.id, staged.id)).run();
     }); // end transaction

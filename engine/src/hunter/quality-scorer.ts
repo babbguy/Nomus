@@ -159,7 +159,26 @@ export function scoreDocumentQuality(
     }
   }
 
-  const textScore = totalSampled > 0 ? recognizedCount / totalSampled : 0;
+  const dictionaryScore = totalSampled > 0 ? recognizedCount / totalSampled : 0;
+
+  // Word-shape score: the share of tokens that are natural-language words
+  // (letters in any script, optionally joined by an apostrophe or hyphen),
+  // ignoring numbers and citations like "42/5)" or "(a)". The dictionary above
+  // holds ~500 EU-flavoured terms, so clean statutes with ordinary vocabulary
+  // ("employer", "applicant", "interview") or in another language scored
+  // grade D and were rejected; garbage (binary, mojibake, base64, OCR merges)
+  // still fails this check.
+  let wordLike = 0;
+  let shapeSampled = 0;
+  for (let i = 0; i < words.length; i += step) {
+    const token = words[i].replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
+    if (!token || /^[\p{N}\p{P}\p{S}]+$/u.test(token)) continue;
+    shapeSampled++;
+    if (token.length <= 24 && /^\p{L}+(?:['’-]\p{L}+)*$/u.test(token)) wordLike++;
+  }
+  const shapeScore = shapeSampled > 0 ? wordLike / shapeSampled : 0;
+
+  const textScore = Math.max(dictionaryScore, shapeScore);
 
   // Check for garbage patterns
   let garbageDetected = false;

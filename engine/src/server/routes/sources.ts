@@ -521,7 +521,7 @@ sourceRoutes.post('/upload-content/:sourceId', async (c) => {
   // Save to content cache for future fallback
   try {
     const { saveCacheContent } = await import('../../hunter/content-cache.js');
-    saveCacheContent(sourceId, content, source.parserType, source.url);
+    saveCacheContent(sourceId, content, effectiveParserType, source.url);
   } catch (err) {
     logger.warn({ sourceId, error: (err as Error).message }, 'Failed to save upload to content cache');
   }

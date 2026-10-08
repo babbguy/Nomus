@@ -187,6 +187,7 @@ async function extractChunk(
 
   // Parse JSON — lenient extraction
   let requirements: ExtractedRequirement[] = [];
+  let parseError: string | undefined;
   try {
     const jsonStr = response.content.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
@@ -213,6 +214,7 @@ async function extractChunk(
   } catch {
     logger.warn({ chunk: chunk.index, content: response.content.slice(0, 100) },
       'Failed to parse chunk extraction JSON');
+    parseError = 'model response was not a JSON array';
   }
 
   return {
@@ -222,5 +224,7 @@ async function extractChunk(
     tokensIn: response.tokensIn,
     tokensOut: response.tokensOut,
     success: requirements.length > 0,
+    // Name the reason so pipeline errors are not 'Errors: ; ;'.
+    ...(requirements.length === 0 ? { error: parseError ?? 'no requirements in model response' } : {}),
   };
 }
