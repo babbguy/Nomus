@@ -24,7 +24,7 @@ import { buildProvenance, type Provenance } from './provenance.js';
 import { deriveCapabilitiesFromCode, SUPPORTED_LANGUAGES } from './detection.js';
 
 export const SERVER_NAME = 'nomus';
-export const SERVER_VERSION = '1.0.0';
+export const SERVER_VERSION = '1.1.0';
 
 // ─── Engine response shapes (fields we rely on) ─────────────────
 

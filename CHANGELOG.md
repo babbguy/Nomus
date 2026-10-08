@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-08
+
+### Security
+- A session still on its temporary password could call the whole API (read the organization,
+  create API keys) and mint a VS Code extension key. Such sessions are now limited to changing
+  the password, `GET /auth/me` and logging out. (#5)
+
+### Fixed
+- `/evaluate` used different applicability rules from `/simulate`: it ignored `INTL` rules,
+  implied data types and industry scoping, and could sign PHI sent to an AI model as compliant.
+  Both now share one implementation. (#11)
+- End-to-end workflow fixes across the scanner, GitHub Action, MCP server, attestations, rule
+  stream, regulation pipeline and dashboard, including: rule conditions matched only when all
+  hold, scanner over-reporting (241 findings on the reference repo, 63 correct), a GitHub Action
+  bundle that failed to load, SSE connections never released on disconnect, unchanged re-uploads
+  re-signing every rule, and dashboard figures that disagreed between pages. (#3)
+- Scanner: a repository checked out under a folder named `tests`, `fixtures` or similar skipped
+  most detection; findings in files using two SDKs named the wrong SDK. (#6, #7)
+- GitHub Action: inline review comments were posted again on every run. (#8)
+- VS Code extension: the workspace `.nomus.yml` was ignored; the extension now packages out of
+  the box. (#10, #1)
+- `/simulations/run` for an organization with no AI systems omitted `overallRiskLevel`. (#9)
+- `/.well-known/nomus-keys` now publishes an RFC 8037 OKP JWK that standard libraries accept. (#12)
+- Public `/verify/:id`, `/transparency` and `/ledger` pages redirected signed-out visitors to the
+  login page. (#13)
+- Rules created by the regulation pipeline were not delivered to live subscribers, and non-policy
+  events corrupted `Last-Event-ID` replay. (#14)
+
 ### Release gate
 - `npm run gate` (`e2e/run-gate.mjs`) runs the built product the way users do and fails on
   anything a user would notice: the production engine on a fresh database with a deterministic
