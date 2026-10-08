@@ -127,7 +127,7 @@ export class DataFlowDetector implements DetectorPlugin {
     const signals: DetectorSignal[] = [];
 
     for (const { file, content } of iterFiles(ctx)) {
-      if (isTestFile(file)) continue;
+      if (isTestFile(file, ctx.rootDir)) continue;
       const stripped = stripComments(file, content);
       const lines = stripped.split('\n');
       const aiCalls = findAiCalls(lines);
