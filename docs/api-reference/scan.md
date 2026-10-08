@@ -18,6 +18,8 @@ rate limited per organization (see the [overview](./README.md#rate-limiting)). E
 
 Upload findings from a scan. Returns `201`.
 
+The scanner reports one finding per rule per file, so a finding is identified by repository, file and rule key. Uploading a finding that is already stored refreshes it (line, commit, PR, text and scan time) instead of adding a duplicate: a finding you dismissed stays dismissed, and a resolved finding that is reported again is reopened. Optional fields may be omitted or sent as `null`.
+
 ```bash
 curl -X POST http://localhost:3100/api/v1/scan/findings \
   -H "Authorization: Bearer $NOMUS_API_KEY" \
@@ -69,6 +71,7 @@ Each finding:
 ```json
 {
   "created": 1,
+  "updated": 0,
   "clauseCorrelation": { "created": 1, "suppressed": 0, "evaluated": 1 },
   "clauseCorrelationError": null
 }

@@ -9,30 +9,36 @@ import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { correlateScan, type CorrelatableFinding } from '../../clausemap/correlator.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
-import { safeJson } from '../utils.js';
+import { safeJson, safeParseInt } from '../utils.js';
+import { invalidateComplianceScore } from './compliance-posture.js';
+
+// Optional fields accept null as "absent": scanners serialize missing values
+// as null (e.g. prNumber on a push build), and rejecting the whole upload for
+// that silently dropped every finding.
+const optionalString = z.string().nullish().transform((v) => v ?? undefined);
 
 const findingSchema = z.object({
-  repo: z.string().optional(),
-  prNumber: z.number().int().optional(),
-  commitSha: z.string().optional(),
+  repo: optionalString,
+  prNumber: z.number().int().nullish().transform((v) => v ?? undefined),
+  commitSha: optionalString,
   file: z.string().min(1),
   line: z.number().int(),
   ruleKey: z.string().min(1),
   severity: z.enum(['critical', 'high', 'medium', 'low']),
-  effect: z.string().optional(),
-  sdk: z.string().optional(),
-  capability: z.string().optional(),
-  summary: z.string().optional(),
-  suggestion: z.string().optional(),
-  detectorSource: z.string().optional(),
-  legalReference: z.string().optional(),
+  effect: optionalString,
+  sdk: optionalString,
+  capability: optionalString,
+  summary: optionalString,
+  suggestion: optionalString,
+  detectorSource: optionalString,
+  legalReference: optionalString,
 });
 
 const uploadFindingsSchema = z.object({
   findings: z.array(findingSchema).min(1),
-  repo: z.string().optional(),
-  prNumber: z.number().int().optional(),
-  commitSha: z.string().optional(),
+  repo: optionalString,
+  prNumber: z.number().int().nullish().transform((v) => v ?? undefined),
+  commitSha: optionalString,
 });
 
 const updateFindingSchema = z.object({
@@ -55,18 +61,17 @@ scanRoutes.post('/findings', async (c) => {
   const db = getDb();
 
   let created = 0;
+  let updated = 0;
   const correlatable: CorrelatableFinding[] = [];
+  const scannedAt = new Date().toISOString();
   for (const f of parsed.data.findings) {
-    const findingId = randomUUID();
-    db.insert(scanFindings).values({
-      id: findingId,
-      orgId,
-      repo: f.repo || parsed.data.repo || 'unknown',
+    const repo = f.repo || parsed.data.repo || 'unknown';
+    const values = {
+      repo,
       prNumber: f.prNumber ?? parsed.data.prNumber ?? null,
       commitSha: f.commitSha || parsed.data.commitSha || 'unknown',
       filePath: f.file,
       lineNumber: f.line,
-      ruleId: null,
       ruleKey: f.ruleKey,
       severity: f.severity,
       effect: f.effect || 'flag',
@@ -75,10 +80,44 @@ scanRoutes.post('/findings', async (c) => {
       suggestion: f.suggestion ?? null,
       detectorSource: f.detectorSource ?? null,
       legalReference: f.legalReference ?? null,
-      status: 'open',
-      scannedAt: new Date().toISOString(),
-    }).run();
-    created++;
+      scannedAt,
+    };
+
+    // A rescan reports the same obligation again (the scanner emits one
+    // finding per rule per file). Refresh the stored finding instead of
+    // adding a duplicate: every CI run used to add a full copy of the scan,
+    // inflating the Scans page and the exposure score. A dismissed finding
+    // stays dismissed; a resolved one that comes back is reopened.
+    const existing = db.select({ id: scanFindings.id, status: scanFindings.status })
+      .from(scanFindings)
+      .where(and(
+        eq(scanFindings.orgId, orgId),
+        eq(scanFindings.repo, repo),
+        eq(scanFindings.filePath, f.file),
+        eq(scanFindings.ruleKey, f.ruleKey),
+      ))
+      .orderBy(desc(scanFindings.scannedAt))
+      .get();
+
+    let findingId: string;
+    if (existing) {
+      findingId = existing.id;
+      db.update(scanFindings)
+        .set({ ...values, status: existing.status === 'resolved' ? 'open' : existing.status })
+        .where(eq(scanFindings.id, existing.id))
+        .run();
+      updated++;
+    } else {
+      findingId = randomUUID();
+      db.insert(scanFindings).values({
+        id: findingId,
+        orgId,
+        ruleId: null,
+        status: 'open',
+        ...values,
+      }).run();
+      created++;
+    }
     correlatable.push({
       id: findingId,
       filePath: f.file,
@@ -106,7 +145,8 @@ scanRoutes.post('/findings', async (c) => {
     clauseCorrelationError = err instanceof Error ? err.message : 'correlation failed';
   }
 
-  return c.json({ created, clauseCorrelation, clauseCorrelationError }, 201);
+  invalidateComplianceScore(orgId);
+  return c.json({ created, updated, clauseCorrelation, clauseCorrelationError }, 201);
 });
 
 // Query findings
@@ -116,7 +156,7 @@ scanRoutes.get('/findings', (c) => {
   const repo = c.req.query('repo');
   const severity = c.req.query('severity');
   const status = c.req.query('status') || 'open';
-  const limit = Math.min(parseInt(c.req.query('limit') || '100'), 500);
+  const limit = Math.min(Math.max(safeParseInt(c.req.query('limit'), 100), 1), 500);
 
   const conditions = [eq(scanFindings.orgId, orgId)];
   if (repo) conditions.push(eq(scanFindings.repo, repo));
@@ -175,5 +215,6 @@ scanRoutes.patch('/findings/:id', async (c) => {
     .run();
 
   if (result.changes === 0) return c.json({ error: 'Finding not found' }, 404);
+  invalidateComplianceScore(orgId);
   return c.json({ message: 'Finding updated' });
 });

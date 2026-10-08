@@ -17,6 +17,15 @@ compliancePostureRoutes.use('*', requireSessionOrApiKey('read:policies'));
 // 30-second score cache to avoid recomputing on rapid dashboard calls
 const scoreCache = new Map<string, { result: ReturnType<typeof calculateScore>; expiresAt: number }>();
 
+/**
+ * Drop an org's cached score after an input to it changes (e.g. scan findings
+ * uploaded or dismissed), so the next read is not up to 30 s stale. The GitHub
+ * Action reads the score immediately after uploading findings.
+ */
+export function invalidateComplianceScore(orgId: string): void {
+  scoreCache.delete(orgId);
+}
+
 interface ScoreFactor {
   category: string;
   description: string;
