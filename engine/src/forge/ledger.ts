@@ -13,7 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
-import { forgeLedger } from '../db/schema.js';
+import { forgeLedger, platformSettings } from '../db/schema.js';
 import { signData } from '../core/signing.js';
 import { canonicalJSON } from '../core/policy-compiler.js';
 import { logger } from '../logger.js';
@@ -38,7 +38,6 @@ export function isPublishingEnabled(): boolean {
   // Check platform settings
   try {
     const db = getDb();
-    const { platformSettings } = require('../db/schema.js');
     const setting = db.select({ value: platformSettings.value })
       .from(platformSettings)
       .where(eq(platformSettings.key, 'forge.ledger.publish'))
@@ -281,7 +280,8 @@ export function getLedgerEntry(id: string): LedgerDetailEntry | null {
 /**
  * Get Ledger summary stats for the transparency page.
  */
-export function getLedgerStats(): {
+/** publishedOnly: count only entries the public ledger lists. */
+export function getLedgerStats(opts?: { publishedOnly?: boolean }): {
   totalDocuments: number;
   verified: number;
   flagged: number;
@@ -297,12 +297,14 @@ export function getLedgerStats(): {
     count: sql<number>`count(*)`,
     rules: sql<number>`sum(rules_accepted)`,
   }).from(forgeLedger)
+    .where(opts?.publishedOnly ? eq(forgeLedger.isPublished, true) : undefined)
     .groupBy(forgeLedger.status)
     .all();
 
   const jurisdictions = db.select({
     jurisdiction: forgeLedger.jurisdiction,
   }).from(forgeLedger)
+    .where(opts?.publishedOnly ? eq(forgeLedger.isPublished, true) : undefined)
     .groupBy(forgeLedger.jurisdiction)
     .all()
     .map((r) => r.jurisdiction);
@@ -335,7 +337,6 @@ export function getLedgerStats(): {
  */
 export function setPublishingEnabled(enabled: boolean): void {
   const db = getDb();
-  const { platformSettings } = require('../db/schema.js');
   const now = new Date().toISOString();
 
   const existing = db.select().from(platformSettings)

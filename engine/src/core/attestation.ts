@@ -8,6 +8,20 @@ import { ATTESTATION_SCHEMA_VERSION } from './attestation-lifecycle.js';
 import type { PolicyConditions } from '@nomus/shared';
 import { isDescriptiveConditionKey, normalizeDataType, normalizeSector } from './applicability.js';
 
+/**
+ * Whether a rule's conditions hold for an action context: every machine
+ * condition must equal the context (sector and data type accept the aliases
+ * /simulate accepts; 'ai_operation' covers any action); descriptive keys are
+ * ignored. Shared by /evaluate and the shadow tests.
+ */
+export function ruleMatchesContext(conditions: Record<string, string>, actionContext: PolicyConditions): boolean {
+  for (const [key, value] of Object.entries(conditions)) {
+    if (isDescriptiveConditionKey(key)) continue;
+    if (value && !conditionHolds(key, value, actionContext[key])) return false;
+  }
+  return true;
+}
+
 function conditionHolds(key: string, required: string, actual: string | undefined): boolean {
   if (actual === undefined) return false;
   // `ai_operation` is the generic action (the regulation pipeline extracts
@@ -78,18 +92,7 @@ export function evaluateCompliance(
   };
 
   for (const rule of rules) {
-    const conditions = JSON.parse(rule.conditions) as Record<string, string>;
-    let matched = true;
-
-    // Check if the action context matches the rule conditions. Sector and
-    // data type accept the same aliases as /simulate (fintech, phi, pii, ...).
-    for (const [key, value] of Object.entries(conditions)) {
-      if (isDescriptiveConditionKey(key)) continue;
-      if (value && !conditionHolds(key, value, actionContext[key])) {
-        matched = false;
-        break;
-      }
-    }
+    const matched = ruleMatchesContext(JSON.parse(rule.conditions) as Record<string, string>, actionContext);
 
     evaluated.push({
       ruleKey: rule.ruleKey,
