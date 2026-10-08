@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { postInlineComments } from '../src/pr-comments.js';
 import { createCheckRun } from '../src/check-run.js';
 import { bySeverity, commentableLines, toRepoPath } from '../src/findings.js';
@@ -60,6 +60,14 @@ describe('findings helpers', () => {
 
   it('toRepoPath makes runner paths repository-relative', () => {
     expect(toRepoPath(join(process.cwd(), 'src', 'api', 'chat.ts'))).toBe('src/api/chat.ts');
+    // On a runner the checkout root is GITHUB_WORKSPACE, not the scan directory.
+    const saved = process.env.GITHUB_WORKSPACE;
+    try {
+      process.env.GITHUB_WORKSPACE = resolve(process.cwd(), '..');
+      expect(toRepoPath(join(process.cwd(), 'src', 'api', 'chat.ts'))).toBe(`${basename(process.cwd())}/src/api/chat.ts`);
+    } finally {
+      process.env.GITHUB_WORKSPACE = saved;
+    }
     expect(toRepoPath('src/x.ts')).toBe('src/x.ts');
   });
 
