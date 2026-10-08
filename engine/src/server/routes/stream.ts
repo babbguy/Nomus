@@ -37,23 +37,24 @@ streamRoutes.get('/', (c) => {
 
     try {
       // Replay missed events on reconnect
-      if (lastEventId) {
+      // Only a plain non-negative integer is a policy event sequence. Any
+      // other value (a UUID, which parseInt would read as its leading digits
+      // or NaN) gets no replay rather than the wrong range.
+      if (lastEventId && /^\d+$/.test(lastEventId)) {
         const lastSequence = parseInt(lastEventId, 10);
-        if (!isNaN(lastSequence)) {
-          const missedEvents = getEventsSince(lastSequence);
-          for (const event of missedEvents) {
-            // Same jurisdiction filter as live events (sse/manager.ts): a
-            // reconnecting ?jurisdictions=US-CA subscriber was replayed
-            // every jurisdiction's missed events.
-            if (jurisdictions.length > 0 && !jurisdictions.includes(eventJurisdiction(event.payload))) {
-              continue;
-            }
-            await stream.writeSSE({
-              id: String(event.sequence),
-              event: event.eventType,
-              data: event.payload,
-            });
+        const missedEvents = getEventsSince(lastSequence);
+        for (const event of missedEvents) {
+          // Same jurisdiction filter as live events (sse/manager.ts): a
+          // reconnecting ?jurisdictions=US-CA subscriber was replayed
+          // every jurisdiction's missed events.
+          if (jurisdictions.length > 0 && !jurisdictions.includes(eventJurisdiction(event.payload))) {
+            continue;
           }
+          await stream.writeSSE({
+            id: String(event.sequence),
+            event: event.eventType,
+            data: event.payload,
+          });
         }
       }
 

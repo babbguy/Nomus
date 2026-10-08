@@ -66,7 +66,11 @@ export function removeClient(clientId: string): void {
  * Broadcast a policy event to all subscribed clients.
  */
 export function broadcastEvent(event: BroadcastEvent): void {
-  const payload = `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
+  // Only stored policy events carry an SSE id (their sequence number): the id
+  // becomes the client's Last-Event-ID, which the stream route replays from.
+  // Ephemeral events (progress, health, ...) must not move that cursor.
+  const idLine = event.id !== undefined ? `id: ${event.id}\n` : '';
+  const payload = `${idLine}event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
   const encoder = new TextEncoder();
   const chunk = encoder.encode(payload);
 

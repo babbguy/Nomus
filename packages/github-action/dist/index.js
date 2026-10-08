@@ -264102,13 +264102,37 @@ function offsetToLine(content, offset) {
     return line;
 }
 /**
+ * Express `file` relative to `rootDir` using POSIX separators.
+ * Relative inputs (in-memory paths) are returned as-is; absolute paths outside
+ * the root fall back to the full normalised path.
+ */
+function toRootRelative(file, rootDir) {
+    const posixFile = file.replace(/\\/g, '/');
+    if (!rootDir)
+        return posixFile;
+    const posixRoot = rootDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (posixRoot === '')
+        return posixFile;
+    const windowsStyle = /^[a-z]:/i.test(posixRoot);
+    const f = windowsStyle ? posixFile.toLowerCase() : posixFile;
+    const r = windowsStyle ? posixRoot.toLowerCase() : posixRoot;
+    if (f.startsWith(r + '/'))
+        return posixFile.slice(posixRoot.length + 1);
+    return posixFile;
+}
+/**
  * Detect whether a file is a test file (best-effort).
  * Used by detectors to suppress false positives in test fixtures.
+ *
+ * When `rootDir` is given, only the part of the path below the scan root is
+ * inspected, so a repository checked out under a directory that happens to be
+ * called `tests` or `fixtures` is not mistaken for test code.
  */
-function isTestFile(file) {
-    return /[\/\\](?:tests?|__tests__|spec|specs|fixtures|__fixtures__|mocks|__mocks__)[\/\\]/i.test(file)
-        || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|py|java|go)$/i.test(file)
-        || /[\/\\]\.env\.example$/i.test(file);
+function isTestFile(file, rootDir) {
+    const path = '/' + toRootRelative(file, rootDir).replace(/^\/+/, '');
+    return /\/(?:tests?|__tests__|spec|specs|fixtures|__fixtures__|mocks|__mocks__)\//i.test(path)
+        || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|py|java|go)$/i.test(path)
+        || /\/\.env\.example$/i.test(path);
 }
 /**
  * Strip line and block comments from a JS/TS/Java/Go file before pattern matching.
@@ -264896,7 +264920,7 @@ class SdkUsageDetector {
     async detect(ctx) {
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             let hits;
             let engine;
@@ -265174,7 +265198,7 @@ class PhiPatternDetector {
     async detect(ctx) {
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             // Strip comments to suppress findings buried in example documentation
             const stripped = stripComments(file, content);
@@ -265356,7 +265380,7 @@ class RiskClassifier {
         const signals = [];
         const sector = ctx.config.sector?.toLowerCase();
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             const stripped = stripComments(file, content);
             const hits = risk_classifier_findHits(stripped);
@@ -265484,7 +265508,7 @@ class TransparencyDetector {
     async detect(ctx) {
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             const stripped = stripComments(file, content);
             const hits = transparency_detector_findHits(stripped);
@@ -265614,7 +265638,7 @@ class DataFlowDetector {
         const maxDepth = this.config.maxTaintDepth ?? DEFAULT_MAX_DEPTH;
         const signals = [];
         for (const { file, content } of iterFiles(ctx)) {
-            if (isTestFile(file))
+            if (isTestFile(file, ctx.rootDir))
                 continue;
             const stripped = stripComments(file, content);
             const lines = stripped.split('\n');
@@ -273454,6 +273478,29 @@ function sdkOfSignal(signal) {
     return undefined;
 }
 /**
+ * The SDK a non-SDK signal (PHI pattern, transparency, risk, data flow) belongs
+ * to: the SDK call on the same line, else the closest SDK call in the file
+ * (ties go to the earlier line). Import signals are only consulted when the
+ * file has no SDK-usage signal at all.
+ */
+function nearestSdk(sites, line) {
+    if (!sites)
+        return undefined;
+    const candidates = sites.usage.length > 0 ? sites.usage : sites.imports;
+    let best;
+    for (const site of candidates) {
+        if (!best) {
+            best = site;
+            continue;
+        }
+        const d = Math.abs(site.line - line);
+        const bd = Math.abs(best.line - line);
+        if (d < bd || (d === bd && site.line < best.line))
+            best = site;
+    }
+    return best?.sdk;
+}
+/**
  * Query the Nomus API with detected capabilities to get matching rules,
  * then map them back to the specific code locations using detector signals.
  *
@@ -273501,15 +273548,17 @@ async function rule_matcher_matchRulesToSignals(signals, capabilities, config) {
     // arrive more than once — report each (rule, file) pair once.
     const findings = [];
     const reported = new Set();
-    // The SDK a finding is attributed to. PHI/transparency/risk signals name a
-    // data pattern ("pii_var"), not an SDK, so they borrow the SDK found in the
-    // same file; SDK-usage signals carry the SDK in metadata.
-    const sdkByFile = new Map();
+    // SDK-naming signals grouped per file, used to attribute signals that do not
+    // name an SDK themselves (see nearestSdk).
+    const sdkSignalsByFile = new Map();
     for (const signal of signals) {
         const sdk = sdkOfSignal(signal);
-        if (sdk && (!sdkByFile.has(signal.file) || signal.source === 'sdk-usage-detector')) {
-            sdkByFile.set(signal.file, sdk);
-        }
+        if (!sdk)
+            continue;
+        const entry = sdkSignalsByFile.get(signal.file) ?? { usage: [], imports: [] };
+        (signal.source === 'sdk-usage-detector' ? entry.usage : entry.imports)
+            .push({ line: signal.line, sdk });
+        sdkSignalsByFile.set(signal.file, entry);
     }
     for (const market of Object.values(marketRules)) {
         for (const rule of market.rules) {
@@ -273549,7 +273598,7 @@ async function rule_matcher_matchRulesToSignals(signals, capabilities, config) {
                 findings.push({
                     file: signal.file,
                     line: signal.line,
-                    sdk: sdkOfSignal(signal) ?? sdkByFile.get(signal.file) ?? 'unknown',
+                    sdk: sdkOfSignal(signal) ?? nearestSdk(sdkSignalsByFile.get(signal.file), signal.line) ?? 'unknown',
                     detectorSource: signal.source,
                     evidence: signal.evidence,
                     rule: { ...rule, confidence: combinedConfidence },
@@ -274112,6 +274161,8 @@ const EFFECT_LABELS = {
     flag: 'FLAGGED',
 };
 const COMMENT_MARKER = '<!-- nomus-scan -->';
+/** Hidden marker identifying inline review comments posted by Nomus. */
+const FINDING_MARKER = '<!-- nomus-finding -->';
 const DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
 /** GitHub accepts a limited number of comments per review. */
 const MAX_INLINE_COMMENTS = 25;
@@ -274161,18 +274212,44 @@ async function postInlineComments(result, octokit, repo, prNumber, sha) {
             entry.findings.push(f);
             byLocation.set(key, entry);
         }
-        const comments = [...byLocation.values()]
-            .slice(0, MAX_INLINE_COMMENTS)
-            .map(({ path, line, findings }) => ({
+        const candidates = [...byLocation.values()].map(({ path, line, findings }) => ({
             path,
             line,
             side: 'RIGHT',
-            body: `${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
+            body: `${FINDING_MARKER}\n${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
         }));
-        if (comments.length === 0) {
+        if (candidates.length === 0) {
             info('   No obligations on lines changed in this pull request — no inline comments');
             return;
         }
+        // Skip locations already carrying an identical Nomus comment from a
+        // previous run, so re-runs and new pushes do not stack duplicates.
+        const posted = new Set();
+        try {
+            const existing = await octokit.paginate(octokit.rest.pulls.listReviewComments, {
+                ...repo,
+                pull_number: prNumber,
+                per_page: 100,
+            });
+            for (const c of existing) {
+                if (!c.body?.includes(FINDING_MARKER))
+                    continue;
+                if (c.side && c.side !== 'RIGHT')
+                    continue;
+                if (c.line == null)
+                    continue;
+                posted.add(`${c.path}:${c.line}:${c.body}`);
+            }
+        }
+        catch (err) {
+            warning(`Could not list existing review comments, posting all: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        const fresh = candidates.filter((c) => !posted.has(`${c.path}:${c.line}:${c.body}`));
+        if (fresh.length === 0) {
+            info('   Inline review comments already up to date — nothing new to post');
+            return;
+        }
+        const comments = fresh.slice(0, MAX_INLINE_COMMENTS);
         await octokit.rest.pulls.createReview({
             ...repo,
             pull_number: prNumber,

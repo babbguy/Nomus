@@ -35,6 +35,7 @@ npm run lint
 npm run build:all
 npm run test:engine
 npm run test:extensions
+npm run test:dashboard
 ```
 
 - Run the release gate, `npm run gate` (see [e2e/README.md](e2e/README.md)). It runs the

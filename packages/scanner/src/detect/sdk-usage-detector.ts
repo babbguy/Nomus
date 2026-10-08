@@ -679,7 +679,7 @@ export class SdkUsageDetector implements DetectorPlugin {
     const signals: DetectorSignal[] = [];
 
     for (const { file, content } of iterFiles(ctx)) {
-      if (isTestFile(file)) continue;
+      if (isTestFile(file, ctx.rootDir)) continue;
 
       let hits: CallHit[];
       let engine: 'ast' | 'regex';

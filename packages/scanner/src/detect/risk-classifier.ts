@@ -142,7 +142,7 @@ export class RiskClassifier implements DetectorPlugin {
     const sector = ctx.config.sector?.toLowerCase();
 
     for (const { file, content } of iterFiles(ctx)) {
-      if (isTestFile(file)) continue;
+      if (isTestFile(file, ctx.rootDir)) continue;
       const stripped = stripComments(file, content);
       const hits = findHits(stripped);
       if (hits.length === 0) continue;
