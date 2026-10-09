@@ -7,6 +7,8 @@
  * contract.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   fingerprintOf, prClosedResponseSchema, requestReviewResponseSchema, verifyCiVerdict, type CiEvaluateResponse,
 } from '@nomus/scanner/corporate';
@@ -126,7 +128,11 @@ describe('E61 verdicts', () => {
 
     const again = await verdict(scan('feat/open', findings, { prNumber: 7 }));
     expect([again.caseId, (await caseDetail(v.caseId!)).case.latestRevision]).toEqual([v.caseId, 1]);
-    const caseRuns = ciRunListResponseSchema.parse((await runs(`caseId=${v.caseId}`, dev)).json).items;
+    const caseRunsBody = (await runs(`caseId=${v.caseId}`, dev)).json;
+    const caseRuns = ciRunListResponseSchema.parse(caseRunsBody).items;
+    // The case page reads this list with the dashboard's contract.
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../../../dashboard/src/api/cpg-case-schemas.ts')).href);
+    expect(() => d.ciRunListSchema.parse(caseRunsBody)).not.toThrow();
     expect(caseRuns.map((r) => r.id)).toEqual([again.runId, v.runId]);
     expect(listAuditEventsByAction(getDb(), orgId, 'ci.evaluated').filter((e) => [v.runId, again.runId].includes(e.targetId!))).toHaveLength(2);
   });

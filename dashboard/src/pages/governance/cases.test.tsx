@@ -3,12 +3,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { CaseTable } from './GovernanceCases';
 import { CaseView } from './CaseDetail';
+import { CiRunTable } from './cases/CiRuns';
 import { FindingList } from './cases/Findings';
 import * as fx from '../../test/cpg-fixtures';
 import { FindingDecision, type DecisionContext } from './cases/Decisions';
 import { ProposalCard } from './decisions/parts';
 import {
-  caseDetailSchema, caseSummarySchema, proposalSchema, revisionDetailSchema, standingExceptionSchema, type CaseDetail, type CpgMe,
+  caseDetailSchema, caseSummarySchema, ciRunSchema, proposalSchema, revisionDetailSchema, standingExceptionSchema, type CaseDetail, type CpgMe,
 } from '../../api/cpg';
 import { exceptionRows, lapsingCount, parseDays, progressText, quorumProgress, requirementText, scopeRule } from '../../lib/cpg-approvals';
 import { asSentence, breakablePath, caseActions, pageNote, pullRequestUrl, threadsOf } from '../../lib/cpg-cases';
@@ -141,6 +142,21 @@ describe('case pages: rendering', () => {
     for (const s of ['Rita Reviewer : requested changes', 'Dana Developer : opened the case, justified findings, replied', 'AI Review Board', 'Legal Board',
       'Request changes', 'Close case', 'Use the gateway client.', 'Moving it next sprint.', 'Add a comment', 'VS Code']) expect(t).toContain(s);
     expect(t).not.toContain('Closure record');
+    expectClean(t);
+  });
+
+  it('CI runs: the card shows for ci.read holders; each run shows its verdict, commit, PR, time and signature status', () => {
+    expect(text(<CaseView detail={detail} me={meAs(DEV_ID, ['case.read', 'ci.read'])} notice={null} onChanged={() => {}} fetchedAt={T} />)).toContain('CI runs');
+    expect(text(<CaseView detail={detail} me={dev} notice={null} onChanged={() => {}} fetchedAt={T} />)).not.toContain('CI runs');
+    const run = ciRunSchema.parse({
+      id: '12121212-1212-4121-8121-121212121212', repo: summary.repo, branch: summary.branch, prNumber: 42, headSha: 'c'.repeat(40), eventName: 'pull_request',
+      bundleHash: 'd'.repeat(64), scannedFileCount: 12, verdict: 'fail', counts: { blocking: 1, pending: 0, rejected: 0, approved: 0, excepted: 0, advisory: 0 },
+      caseId: CASE_ID, findings: [], evaluatedAt: T, signedPayload: '{}', signature: 'c2ln', signatureValid: true,
+    });
+    const runs = [run, { ...run, id: '13131313-1313-4131-8131-131313131313', verdict: 'pass' as const, signatureValid: false }];
+    expect(renderToStaticMarkup(<MemoryRouter><CiRunTable runs={runs} repo={summary.repo} /></MemoryRouter>)).toContain('href="https://github.com/example-org/support-app/pull/42"');
+    const t = text(<CiRunTable runs={runs} repo={summary.repo} />);
+    for (const s of ['Failed', '1 blocking', 'c'.repeat(40), '#42', 'Oct 9, 2026, 08:00 UTC', 'Verified', 'Passed', 'Does not verify']) expect(t).toContain(s);
     expectClean(t);
   });
 

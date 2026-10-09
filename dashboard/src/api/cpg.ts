@@ -14,9 +14,9 @@ import {
 } from './cpg-quorum';
 
 import {
-  caseCommentSchema, caseDetailSchema, caseListSchema, caseStatusSchema, castVoteSchema, decisionSchema, proposalListSchema, proposalSchema,
+  caseCommentSchema, caseDetailSchema, caseListSchema, caseStatusSchema, castVoteSchema, ciRunListSchema, decisionSchema, proposalListSchema, proposalSchema,
   reviewerContextSchema, revisionDetailSchema, revocationSchema, standingExceptionListSchema,
-  type CaseComment, type CaseDetail, type CaseList, type CaseState, type CastVote, type Decision, type Proposal, type ProposalStatus,
+  type CaseComment, type CaseDetail, type CaseList, type CaseState, type CastVote, type CiRunList, type Decision, type Proposal, type ProposalStatus,
   type ReviewerContext, type RevisionDetail, type StandingException, type StandingPattern,
 } from './cpg-case-schemas';
 import {
@@ -33,7 +33,7 @@ export * from './cpg-integration-schemas';
  * Typed client for the Corporate Policy Governance API (/api/v1/cpg):
  * RBAC, settings and the audit log (E1 to E17); boards, quorum, compile and
  * the policy log (E19 to E37); review cases (E41 to E52); proposals,
- * decisions and standing exceptions (E54 to E60). Every response is parsed with its zod
+ * decisions and standing exceptions (E54 to E60); a case's CI runs (E63). Every response is parsed with its zod
  * contract (cpg-schemas.ts, cpg-quorum.ts); a response that does not match
  * throws CpgContractError, which pages show as a load failure.
  */
@@ -357,6 +357,12 @@ export async function listCases(q: CaseQuery = {}): Promise<CaseList> {
 export async function getCase(caseId: string): Promise<CaseDetail> {
   const { data } = await api.get(`/cpg/cases/${id(caseId)}`);
   return parseResponse(caseDetailSchema, data, 'GET /cpg/cases/:id');
+}
+
+/** E63: a case's CI runs, newest first (the first 50). */
+export async function listCaseCiRuns(caseId: string): Promise<CiRunList> {
+  const { data } = await api.get(`/cpg/ci/runs?caseId=${id(caseId)}`);
+  return parseResponse(ciRunListSchema, data, 'GET /cpg/ci/runs');
 }
 
 export async function getCaseRevision(caseId: string, revision: number): Promise<RevisionDetail> {
