@@ -15,6 +15,8 @@ extension, and requesting a review of a finding from VS Code.
 - [VS Code extension](#vs-code-extension)
 - [Requesting a review in VS Code](#requesting-a-review-in-vs-code)
 - [Review cases in the dashboard](#review-cases-in-the-dashboard)
+- [Deciding findings and voting](#deciding-findings-and-voting)
+- [Standing exceptions](#standing-exceptions)
 - [When the policy bundle cannot be used](#when-the-policy-bundle-cannot-be-used)
 - [What is not in this release](#what-is-not-in-this-release)
 
@@ -287,7 +289,51 @@ board (other reviewers are told which boards can); withdraw your own case, or cl
 instance's key and verified each time the page loads. Reviewer context generated before it closed
 can still be shown; a closed case does not generate any more.
 
-## When the policy bundle cannot be used
+## Deciding findings and voting
+
+Each blocking finding of the latest revision shows its **Decision**: the signed decision that
+settles it (approved or rejected, the expiry, and **Signature verified**, checked when the page
+loads), the standing exception that covers it, or a pending proposal with how many approvals it has
+and which boards still need to approve.
+
+If you hold `case.review` on the repository and belong to a board that owns the finding's policy,
+you can **Propose approval** or **Propose rejection**:
+
+- an approval needs an expiry, in days, at most the maximum the quorum allows for the policy's tier
+  (by default 180 days for review-required and 90 for prohibited); the default is filled in;
+- a rejection is final at once and never expires; only a later approval lifts it;
+- your own vote is recorded with your proposal, so a policy that needs one approval is decided at
+  once.
+
+**Propose a bulk decision** (in the Decisions card) decides two or more open findings of one
+review-required policy version together; each still gets its own signed decision. Prohibited
+findings are always decided one at a time.
+
+The **Decisions** card lists every proposal of the case, newest first, with its votes (and the boards
+each voter approved for), vetoes, invalidations and revocations. On a pending proposal, eligible
+reviewers **Approve** or **Reject**, with an optional comment. One eligible rejection vetoes an
+approval. When you cannot vote, the card says why: you already voted, you are not on a required
+board, or you opened, justified or revised the case. Nobody can decide on their own work, whatever
+roles they hold, so those actions are never offered; if the server refuses one anyway, its message
+is shown as it is. Holders of `decision.revoke` can **Revoke** a decision: it is immediate, signed
+and final, and the finding needs review again.
+
+## Standing exceptions
+
+**Governance > Exceptions** lists the standing exceptions in the repositories you can read: their
+patterns (repositories or teams, paths, excluded paths), conditions, policy and version, status,
+expiry, proposer, votes and revocations. Filter by status (**Pending**, **Active**, **Expired**,
+**Revoked**, **Lapsed (policy changed)**, **Not approved**) and by policy. Pending exceptions are
+listed whether or not they were proposed from a case.
+
+With `exception.propose`, **Propose an exception**: pick the policy (its active version), give
+repository patterns or teams and path globs, optional branches, languages and a maximum finding
+size, an expiry within the configured maximum (90 days by default) and a rationale. The form states
+what approval it needs, for example two approvals covering every owning board, one of them by an
+Exception Approver, for a prohibited policy. You do not vote on your own proposal. An exception
+covers one policy version: when a new version is approved it **lapses**, and the new-version page
+warns how many will.
+
 
 The extension never shows "no violations" when it cannot check. Every problem is visible, in the
 view's status row and as an error message:
@@ -307,6 +353,5 @@ policies were NOT checked when the bundle cannot be fetched (see [Exit codes](#s
 
 ## What is not in this release
 
-Reviewers' decisions (approvals, rejections and standing exceptions) and the CI gate for corporate
-findings come in later releases. Until then, a review case
-collects justifications, change requests and replies, and reviewers cannot approve findings yet.
+The CI gate for corporate findings comes in a later release. Until then, decisions are shown in the
+dashboard and in VS Code, and CI does not yet enforce them.

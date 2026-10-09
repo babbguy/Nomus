@@ -11,8 +11,8 @@ period, and what a corporate policy can and cannot express. Roles and permission
 
 > Phase note: this release builds the policy registry, the signed bundle and their dashboard
 > pages (Governance > Policies, Boards and Quorum), corporate findings in the CLI and VS Code, and
-> review cases (requested from VS Code, shown in Governance > Cases). Reviewers' decisions and the
-> CI gate arrive in the following releases.
+> review cases (requested from VS Code, shown in Governance > Cases), reviewers' decisions and
+> standing exceptions (Governance > Exceptions). The CI gate arrives in a following release.
 
 ## How it fits together
 
@@ -257,22 +257,41 @@ describes it. Points for admins:
 - **Closed cases** cannot change. The case page verifies the signed closure record on every load
   and shows **Signature does not verify** if the stored history no longer matches it.
 
+## Decisions and voting in the dashboard
+
+Reviewers decide findings on the case page (the user guide describes it). Points for admins:
+
+- **Who can propose and vote:** `case.review` on the repository and membership of a required board
+  (the policy's owning boards plus any extra boards of the quorum). Add reviewers to boards on the
+  Boards page; a reviewer outside them is told which boards can decide.
+- **Expiry limits** come from the quorum in force for the policy's tier (or its override), and are
+  checked again when a proposal is finalized. Rejections never expire.
+- **Bulk decisions** are offered only for review-required policies; prohibited findings are always
+  decided one at a time, whatever the quorum says.
+- **Four-eyes:** whoever opened, justified or revised a case can never propose or vote on its
+  findings, and the proposer of a standing exception cannot vote on it. The pages hide these
+  actions and say why; the server refuses them too.
+- **Revocation** needs `decision.revoke` (Exception Approvers); it is shown in the proposal's
+  history with who revoked it, when and why.
+
 ## Standing exceptions and revocation
 
 A standing exception lets code that matches a pattern pass without a decision per finding, for
 example a legacy directory that is being retired. Anyone with `exception.propose` (Case Reviewers
-and Exception Approvers) proposes one with `POST /api/v1/cpg/proposals` (see the
-[API reference](../api-reference/approvals.md#standing-exceptions)); the dashboard pages arrive in
-the next release.
+and Exception Approvers) proposes one on **Governance > Exceptions** or with `POST /api/v1/cpg/proposals` (see the
+[API reference](../api-reference/approvals.md#standing-exceptions)). The page lists every
+exception, including pending ones proposed outside a case, with filters by status and policy.
 
 - **What it covers:** repositories (or teams, whose repositories are looked up each time a finding
   is checked), path globs with exclusions, one policy version, and optional conditions (branches,
   languages, a maximum finding size, a pattern the snippet must contain).
 - **Who approves:** by default the same boards as the policy's snippet decisions, and at least one
   approver with `exception.approve` (the Exception Approver role); for prohibited policies, two
-  approvals covering every owning board. Nobody involved in a case the exception covers can vote.
+  approvals covering every owning board. Nobody involved in a case the exception covers can vote,
+  and neither can the proposer.
 - **How long:** an expiry is required, at most `standingExceptions.maxExpiryDays` (90 days by
-  default). A new version of the policy ends the exception early.
+  default). A new version of the policy ends the exception early: it shows as **Lapsed**, and the
+  new-version page warns authors how many exceptions their version will lapse.
 - **Precedence:** a rejection of a finding always wins over an exception; an unexpired approval is
   reported instead of the exception; an expired approval falls back to a matching exception.
 

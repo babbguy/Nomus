@@ -16,6 +16,7 @@ Permissions are checked on the case's repository; an id of another organization 
 |-----------------|------------|------------|---------|
 | `POST /api/v1/cpg/proposals` | session | `case.review`, and an eligible voter | Propose a snippet or bulk decision; the proposer's vote is recorded with it |
 | `GET /api/v1/cpg/proposals?caseId=` | session | `case.read` | The case's proposals, oldest first (`?scope`, `?status`) |
+| `GET /api/v1/cpg/proposals?scope=standing` | session | `case.read` | Without `caseId`: the standing exception proposals whose repositories you can read, including those made outside a case (`?status`) |
 | `GET /api/v1/cpg/proposals/:id` | session | `case.read` | One proposal: requirement, votes, derived status, and whether you may vote |
 | `POST /api/v1/cpg/proposals/:id/votes` | session | `case.review`, and an eligible voter | Vote `approve` or `reject` |
 | `GET /api/v1/cpg/decisions/:id` | session or user-bound key | `case.read` | A decision with its signed payload |
@@ -39,7 +40,8 @@ The fingerprints must be findings of the case's latest revision. An approval nee
 after now and at most the configured maximum ahead (by default 180 days for `review-required` and
 90 for `prohibited`); a rejection has no `expiresAt` and never expires. The answer is `201` with the
 proposal: `{ "id", "status", "required", "quorumConfigVersionAtCreation", "votes", "decisionIds",
-"invalidation", "viewer", ... }`.
+"invalidation", "revocations", "viewer", ... }`. `revocations` lists each revoked decision of the
+proposal: `{ "decisionId", "revokedByName", "reason", "revokedAt" }`.
 
 `required` is the requirement under the quorum configuration in force at creation: `approvals`,
 `boardCoverage` (`all_owning`: an approving member of every required board; `any_owning`: of any),
@@ -118,7 +120,7 @@ exception no longer matches and has to be proposed again.
   standing maximum and `standingExceptions.maxExpiryDays` (90 days by default).
 - Proposing needs `exception.propose` on every repository the pattern can touch: each listed
   repository, or an organization-wide grant when the pattern has a repository glob or a team. The
-  proposer does not vote.
+  proposer does not vote, and cannot vote on it later (`403 self_approval_forbidden`).
 - Voters need `case.review` or `exception.approve` on the same repositories, and the quorum's
   `requiredPermission` (by default `exception.approve`) must be held by one approving voter.
 - Nobody may vote who opened, justified or revised the case the exception was proposed from, or
@@ -140,7 +142,8 @@ blocks and beats any exception; an unexpired approval passes), then a matching s
 
 `GET /exceptions` answers `{ "items": [{ "id", "proposalId", "caseId", "policyId", "policyKey",
 "policyVersion", "pattern", "expiresAt", "finalizedAt", "approverUserIds", "status" ("active",
-"expired" or "revoked"), "revocation" }] }`, listing only exceptions whose repositories you can read.
+"expired", "revoked" or "lapsed": its policy version is no longer the active one), "revocation" }] }`,
+listing only exceptions whose repositories you can read. `?active=true` leaves out lapsed exceptions.
 
 ## Revocation
 
