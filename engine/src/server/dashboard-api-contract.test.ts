@@ -749,7 +749,7 @@ describe('CPG API contracts', () => {
   it('every CPG route answers 401 without credentials', async () => {
     for (const path of ['/api/v1/cpg/me', '/api/v1/cpg/roles', '/api/v1/cpg/users', '/api/v1/cpg/teams', '/api/v1/cpg/settings', '/api/v1/cpg/audit', '/api/v1/cpg/permissions',
       '/api/v1/cpg/boards', '/api/v1/cpg/quorum', '/api/v1/cpg/quorum/versions', '/api/v1/cpg/policies', '/api/v1/cpg/policies/export', '/api/v1/cpg/bundle',
-      '/api/v1/cpg/compile/00000000-0000-4000-8000-000000000000']) {
+      '/api/v1/cpg/compile/00000000-0000-4000-8000-000000000000', '/api/v1/cpg/audit/export', '/api/v1/cpg/ci/runs']) {
       const res = await app.request(`http://localhost${path}`);
       expect(res.status, path).toBe(401);
     }

@@ -274658,6 +274658,8 @@ const ciEvaluateResponseSchema = objectType({
     /** One line per blocking finding: `corp.x @ path:line: status`. */
     reasons: arrayType(stringType()),
     caseId: stringType().uuid().nullable(),
+    /** The case's `CPG-…` reference. Display only: like `caseId`, it is outside the signed payload. */
+    caseRef: stringType().nullable(),
     caseUrl: stringType().url().nullable(),
     findings: arrayType(findingResolutionSchema.extend({ filePath: relPath, startLine: numberType().int(), endLine: numberType().int() }).strict()),
     counts: ciCountsSchema,
@@ -276511,7 +276513,7 @@ async function createCorporateCheckRun(octokit, repo, sha, v, bundleHash, titles
         '|---|---|---|---|---|---|',
         `| ${counts.blocking} | ${counts.pending} | ${counts.rejected} | ${counts.approved} | ${counts.excepted} | ${counts.advisory} |`,
         '',
-        v.caseUrl ? `Review case: ${v.caseUrl}` : 'No review case for this branch.',
+        v.caseUrl ? `Review case: [${v.caseRef ?? v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
         '',
         `Policy bundle: \`${bundleHash}\``,
     ].join('\n');
@@ -276566,7 +276568,7 @@ function corporateCommentBody(v) {
         CORPORATE_COMMENT_MARKER,
         `## Nomus Corporate Policy Gate: ${v.verdict === 'pass' ? 'passed' : 'failed'}`,
         '',
-        v.caseUrl ? `**Review case:** [${v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
+        v.caseUrl ? `**Review case:** [${v.caseRef ?? v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
         '',
         '| Blocking | Pending | Rejected | Approved | Excepted | Advisory |',
         '|---|---|---|---|---|---|',

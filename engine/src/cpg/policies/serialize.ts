@@ -170,6 +170,6 @@ export function buildPolicyExport(db: Db, orgId: string): PolicyExportResponse {
     exportedAt,
     content,
     contentHash,
-    signature: cpgSign(exportSignedText({ orgId, exportedAt, contentHash })),
+    signature: cpgSign(exportSignedText({ kind: POLICY_EXPORT_KIND, orgId, exportedAt, contentHash })),
   });
 }

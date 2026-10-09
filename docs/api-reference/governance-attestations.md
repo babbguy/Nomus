@@ -97,6 +97,11 @@ as a receipt signature, or the reverse.
 
 ## Where else it shows
 
+- The manifest and its records are read from the evidence export above; a case's closure record
+  from `GET /api/v1/cpg/cases/:id` (`closure`); and every signed record of the organization from
+  the signed audit export (`GET /api/v1/cpg/audit/export`, Auditor). There are no separate
+  endpoints for them.
+
 - `GET /api/v1/attestations` adds `corporateGovernance: {exceptions, caseClosures, ciRuns}` to
   attestations that have a manifest.
 - The public `GET /api/v1/verify/:id` adds

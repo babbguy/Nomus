@@ -72,6 +72,7 @@ The answer (`200`):
   "verdict": "fail",
   "reasons": ["corp.no-direct-openai @ src/chat.ts:12: rejected"],
   "caseId": "<uuid or null>",
+  "caseRef": "CPG-1A2B3C4D",
   "caseUrl": "https://nomus.example.org/governance/cases/<uuid>",
   "findings": [{ "fingerprint": "...", "status": "rejected", "blocking": true, "tier": "prohibited", "enforceFrom": "...",
                  "decisionId": "<uuid>", "exceptionDecisionId": null, "expiresAt": null,
@@ -83,7 +84,8 @@ The answer (`200`):
 }
 ```
 
-`findings` has one item per uploaded finding, in upload order. `advisory` counts advisory and
+`findings` has one item per uploaded finding, in upload order. `caseRef` is the case's reference
+(`null` without a case); like `caseId` and `caseUrl` it is display data outside the signed payload. `advisory` counts advisory and
 grace-period findings.
 
 ### Verifying the verdict

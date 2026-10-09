@@ -22,7 +22,7 @@ import { createCheckRun } from '../src/check-run.js';
 import { runCorporateGate } from '../src/cpg.js';
 import { bySeverity, commentableLines, toRepoPath } from '../src/findings.js';
 import { makeScanResult, makeFinding, mockOctokit } from './helpers.js';
-import { CASE, makeCheckout, startFakeEngine, statefulOctokit, type FakeEngine } from './fake-engine.js';
+import { CASE, CASE_REF, makeCheckout, startFakeEngine, statefulOctokit, type FakeEngine } from './fake-engine.js';
 
 const inputs = vi.hoisted(() => ({} as Record<string, string>));
 const outputs = vi.hoisted(() => ({} as Record<string, unknown>));
@@ -199,6 +199,7 @@ describe('the corporate policy gate against a fake engine', () => {
     expect(gh.state.checkRuns).toHaveLength(1);
     expect(gh.state.checkRuns[0]).toMatchObject({ name: 'Nomus Corporate Policy Gate', head_sha: HEAD, conclusion: 'failure', output: { title: '2 blocking, 0 approved, 0 excepted' } });
     expect(gh.state.checkRuns[0].output.annotations.map((a: any) => [a.path, a.annotation_level])).toEqual([['app/helper.ts', 'failure'], ['src/chat.ts', 'failure']]);
+    expect(gh.state.checkRuns[0].output.summary).toContain(`Review case: [${CASE_REF}](https://gate.example.org/governance/cases/${CASE})`);
     // The corporate SARIF: its own upload and category, errors.
     expect(gh.state.sarifs).toHaveLength(1);
     const sarif = sarifOf(gh.state.sarifs[0]);
@@ -208,7 +209,7 @@ describe('the corporate policy gate against a fake engine', () => {
     expect(gh.state.comments).toHaveLength(1);
     const comment = gh.state.comments[0].body;
     expect(comment).toContain('<!-- nomus-cpg -->');
-    expect(comment).toContain(`[${CASE}](https://gate.example.org/governance/cases/${CASE})`);
+    expect(comment).toContain(`**Review case:** [${CASE_REF}](https://gate.example.org/governance/cases/${CASE})`);
     expect(comment).toContain('| `corp.no-direct-openai` | `src/chat.ts:3` | needs review |');
     // Never the code (§12).
     for (const text of [comment, JSON.stringify(gh.state.checkRuns), JSON.stringify(sarif)]) expect(text).not.toContain('chat.completions.create');

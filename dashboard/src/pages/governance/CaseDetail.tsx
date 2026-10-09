@@ -15,7 +15,7 @@ import {
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { cpgErrorCode } from '../../lib/cpg-errors';
-import { hasOrgPermission } from '../../lib/cpg-permissions';
+import { hasOrgPermission, holdsPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import { SOURCE_LABEL, actorLabel, caseActions, closeReasonLabel, type CaseActions } from '../../lib/cpg-cases';
 import GovernanceHeader from './GovernanceHeader';
@@ -24,12 +24,13 @@ import { CaseStateBadge, LaneList, Path, PullRequest, RepoBranch } from './cases
 import { FindingList } from './cases/Findings';
 import { Blocked, Discussion, RequestChangesForm } from './cases/Discussion';
 import { DecisionsCard, FindingDecision, type DecisionContext } from './cases/Decisions';
+import { CiRunsCard } from './cases/CiRuns';
 
 /**
  * /governance/cases/:id (E43, E44, E51, E52, E46, E47, E49, E50, E54 to
- * E60): one review case with its lanes, revisions, findings (snippet,
+ * E60, E63): one review case with its lanes, revisions, findings (snippet,
  * justification, reviewer context, decision), proposals and votes, change
- * requests and comments.
+ * requests, comments and CI runs.
  */
 export default function CaseDetail() {
   const { id = '' } = useParams();
@@ -204,6 +205,8 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
           </tbody>
         </table>
       </Card>
+
+      {holdsPermission(me, 'ci.read') && <CiRunsCard caseId={c.id} repo={c.repo} reloadKey={proposalsKey} />}
 
       <Card>
         <h2 className="text-sm font-semibold text-text-primary mb-1">Findings of revision {revision}</h2>

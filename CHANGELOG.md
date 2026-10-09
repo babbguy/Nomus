@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
+  export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
+  every signed decision, revocation, case closure record and CI verdict, verifiable offline with the
+  published key. The case page lists the case's CI runs with their signature status. The CI
+  evaluate response gains `caseRef`, and the Action's PR comment and check run link the case by its
+  `CPG-…` reference.
 - Corporate policy governance, phase 8 (attestations): `POST /evaluate` accepts an optional
   `governance` extra (`repo`, `branch`, closed `caseId`) and signs a separate manifest of the
   approvals, standing exceptions, case closure record and CI runs in force at the attestation
@@ -227,6 +233,9 @@ All notable changes to this project are documented here. The format follows
   findings status, CI evaluate and pr-closed) is now canonicalised, so every form names one
   repository; team and standing-exception repository patterns and repository-scoped grants drop a
   leading `github.com/` host.
+- Corporate policy governance: the review case list checked repository permissions after taking a
+  page, so a reader limited to some repositories could get short or empty pages while more of
+  their cases existed. Pages are now filled before they are returned.
 ### Fixed
 - Scanner: two scans of the same repository could list findings in a different order, because the
   file walk returns files in no guaranteed order. Files are now sorted before detection, so the

@@ -49,6 +49,7 @@ import { cpgVscodeChecks } from './checks/cpg-vscode.mjs';
 import { cpgCasesChecks } from './checks/cpg-cases.mjs';
 import { cpgBrowserChecks } from './checks/cpg-browser.mjs';
 import { cpgApprovalsChecks } from './checks/cpg-approvals.mjs';
+import { cpgVscodeDecisionsChecks } from './checks/cpg-vscode-decisions.mjs';
 import { cpgActionChecks } from './checks/cpg-action.mjs';
 import { cpgIntegrationsChecks } from './checks/cpg-integrations.mjs';
 import { cpgAttestationsChecks } from './checks/cpg-attestations.mjs';
@@ -176,6 +177,8 @@ async function main() {
       ['cpg-browser', cpgBrowserChecks],
       // Last: decisions bind (repo, fingerprint), so they would change what later areas see.
       ['cpg-approvals', cpgApprovalsChecks],
+      // The extension shows those decisions (hints and errors) on a branch of the same repository.
+      ['cpg-vscode-decisions', cpgVscodeDecisionsChecks],
       // The Action as the enforcement gate, against the decisions cpg-approvals made.
       ['cpg-action', cpgActionChecks],
       // Corporate policy records in attestations, from the case cpg-approvals closed (before integrations, so no delivery is queued).

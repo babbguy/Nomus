@@ -157,6 +157,26 @@ export const standingExceptionSchema = z.object({
 
 export const standingExceptionListSchema = z.object({ items: z.array(standingExceptionSchema) }).strict();
 
+const ciCountsSchema = z.object({
+  blocking: z.number().int(), pending: z.number().int(), rejected: z.number().int(),
+  approved: z.number().int(), excepted: z.number().int(), advisory: z.number().int(),
+}).strict();
+
+/** E63: a recorded CI evaluation with its signed verdict. */
+export const ciRunSchema = z.object({
+  id: uuid, repo: z.string(), branch: z.string(), prNumber: z.number().int().nullable(), headSha: z.string(), eventName: z.string(),
+  bundleHash: z.string(), scannedFileCount: z.number().int(), verdict: z.enum(['pass', 'fail']), counts: ciCountsSchema, caseId: uuid.nullable(),
+  findings: z.array(z.object({
+    fingerprint, filePath: z.string(), startLine: z.number().int(), endLine: z.number().int(),
+    status: resolutionStatusSchema, decisionId: uuid.nullable(), exceptionDecisionId: uuid.nullable(),
+  }).strict()),
+  evaluatedAt: isoDate, signedPayload: z.string(), signature: z.string(), signatureValid: z.boolean(),
+}).strict();
+
+export const ciRunListSchema = z.object({ items: z.array(ciRunSchema), nextCursor: z.string().nullable() }).strict();
+
+export type CiRun = z.infer<typeof ciRunSchema>;
+export type CiRunList = z.infer<typeof ciRunListSchema>;
 export type ProposalStatus = z.infer<typeof proposalStatusSchema>;
 export type StandingPattern = z.infer<typeof standingPatternSchema>;
 export type Proposal = z.infer<typeof proposalSchema>;

@@ -33,7 +33,7 @@ export async function createCorporateCheckRun(
     '|---|---|---|---|---|---|',
     `| ${counts.blocking} | ${counts.pending} | ${counts.rejected} | ${counts.approved} | ${counts.excepted} | ${counts.advisory} |`,
     '',
-    v.caseUrl ? `Review case: ${v.caseUrl}` : 'No review case for this branch.',
+    v.caseUrl ? `Review case: [${v.caseRef ?? v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
     '',
     `Policy bundle: \`${bundleHash}\``,
   ].join('\n');

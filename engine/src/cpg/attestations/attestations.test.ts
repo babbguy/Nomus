@@ -3,9 +3,12 @@
  * real app and a real database: what the manifest selects at the attestation
  * instant, refusals that leave no receipt, the bundleVersion 2 export and its
  * offline verification, the tamper matrix, revocation after the attestation,
- * the public summary and the T36 binding trigger.
+ * the public summary, the T36 binding trigger and the signed governance
+ * audit export (E73).
  */
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign, verify } from 'node:crypto';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { fingerprintOf } from '@nomus/scanner/corporate';
 import { getDb } from '../../db/client.js';
@@ -17,6 +20,7 @@ import { createApp } from '../../server/app.js';
 import { closeCase } from '../cases/close.js';
 import { caseFixtures } from '../__fixtures__/case-fixtures.js';
 import { call, makeOrg, makeUser, type TestUser } from '../__fixtures__/rbac-fixtures.js';
+import { governanceExportResponseSchema } from '../contracts.js';
 import { verifyEvidenceBundle } from './verify.js';
 
 const app = createApp();
@@ -178,5 +182,68 @@ describe('without governance', () => {
     expect((await call(app, 'GET', `/api/v1/verify/${res.json.id}`)).json).not.toHaveProperty('corporateGovernance');
     const list = (await call(app, 'GET', '/api/v1/attestations?limit=50', { cookie: owner.cookie })).json.attestations as any[];
     expect(list.find((a) => a.id === res.json.id)).not.toHaveProperty('corporateGovernance');
+  });
+});
+
+describe('E73 the signed governance audit export', () => {
+  const canonical = (v: unknown): string => JSON.stringify(sortDeep(v));
+  const sortDeep = (v: unknown): unknown => Array.isArray(v) ? v.map(sortDeep)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortDeep((v as Record<string, unknown>)[k])])) : v;
+  const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
+  const key = () => createPublicKey({ key: Buffer.from(getPublicKey(), 'base64'), format: 'der', type: 'spki' });
+  const signedBy = (text: string, signature: string) => verify(null, Buffer.from(text, 'utf8'), key(), Buffer.from(signature, 'base64'));
+
+  /** The offline check an auditor runs, from the file and the published key only. */
+  function verifyExport(e: any): string[] {
+    const reasons: string[] = [];
+    if (sha256(canonical(e.content)) !== e.contentHash) reasons.push('content hash');
+    if (!signedBy(canonical({ kind: e.kind, orgId: e.orgId, exportedAt: e.exportedAt, contentHash: e.contentHash }), e.signature)) reasons.push('export signature');
+    let prev = '0'.repeat(64);
+    for (const [i, ev] of e.content.auditEvents.entries()) {
+      const body = canonical({ id: ev.id, org_id: e.orgId, seq: ev.seq, actor: ev.actor, action: ev.action, target_type: ev.targetType, target_id: ev.targetId, payload: ev.payload, created_at: ev.createdAt });
+      if (ev.seq !== i + 1 || ev.prevHash !== prev || sha256(prev + body) !== ev.hash) reasons.push(`audit event ${ev.seq}`);
+      prev = ev.hash;
+    }
+    for (const r of ['decisions', 'revocations', 'caseClosures', 'ciRuns'].flatMap((k) => e.content[k])) {
+      if (!signedBy(r.signedPayloadCanonicalJson, r.signature)) reasons.push(`record ${r.id}`);
+    }
+    return reasons;
+  }
+
+  it('is for audit.export holders only: the Auditor gets it; an Org Admin and a Developer are 403', async () => {
+    for (const user of [owner, dev]) {
+      const res = await call(app, 'GET', '/api/v1/cpg/audit/export', { cookie: user.cookie });
+      expect([res.status, res.json.code, res.json.details?.permission]).toEqual([403, 'forbidden', 'audit.export']);
+    }
+  });
+
+  it('holds the whole chain and every signed record, and verifies offline with the published key', async () => {
+    const auditor = makeUser(orgId);
+    const roles = (await call(app, 'GET', '/api/v1/cpg/roles', { cookie: owner.cookie })).json.items as Array<{ id: string; key: string }>;
+    expect((await post(owner, `/api/v1/cpg/users/${auditor.id}/grants`, { roleId: roles.find((r) => r.key === 'auditor')!.id, scopeType: 'org' })).status).toBe(201);
+    const res = await call(app, 'GET', '/api/v1/cpg/audit/export', { cookie: auditor.cookie });
+    expect([res.status, res.headers.get('content-disposition')]).toEqual([200, expect.stringMatching(/^attachment; filename="nomus-governance-audit-\d{4}-\d{2}-\d{2}\.json"$/)]);
+    const e = governanceExportResponseSchema.parse(res.json);
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../../dashboard/src/api/cpg-schemas.ts')).href);
+    expect(() => d.governanceExportSchema.parse(res.json)).not.toThrow(); // the audit page's contract
+    expect([e.kind, e.orgId, e.content.chainValid, e.content.auditEvents[0].seq]).toEqual(['nomus.cpg-governance-export.v1', orgId, true, 1]);
+    expect(e.content.auditEvents.at(-1)!.action).toBe('grant.created'); // up to the auditor's own grant
+    expect(e.content.decisions.map((d) => d.id)).toEqual(expect.arrayContaining([approvalId, rejectId, exceptionId]));
+    expect(e.content.revocations.map((r) => JSON.parse(r.signedPayloadCanonicalJson).decisionId)).toEqual([exceptionId]);
+    expect(e.content.caseClosures.map((c) => [c.id, JSON.parse(c.signedPayloadCanonicalJson).kind])).toEqual([[caseId, 'nomus.cpg-case-closure.v1']]);
+    expect(verifyExport(e)).toEqual([]);
+
+    const tampered: Record<string, (x: any) => void> = {
+      'an audit event payload edited': (x) => { x.content.auditEvents[0].payload = { edited: true }; },
+      'an audit event removed, hash recomputed': (x) => { x.content.auditEvents.splice(1, 1); x.contentHash = sha256(canonical(x.content)); },
+      'a decision payload edited': (x) => { x.content.decisions[0].signedPayloadCanonicalJson = x.content.decisions[0].signedPayloadCanonicalJson.replace('"policyVersion":1', '"policyVersion":2'); },
+      'a revocation dropped': (x) => { x.content.revocations = []; },
+      'the export date changed': (x) => { x.exportedAt = '2020-01-01T00:00:00.000Z'; },
+    };
+    for (const [name, mutate] of Object.entries(tampered)) {
+      const x = structuredClone(e);
+      mutate(x);
+      expect(verifyExport(x), name).not.toEqual([]);
+    }
   });
 });

@@ -454,6 +454,30 @@ export const policyExportResponseSchema = z.object({
   signature: z.string().min(1),
 }).strict();
 
+const signedRecordSchema = z.object({ id: uuid, signedPayloadCanonicalJson: z.string(), signature: z.string().min(1) }).strict();
+
+/** E73: the signed governance audit export (see cpg/audit/export.ts). */
+export const governanceExportResponseSchema = z.object({
+  kind: z.literal('nomus.cpg-governance-export.v1'),
+  orgId: uuid,
+  exportedAt: isoDate,
+  content: z.object({
+    /** The server's verification of the chain at export time; the events let anyone repeat it. */
+    chainValid: z.boolean(),
+    auditEvents: z.array(auditEventResponseSchema),
+    decisions: z.array(signedRecordSchema),
+    revocations: z.array(signedRecordSchema),
+    /** `id` is the case id. */
+    caseClosures: z.array(signedRecordSchema),
+    ciRuns: z.array(signedRecordSchema),
+  }).strict(),
+  /** sha256(canonicalJson(content)). */
+  contentHash: sha256Hex,
+  /** Ed25519 over canonicalJson({kind, orgId, exportedAt, contentHash}). */
+  signature: z.string().min(1),
+}).strict();
+
+export type GovernanceExportResponse = z.infer<typeof governanceExportResponseSchema>;
 export type BoardResponse = z.infer<typeof boardResponseSchema>;
 export type BoardMemberResponse = z.infer<typeof boardMemberResponseSchema>;
 export type CompileRecordResponse = z.infer<typeof compileRecordResponseSchema>;

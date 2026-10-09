@@ -125,14 +125,16 @@ export async function cpgActionChecks(ctx) {
     // ── 4. one marked comment with the case, and no code ──
     const caseUrl = r1.outputs['corporate-case-url'] ?? '';
     const caseId = /\/governance\/cases\/([0-9a-f-]{36})$/.exec(caseUrl)?.[1];
+    const before = await caseDetail(caseId);
+    const caseLink = `[${before?.case?.ref}](${caseUrl})`;
     const posted = [marked()[0]?.body ?? '', JSON.stringify(corporateRuns()), JSON.stringify(corp.map((s) => s.sarif))].join('\n');
     const leaked = SENTINELS.filter((s) => posted.includes(s));
-    gate.check(`4. one ${MARKER} comment with the review case link and the counts; no code in the comment, the check run or the corporate SARIF`,
-      marked().length === 1 && !!caseId && marked()[0].body.includes(caseUrl) && /\| Blocking \|/.test(marked()[0].body) && leaked.length === 0,
-      '1 comment, case link, no sentinel', `${marked().length} comment(s), case ${caseId}, leaked ${leaked}`);
+    gate.check(`4. one ${MARKER} comment with the review case reference linked and the counts; no code in the comment, the check run or the corporate SARIF`,
+      marked().length === 1 && !!caseId && /^CPG-[0-9A-F]{8}$/.test(before?.case?.ref ?? '') && marked()[0].body.includes(caseLink)
+        && /\| Blocking \|/.test(marked()[0].body) && leaked.length === 0,
+      '1 comment, CPG- ref linked to the case, no sentinel', `${marked().length} comment(s), case ${caseId}, link ${marked()[0]?.body.includes(caseLink)}, leaked ${leaked}`);
 
     // ── 5. the case gains the PR number; the CI run is recorded with a valid signature ──
-    const before = await caseDetail(caseId);
     const runs1 = (await owner.client.get(`/api/v1/cpg/ci/runs?caseId=${caseId}`)).json?.items ?? [];
     const run1 = runs1[0];
     gate.check('5. the case is attached to the PR, and its CI run is recorded with a signature that verifies offline',
