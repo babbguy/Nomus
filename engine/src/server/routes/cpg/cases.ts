@@ -31,7 +31,7 @@ import {
   emptyRequestSchema, justificationResponseSchema, requestChangesRequestSchema,
 } from '../../../cpg/contracts.js';
 import { CpgError, cpgError, notFound } from '../../../cpg/errors.js';
-import { actorFrom, handle, parseBody, parseQuery, pathParam } from './helpers.js';
+import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission } from './helpers.js';
 
 /**
  * Review cases (design spec §5, E40 to E53). Permissions are checked against
@@ -56,14 +56,6 @@ const reviewBodyLimit = bodyLimit({
   maxSize: MAX_REVIEW_BODY,
   onError: (c) => cpgError(c, 413, 'payload_too_large', 'The request body is over 4 MiB', { maxBytes: MAX_REVIEW_BODY }),
 });
-
-function requirePermission(actor: CpgActor, permission: PermissionKey, repo?: string): void {
-  if (!can(actor, permission, repo ? { repo } : undefined)) throw new CpgError(403, 'forbidden', `Missing permission ${permission}`, { permission });
-}
-
-function requireEnabled(db: Db, orgId: string): void {
-  if (!getOrgSettings(db, orgId)?.enabled) throw new CpgError(403, 'cpg_disabled', 'Corporate policies are not enabled for this organization');
-}
 
 /** The case named by :id, with `permission` checked on its repository. */
 function caseFor(c: Context<AppEnv>, permission: PermissionKey): { db: Db; actor: CpgActor; kase: CaseRow } {

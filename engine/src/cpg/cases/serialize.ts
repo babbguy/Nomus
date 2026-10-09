@@ -9,6 +9,8 @@ import {
   caseDetailResponseSchema, revisionDetailResponseSchema, reviewerContextResponseSchema,
   type CaseSummaryResponse, type CommentResponse, type JustificationResponse, type ReviewerContextResponse,
 } from '../contracts.js';
+import { latestDecisions, settles, type DecisionRow } from '../decisions/resolve.js';
+import { pendingFingerprints } from '../decisions/status.js';
 import { CpgError, notFound } from '../errors.js';
 import { boardIdsOf, userNames } from '../policies/service.js';
 import { closurePayload, closureSignedText } from './close.js';
@@ -66,20 +68,31 @@ interface ResolutionFacts {
   head: Pick<PolicyHead, 'state' | 'enforceFrom'>;
 }
 
+/** What else decides a finding's resolution: its decision, a pending proposal, a change request. */
+interface ResolutionContext {
+  decisions: ReadonlyMap<string, DecisionRow>;
+  pending: ReadonlySet<string>;
+  changeRequested: ReadonlySet<string>;
+  now: string;
+}
+
 /**
- * One finding's resolution. Decisions arrive in Phase 5, so a blocking
- * finding is `changes_requested` (named by an unresolved change request) or
- * `needs_review`. A finding raised against a version that is no longer
- * active is `expired`: it blocks (rescan) unless the policy is retired.
+ * One finding's resolution (§7.4; standing exceptions are not resolved yet).
+ * A finding raised against a version that is no longer active is `expired`:
+ * it blocks (rescan) unless the policy is retired. A non-blocking finding is
+ * `advisory` or `grace`. Otherwise a rejection blocks, an unexpired approval
+ * passes, and an expired one counts as absent: `pending` when a proposal
+ * covers the finding, else `expired`, `changes_requested` or `needs_review`.
  */
-function resolutionOf(f: ResolutionFacts, changeRequested: ReadonlySet<string>): FindingResolution {
-  const blocking = f.current ? isBlocking(f) : f.head.state === 'active';
-  const status = !f.current ? 'expired' : f.tier === 'advisory' ? 'advisory' : !f.enforced ? 'grace'
-    : changeRequested.has(f.fingerprint) ? 'changes_requested' : 'needs_review';
-  return {
-    fingerprint: f.fingerprint, status, blocking, tier: f.tier, enforceFrom: f.head.enforceFrom,
-    decisionId: null, exceptionDecisionId: null, expiresAt: null,
-  };
+function resolutionOf(f: ResolutionFacts, ctx: ResolutionContext): FindingResolution {
+  const base = { fingerprint: f.fingerprint, tier: f.tier, enforceFrom: f.head.enforceFrom, decisionId: null, exceptionDecisionId: null, expiresAt: null };
+  if (!f.current) return { ...base, status: 'expired', blocking: f.head.state === 'active' };
+  if (!isBlocking(f)) return { ...base, status: f.tier === 'advisory' ? 'advisory' : 'grace', blocking: false };
+  const d = ctx.decisions.get(f.fingerprint);
+  const decided = d ? { decisionId: d.id, expiresAt: d.expiresAt } : {};
+  if (settles(d, ctx.now)) return { ...base, ...decided, status: d.outcome === 'reject' ? 'rejected' : 'approved', blocking: d.outcome === 'reject' };
+  const status = ctx.pending.has(f.fingerprint) ? 'pending' : d ? 'expired' : ctx.changeRequested.has(f.fingerprint) ? 'changes_requested' : 'needs_review';
+  return { ...base, ...decided, status, blocking: true };
 }
 
 /** The change requests of a case that no reply has resolved yet. */
@@ -90,14 +103,18 @@ function unresolvedRequests(db: Db, caseId: string): CommentRow[] {
 
 const requestedFingerprints = (requests: CommentRow[]) => new Set(requests.flatMap((m) => JSON.parse(m.fingerprints) as string[]));
 
-/** The resolution of each latest-revision finding, by fingerprint. */
-function resolutions(db: Db, findings: CaseFindingRow[], changeRequested: Set<string>): FindingResolution[] {
+/** The resolution of each latest-revision finding of case `c`, by fingerprint. */
+function resolutions(db: Db, c: CaseRow, findings: CaseFindingRow[], changeRequested: Set<string>): FindingResolution[] {
+  const now = new Date().toISOString();
+  const ctx: ResolutionContext = {
+    decisions: latestDecisions(db, c.orgId, c.repo, findings.map((f) => f.fingerprint), now), pending: pendingFingerprints(db, c.id, now), changeRequested, now,
+  };
   const policyIds = [...new Set(findings.map((f) => f.policyId))];
   const heads = new Map(policyIds.length === 0 ? [] : db.select().from(cpgPolicyHeads).where(inArray(cpgPolicyHeads.policyId, policyIds)).all().map((h) => [h.policyId, h]));
   const byFingerprint = new Map(findings.map((f) => [f.fingerprint, f]));
   return [...byFingerprint.values()].sort((a, b) => (a.fingerprint < b.fingerprint ? -1 : 1)).map((f) => {
     const head = heads.get(f.policyId)!;
-    return resolutionOf({ ...f, current: head.activeVersionId === f.policyVersionId, head }, changeRequested);
+    return resolutionOf({ ...f, current: head.activeVersionId === f.policyVersionId, head }, ctx);
   });
 }
 
@@ -122,13 +139,18 @@ export function findingsStatus(db: Db, orgId: string, branch: { repo: string; br
   if (unknown.length > 0) throw new CpgError(422, 'unknown_policy', 'A fingerprint names a policy version this organization does not have', { fingerprints: unknown });
   const kase = db.select({ id: cpgCases.id }).from(cpgCases)
     .where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, branch.repo), eq(cpgCases.branch, branch.branch), isNull(cpgCases.closedAt))).get();
-  const changeRequested = kase ? requestedFingerprints(unresolvedRequests(db, kase.id)) : new Set<string>();
+  const ctx: ResolutionContext = {
+    decisions: latestDecisions(db, orgId, branch.repo, parsed.map((p) => p.fingerprint), now),
+    pending: kase ? pendingFingerprints(db, kase.id, now) : new Set(),
+    changeRequested: kase ? requestedFingerprints(unresolvedRequests(db, kase.id)) : new Set(),
+    now,
+  };
   return parsed.map((p) => {
     const v = versions.get(`${p.policyKey}:${p.policyVersion}`)!;
     return resolutionOf({
       fingerprint: p.fingerprint, tier: v.tier, current: v.state === 'active' && v.activeVersionId === v.id,
       enforced: v.enforceFrom !== null && v.enforceFrom <= now, head: v,
-    }, changeRequested);
+    }, ctx);
   });
 }
 
@@ -145,7 +167,7 @@ export function caseStatus(db: Db, c: CaseRow, origin: string): CaseStatus {
       commentId: m.id, boardName: boardName.get(m.boardId!) ?? '', authorName: names.get(m.authorUserId) ?? '', body: m.body,
       fingerprints: JSON.parse(m.fingerprints) as string[], createdAt: m.createdAt,
     })),
-    resolutions: resolutions(db, latestFindings(db, c.id), requestedFingerprints(requests)),
+    resolutions: resolutions(db, c, latestFindings(db, c.id), requestedFingerprints(requests)),
     updatedAt: c.updatedAt,
   });
 }

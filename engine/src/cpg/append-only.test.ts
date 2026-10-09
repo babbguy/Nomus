@@ -81,7 +81,7 @@ function seedRegistry(): void {
 }
 
 /** One row in every Phase 4 table (cpg_0003), written with raw SQL. */
-function seedCase(): void {
+function seedCase(): { caseId: string; fingerprint: string } {
   const caseId = randomUUID();
   const revisionId = randomUUID();
   const fingerprint = `${H}:corp.no-direct-openai:1`;
@@ -99,6 +99,27 @@ function seedCase(): void {
   run("INSERT INTO cpg_justifications (id, case_id, org_id, fingerprint, author_user_id, body, created_at) VALUES (?, ?, ?, ?, ?, 'Needed for the gateway migration.', ?)", randomUUID(), caseId, orgId, fingerprint, registry.authorId, NOW);
   const commentId = randomUUID();
   run("INSERT INTO cpg_comments (id, case_id, org_id, thread_id, kind, fingerprints, author_user_id, body, created_at) VALUES (?, ?, ?, ?, 'comment', '[]', ?, 'ok', ?)", commentId, caseId, orgId, commentId, registry.approverId, NOW);
+  return { caseId, fingerprint };
+}
+
+/** One row in every Phase 5 table (cpg_0004), written with raw SQL. */
+function seedApprovals({ caseId, fingerprint }: { caseId: string; fingerprint: string }): void {
+  const proposalId = randomUUID();
+  const decisionId = randomUUID();
+  const later = '2026-11-09T12:00:00.000Z';
+  run(`INSERT INTO cpg_proposals (id, org_id, case_id, scope, outcome, policy_id, policy_version_id, policy_key, policy_version, tier, fingerprints,
+       requested_expires_at, rationale, required, quorum_config_version_at_creation, proposer_user_id, created_at, lapses_at)
+       VALUES (?, ?, ?, 'snippet', 'approve', ?, ?, 'corp.no-direct-openai', 1, 'prohibited', ?, ?, 'Accepted until the gateway ships.', '{}', 1, ?, ?, ?)`,
+  proposalId, orgId, caseId, registry.policyId, registry.versionId, JSON.stringify([fingerprint]), later, registry.approverId, NOW, later);
+  run("INSERT INTO cpg_votes (id, proposal_id, org_id, voter_user_id, vote, boards_at_vote, permissions_at_vote, created_at) VALUES (?, ?, ?, ?, 'approve', '[]', '[]', ?)",
+    randomUUID(), proposalId, orgId, registry.approverId, NOW);
+  run("INSERT INTO cpg_proposal_events (id, proposal_id, org_id, event, actor, details, created_at) VALUES (?, ?, ?, 'invalidated', 'test', '{}', ?)", randomUUID(), proposalId, orgId, NOW);
+  run(`INSERT INTO cpg_decisions (id, org_id, proposal_id, case_id, scope, outcome, repo, fingerprint, policy_id, policy_version_id, policy_key, policy_version,
+       expires_at, approver_user_ids, quorum_config_version, quorum_config_hash, finalized_at, signed_payload, signature)
+       VALUES (?, ?, ?, ?, 'snippet', 'approve', 'acme/app', ?, ?, ?, 'corp.no-direct-openai', 1, ?, ?, 1, ?, ?, '{}', 'sig')`,
+  decisionId, orgId, proposalId, caseId, fingerprint, registry.policyId, registry.versionId, later, JSON.stringify([registry.approverId]), H, NOW);
+  run("INSERT INTO cpg_revocations (id, org_id, decision_id, revoked_by_user_id, reason, revoked_at, signed_payload, signature) VALUES (?, ?, ?, ?, 'No longer needed.', ?, '{}', 'sig')",
+    randomUUID(), orgId, decisionId, registry.approverId, NOW);
 }
 
 beforeAll(() => {
@@ -110,7 +131,7 @@ beforeAll(() => {
   runMigrations(db);
   appendAuditEvent(db, { orgId, actor: 'test', action: 'test.event', targetType: 'test', targetId: null, payload: { a: 1 } });
   seedRegistry();
-  seedCase();
+  seedApprovals(seedCase());
 });
 
 describe('strictly append-only tables refuse UPDATE and DELETE', () => {

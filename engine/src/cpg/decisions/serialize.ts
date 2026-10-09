@@ -1,0 +1,63 @@
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import {
+  decisionResponseSchema, proposalDetailResponseSchema, type DecisionResponse, type ProposalDetailResponse, type ProposalVoteResponse,
+} from '../contracts.js';
+import { getCase } from '../cases/service.js';
+import { CpgError } from '../errors.js';
+import { userNames } from '../policies/service.js';
+import { cpgVerify } from '../policies/signing.js';
+import type { CpgActor } from '../rbac/can.js';
+import type { DecisionRow } from './resolve.js';
+import { fingerprintsOf, requiredOf, type ProposalView, type VoteRow } from './status.js';
+import { eligibleBallot } from './votes.js';
+
+/** Response builders for the proposal and decision routes; each output is parsed with its contract. */
+
+type Db = BetterSQLite3Database<any>;
+
+export function voteOf(v: VoteRow, names: Map<string, string>): ProposalVoteResponse {
+  return {
+    id: v.id, voterUserId: v.voterUserId, voterName: names.get(v.voterUserId) ?? '', vote: v.vote,
+    boards: JSON.parse(v.boardsAtVote) as string[], permissions: JSON.parse(v.permissionsAtVote) as string[], comment: v.comment, createdAt: v.createdAt,
+  };
+}
+
+/** Whether `actor` may vote on the proposal now; the reason is the code a vote would be refused with. */
+function viewerOf(db: Db, view: ProposalView, actor: CpgActor): ProposalDetailResponse['viewer'] {
+  const refuse = (reason: string) => ({ canVote: false, reason });
+  if (view.status !== 'pending') return refuse('proposal_not_pending');
+  if (view.votes.some((v) => v.voterUserId === actor.userId)) return refuse('already_voted');
+  try {
+    eligibleBallot(db, actor, getCase(db, actor.orgId, view.proposal.caseId!), requiredOf(view.proposal));
+    return { canVote: true, reason: null };
+  } catch (err) {
+    if (err instanceof CpgError) return refuse(err.code);
+    throw err;
+  }
+}
+
+export function proposalDetails(db: Db, views: ProposalView[], actor: CpgActor): ProposalDetailResponse[] {
+  const names = userNames(db, views.flatMap((v) => [v.proposal.proposerUserId, ...v.votes.map((b) => b.voterUserId)]));
+  return views.map((view) => {
+    const p = view.proposal;
+    return proposalDetailResponseSchema.parse({
+      id: p.id, caseId: p.caseId, scope: p.scope, outcome: p.outcome, status: view.status,
+      policyId: p.policyId, policyKey: p.policyKey, policyVersion: p.policyVersion, tier: p.tier,
+      fingerprints: fingerprintsOf(p), requestedExpiresAt: p.requestedExpiresAt, rationale: p.rationale,
+      required: requiredOf(p), quorumConfigVersionAtCreation: p.quorumConfigVersionAtCreation,
+      proposer: { userId: p.proposerUserId, name: names.get(p.proposerUserId) ?? '' },
+      createdAt: p.createdAt, lapsesAt: p.lapsesAt,
+      votes: view.votes.map((v) => voteOf(v, names)), decisionIds: view.decisionIds, invalidation: view.invalidation,
+      viewer: viewerOf(db, view, actor),
+    });
+  });
+}
+
+export function decisionOf(d: DecisionRow): DecisionResponse {
+  return decisionResponseSchema.parse({
+    id: d.id, proposalId: d.proposalId, caseId: d.caseId, scope: d.scope, outcome: d.outcome, repo: d.repo, fingerprint: d.fingerprint,
+    batchId: d.batchId, policyId: d.policyId, policyKey: d.policyKey, policyVersion: d.policyVersion, expiresAt: d.expiresAt,
+    approverUserIds: JSON.parse(d.approverUserIds) as string[], quorumConfigVersion: d.quorumConfigVersion, quorumConfigHash: d.quorumConfigHash,
+    finalizedAt: d.finalizedAt, signedPayload: d.signedPayload, signature: d.signature, signatureValid: cpgVerify(d.signedPayload, d.signature),
+  });
+}

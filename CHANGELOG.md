@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 5 (approvals, engine): reviewers propose snippet and bulk
+  decisions on a case's blocking findings and vote on them under the configured quorum (approvals per
+  tier and scope, per-policy overrides, required boards, an optional required permission). One
+  eligible rejection vetoes an approval, a rejection is final at once, approvals expire within the
+  configured maximum, and bulk is never allowed on prohibited policies. Self-approval (the case
+  opener, a justification author or a revision creator) is refused by the API and by the database.
+  Each finalized finding gets a decision signed with the instance key that records the quorum
+  version in force at finalization; finding status reports `approved`, `rejected` and `pending`, and
+  the case becomes `decided` once every blocking finding has a decision. Endpoints under
+  `/api/v1/cpg/proposals` and `/api/v1/cpg/decisions` (see the API reference).
 - Corporate policy governance, phase 4 (review case pages): **Governance > Cases** lists the review
   cases of the repositories you can read, filtered by state and board and paged (a page shortened
   by repository access says so), and each case shows its people, lanes, revisions, findings
