@@ -8,6 +8,7 @@ import { BundleCache, DEFAULT_MAX_CACHE_AGE_HOURS, type BundleState } from './bu
 import type { CorporateViewProvider } from './corporate-view';
 import { readGitContext, type GitContext } from './git-context';
 import { formatUtc } from './corporate-format';
+import { apiUrlSetting, resolveApiKey } from './cpg-client';
 
 /**
  * Corporate policy findings in the editor (design spec §10, Phase 3:
@@ -72,16 +73,8 @@ export class CorporateController {
     return vscode.workspace.getConfiguration('nomus').get<boolean>('corporate.enabled', true) !== false;
   }
 
-  private apiUrl(): string {
-    return vscode.workspace.getConfiguration('nomus').get<string>('apiUrl', 'http://localhost:3100');
-  }
-
   private workspaceRoot(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  }
-
-  private async resolveKey(): Promise<string | undefined> {
-    return (await this.getApiKey()) || vscode.workspace.getConfiguration('nomus').get<string>('apiKey', '') || undefined;
   }
 
   /** Drop every corporate diagnostic and finding (bundle unusable, signed out, or a new bundle). */
@@ -153,7 +146,7 @@ export class CorporateController {
       this.render();
       return null;
     }
-    const apiKey = await this.resolveKey();
+    const apiKey = await resolveApiKey(this.getApiKey);
     if (!apiKey) {
       this.clearFindings();
       this.state = null;
@@ -162,7 +155,7 @@ export class CorporateController {
     }
     const root = this.workspaceRoot();
     this.repository = root ? await readGitContext(root) : null;
-    const { state, discardedCache } = await this.cache.load(this.apiUrl(), apiKey, { force });
+    const { state, discardedCache } = await this.cache.load(apiUrlSetting(), apiKey, { force });
     this.state = state;
     this.notify(state, discardedCache);
     const usable = (state.kind === 'verified' || state.kind === 'offline') && state.bundle.enabled ? state.bundle : null;

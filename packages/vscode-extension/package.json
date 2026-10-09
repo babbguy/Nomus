@@ -156,6 +156,25 @@
         "command": "nomus.cpg.refresh",
         "title": "Nomus: Refresh Corporate Policies",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "nomus.cpg.requestReview",
+        "title": "Nomus: Request Policy Review",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "nomus.cpg.replyToChangeRequest",
+        "title": "Nomus: Reply to Change Request",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "nomus.cpg.resubmit",
+        "title": "Nomus: Resubmit Policy Review"
+      },
+      {
+        "command": "nomus.cpg.openCase",
+        "title": "Nomus: Open Review Case in Dashboard",
+        "icon": "$(link-external)"
       }
     ],
     "viewsContainers": {
@@ -194,9 +213,26 @@
     "menus": {
       "view/title": [
         {
+          "command": "nomus.cpg.requestReview",
+          "when": "view == nomus.corporate",
+          "group": "navigation"
+        },
+        {
           "command": "nomus.cpg.refresh",
           "when": "view == nomus.corporate",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "nomus.cpg.replyToChangeRequest",
+          "when": "view == nomus.corporate && viewItem == nomus.corporate.changeRequest",
+          "group": "inline"
+        },
+        {
+          "command": "nomus.cpg.openCase",
+          "when": "view == nomus.corporate && viewItem == nomus.corporate.case",
+          "group": "inline"
         }
       ]
     }
@@ -209,7 +245,8 @@
     "package": "npx --yes @vscode/vsce@3 package --no-dependencies"
   },
   "dependencies": {
-    "@nomus/scanner": "*"
+    "@nomus/scanner": "*",
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",
