@@ -302,6 +302,7 @@ export const policyHeadSchema = z.object({
   inGracePeriod: z.boolean(),
   pendingVersionId: uuid.nullable(),
   pendingVersion: z.number().int().min(1).nullable(),
+  pendingVersionKind: z.enum(['define', 'retire']).nullable(),
   latestVersion: z.number().int().min(1),
   createdAt: isoDate,
   createdBy: z.string(),

@@ -48,6 +48,12 @@ describe('Policy log', () => {
     expectClean(t);
   });
 
+  it('a pending retirement is labelled as a retirement in the version column', () => {
+    const t = text(<PolicyTable items={[{ ...fx.policyHead, activeVersion: 2, pendingVersion: 3, pendingVersionKind: 'retire', inGracePeriod: false }]} now={NOW} filtered={false} canAuthor />);
+    expect(t).toContain('v2 active');
+    expect(t).toContain('v3 retirement awaiting approval');
+  });
+
   it('empty states for authors, readers and filters', () => {
     expect(text(<PolicyTable items={[]} now={NOW} filtered={false} canAuthor />)).toContain('needs another person');
     expect(text(<PolicyTable items={[]} now={NOW} filtered={false} canAuthor={false} />)).toContain('Policy Authors write policies');

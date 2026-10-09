@@ -69,6 +69,8 @@ All notable changes to this project are documented here. The format follows
   shows the user's governance role (for example "Org Admin", or "Org Admin +1" with several roles)
   instead of "Member". Platform administrators and users without governance roles keep the
   previous label.
+- The policy log (`GET /api/v1/cpg/policies` and the policy detail) now says whether a pending
+  version defines the policy or retires it (`pendingVersionKind`).
 - On upgrade, each organization's earliest member becomes Org Admin and every member becomes
   Developer; platform administrators get no organization role. Developer keeps the v1.1.0 member
   abilities (`PATCH /org`, organization API keys) as grants an Org Admin can remove.

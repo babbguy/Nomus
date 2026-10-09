@@ -188,7 +188,7 @@ const version = (over: Record<string, unknown>) => ({
 export const policyHead = {
   policyId: POLICY_ID, policyKey: 'corp.no-gpt-4-32k', state: 'active' as const, title: 'Do not use gpt-4-32k', tier: 'review-required' as const,
   owningBoards: [{ id: BOARD_AI_ID, name: 'AI Review Board' }], activeVersion: 1, enforceFrom: '2026-10-22T08:00:00.000Z', inGracePeriod: true,
-  pendingVersionId: V2_ID, pendingVersion: 2, latestVersion: 2, createdAt: T, createdBy: `user:${AUTHOR_ID}`, updatedAt: T2,
+  pendingVersionId: V2_ID, pendingVersion: 2, pendingVersionKind: 'define' as const, latestVersion: 2, createdAt: T, createdBy: `user:${AUTHOR_ID}`, updatedAt: T2,
 };
 
 export const policyDetail = {
