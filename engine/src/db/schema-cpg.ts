@@ -445,6 +445,63 @@ export const cpgCiRuns = sqliteTable('cpg_ci_runs', {
   signature: text('signature').notNull(),
 });
 
+export const cpgIntegrations = sqliteTable('cpg_integrations', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  kind: text('kind', { enum: ['email', 'jira', 'webhook'] }).notNull(),
+  name: text('name').notNull(),
+  boardIds: text('board_ids').notNull(),
+  events: text('events').notNull(),
+  config: text('config').notNull(),
+  secretEnc: text('secret_enc'),
+  secretLast4: text('secret_last4'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+export const cpgIntegrationLinks = sqliteTable('cpg_integration_links', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  integrationId: text('integration_id').notNull(),
+  caseId: text('case_id').notNull(),
+  boardId: text('board_id').notNull(),
+  externalKey: text('external_key').notNull(),
+  externalUrl: text('external_url').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgNotificationDeliveries = sqliteTable('cpg_notification_deliveries', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  integrationId: text('integration_id').notNull(),
+  channel: text('channel', { enum: ['email', 'jira', 'webhook'] }).notNull(),
+  event: text('event').notNull(),
+  caseId: text('case_id'),
+  boardId: text('board_id'),
+  payload: text('payload').notNull(),
+  payloadSha256: text('payload_sha256').notNull(),
+  retryOf: text('retry_of'),
+  status: text('status', { enum: ['pending', 'delivered', 'failed', 'cancelled'] }).notNull(),
+  attempts: integer('attempts').notNull(),
+  nextAttemptAt: text('next_attempt_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+export const cpgDeliveryAttempts = sqliteTable('cpg_delivery_attempts', {
+  id: text('id').primaryKey(),
+  deliveryId: text('delivery_id').notNull(),
+  attempt: integer('attempt').notNull(),
+  startedAt: text('started_at').notNull(),
+  durationMs: integer('duration_ms').notNull(),
+  httpStatus: integer('http_status'),
+  error: text('error'),
+  responseExcerpt: text('response_excerpt'),
+});
+
 /** Every CPG table declared above, for the column-parity test. */
 export const CPG_DRIZZLE_TABLES = [
   schemaMigrations,
@@ -479,4 +536,8 @@ export const CPG_DRIZZLE_TABLES = [
   cpgDecisions,
   cpgRevocations,
   cpgCiRuns,
+  cpgIntegrations,
+  cpgIntegrationLinks,
+  cpgNotificationDeliveries,
+  cpgDeliveryAttempts,
 ] as const;

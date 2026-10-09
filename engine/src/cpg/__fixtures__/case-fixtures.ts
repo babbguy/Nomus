@@ -19,7 +19,7 @@ export function caseFixtures(sqlite: Database.Database) {
   }
 
   /** A policy whose version 1 has head state `state`, enforced from `enforceFrom`. */
-  function insertPolicy(org: string, key: string, tier: string, boards: string[], opts: { state?: 'active' | 'proposed'; enforceFrom?: string } = {}): string {
+  function insertPolicy(org: string, key: string, tier: string, boards: string[], opts: { state?: 'active' | 'proposed'; enforceFrom?: string; plainText?: string } = {}): string {
     const policyId = randomUUID();
     const compileId = randomUUID();
     const versionId = randomUUID();
@@ -27,9 +27,9 @@ export function caseFixtures(sqlite: Database.Database) {
     const h = 'c'.repeat(64);
     run('INSERT INTO cpg_policies (id, org_id, policy_key, created_by, created_at) VALUES (?, ?, ?, ?, ?)', policyId, org, key, author, NOW);
     run(`INSERT INTO cpg_compile_records (id, org_id, requested_by, input_text, input_hash, examples, prompt_version, status, compiled_rule, compiled_rule_hash, created_at)
-         VALUES (?, ?, ?, 'A policy text that is long enough.', ?, '{}', 1, 'compiled', '{}', ?, ?)`, compileId, org, author, h, h, NOW);
+         VALUES (?, ?, ?, ?, ?, '{}', 1, 'compiled', '{}', ?, ?)`, compileId, org, author, opts.plainText ?? 'A policy text that is long enough.', h, h, NOW);
     run(`INSERT INTO cpg_policy_versions (id, policy_id, org_id, version, kind, title, plain_text, tier, owning_board_ids, rule, rule_hash, compile_record_id, edited_from_compile, created_by, created_at)
-         VALUES (?, ?, ?, 1, 'define', ?, 'text', ?, ?, ?, ?, ?, 0, ?, ?)`, versionId, policyId, org, `Policy ${key}`, tier, JSON.stringify(boards), RULE, h, compileId, author, NOW);
+         VALUES (?, ?, ?, 1, 'define', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`, versionId, policyId, org, `Policy ${key}`, opts.plainText ?? 'text', tier, JSON.stringify(boards), RULE, h, compileId, author, NOW);
     if (opts.state === 'proposed') {
       run("INSERT INTO cpg_policy_heads (policy_id, org_id, state, pending_version_id, updated_at) VALUES (?, ?, 'proposed', ?, ?)", policyId, org, versionId, NOW);
     } else {

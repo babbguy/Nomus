@@ -6,8 +6,9 @@ import { cpgComments } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
 import { activeMembers } from '../boards/service.js';
 import { CpgError, notFound } from '../errors.js';
+import { notifyCase } from '../notify/outbox.js';
 import { caseLanes } from './lanes.js';
-import { addCaseEvent, assertLatestFingerprints, openCase, openChangeRequests, refreshCaseState, type CaseRow } from './service.js';
+import { addCaseEvent, assertLatestFingerprints, getCase, openCase, openChangeRequests, refreshCaseState, type CaseRow } from './service.js';
 
 /**
  * Case comments and the request-changes loop (design spec §5.3 rows 4 and
@@ -47,11 +48,13 @@ export function addComment(db: Db, input: CommentBase & { kind: 'comment' | 'rep
     const c = openCase(db, input.orgId, input.caseId);
     assertLatestFingerprints(db, c.id, input.fingerprints);
     let threadId: string | null = null;
+    let threadBoard: string | null = null;
     if (input.kind === 'reply') {
-      const root = db.select({ id: cpgComments.id }).from(cpgComments)
+      const root = db.select({ id: cpgComments.id, boardId: cpgComments.boardId }).from(cpgComments)
         .where(and(eq(cpgComments.id, input.threadId ?? ''), eq(cpgComments.caseId, c.id), isNull(cpgComments.parentId))).get();
       if (!root) throw notFound('Thread');
       threadId = root.id;
+      threadBoard = root.boardId;
     }
     if (input.resolves && !(threadId && openChangeRequests(db, c.id).has(threadId))) {
       throw new CpgError(409, 'change_request_not_open', 'Only a reply to an open change request can resolve it');
@@ -63,6 +66,8 @@ export function addComment(db: Db, input: CommentBase & { kind: 'comment' | 'rep
     const details = { commentId: id, threadId: row.threadId, kind: row.kind, resolves: input.resolves === true };
     addCaseEvent(db, c, 'comment_added', actor, details, now);
     appendAuditEvent(db, { orgId: c.orgId, actor, action: 'case.comment_added', targetType: 'case', targetId: c.id, payload: details });
+    // A reply to a change request goes to that board's lane; any other reply to every lane.
+    if (input.kind === 'reply') notifyCase(db, c, 'case.replied', { boardId: threadBoard });
     return row;
   }).immediate();
 }
@@ -92,6 +97,7 @@ export function requestChanges(db: Db, input: CommentBase & { boardId: string })
       payload: { commentId: id, boardId: lane.boardId, fingerprints: JSON.parse(row.fingerprints) as string[] },
     });
     refreshCaseState(db, c, actor, now);
+    notifyCase(db, getCase(db, c.orgId, c.id), 'case.changes_requested', { boardId: lane.boardId });
     return row;
   }).immediate();
 }
@@ -111,5 +117,6 @@ export function resubmit(db: Db, input: { orgId: string; caseId: string; userId:
     addCaseEvent(db, c, 'submitted', actor, { via: 'resubmit', commentIds: [...open.keys()] }, now);
     appendAuditEvent(db, { orgId: c.orgId, actor, action: 'case.resubmitted', targetType: 'case', targetId: c.id, payload: { commentIds: [...open.keys()] } });
     refreshCaseState(db, c, actor, now);
+    notifyCase(db, getCase(db, c.orgId, c.id), 'case.review_requested');
   }).immediate();
 }

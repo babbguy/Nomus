@@ -7,6 +7,7 @@ import { appendAuditEvent } from '../audit/log.js';
 import { listBoards } from '../boards/service.js';
 import { addCaseEvent, getCase, refreshOpenCases } from '../cases/service.js';
 import { CpgError } from '../errors.js';
+import { notifyCase } from '../notify/outbox.js';
 import { boardIdsOf, getHead, getVersion } from '../policies/service.js';
 import { cpgSign } from '../policies/signing.js';
 import { expiryInRange, requirementFor, tally, type Requirement, type Tally } from '../quorum/evaluate.js';
@@ -125,4 +126,10 @@ function writeDecisions(db: Db, p: ProposalRow, deciders: string[], quorum: Quor
   });
   if (c) addCaseEvent(db, c, 'decision_recorded', actor, { proposalId: p.id, outcome: p.outcome, decisionIds }, finalizedAt);
   refreshOpenCases(db, p.orgId, actor, finalizedAt, p.policyVersionId);
+  if (c) {
+    notifyCase(db, getCase(db, p.orgId, c.id), 'decision.recorded', {
+      policyVersionId: p.policyVersionId,
+      decision: { id: decisionIds[0], scope: p.scope, outcome: p.outcome, expiresAt: p.requestedExpiresAt, findingCount: decisionIds.length },
+    });
+  }
 }
