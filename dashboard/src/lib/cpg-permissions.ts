@@ -71,6 +71,7 @@ export const POLICIES_REQUIREMENT: PermissionRequirement = { all: ['policy.read'
 export const POLICY_AUTHOR_REQUIREMENT: PermissionRequirement = { all: ['policy.read', 'policy.author'] };
 export const BOARDS_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
 export const QUORUM_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
+export const INTEGRATIONS_REQUIREMENT: PermissionRequirement = { all: ['integrations.manage'] };
 export const CASES_REQUIREMENT: PermissionRequirement = { scoped: ['case.read'] };
 
 /** The governance pages, in sidebar order. */
@@ -82,6 +83,7 @@ export const GOVERNANCE_PAGES: GovernancePage[] = [
   { to: '/governance/boards', label: 'Boards', description: 'Review boards, their members and the policies they own', requires: BOARDS_REQUIREMENT },
   { to: '/governance/quorum', label: 'Quorum', description: 'Who must approve what, versioned and signed', requires: QUORUM_REQUIREMENT },
   { to: '/governance/access', label: 'Access', description: 'Users, role grants, custom roles and teams', requires: ACCESS_REQUIREMENT },
+  { to: '/governance/integrations', label: 'Integrations', description: 'Email, Jira and webhook notifications, and their delivery log', requires: INTEGRATIONS_REQUIREMENT },
   { to: '/governance/audit', label: 'Audit log', description: 'Every access and settings change, hash-chained', requires: AUDIT_REQUIREMENT },
   { to: '/governance/settings', label: 'Settings', description: 'Turn governance on, reviewer context', requires: SETTINGS_REQUIREMENT },
 ];

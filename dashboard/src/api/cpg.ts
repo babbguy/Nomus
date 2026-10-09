@@ -19,10 +19,15 @@ import {
   type CaseComment, type CaseDetail, type CaseList, type CaseState, type CastVote, type Decision, type Proposal, type ProposalStatus,
   type ReviewerContext, type RevisionDetail, type StandingException, type StandingPattern,
 } from './cpg-case-schemas';
+import {
+  deliveryListSchema, deliverySchema, integrationSchema, integrationWithSecretSchema,
+  type CpgEvent, type Delivery, type DeliveryList, type DeliveryStatus, type Integration, type IntegrationKind, type IntegrationWithSecret,
+} from './cpg-integration-schemas';
 
 export * from './cpg-schemas';
 export * from './cpg-quorum';
 export * from './cpg-case-schemas';
+export * from './cpg-integration-schemas';
 
 /**
  * Typed client for the Corporate Policy Governance API (/api/v1/cpg):
@@ -426,4 +431,47 @@ export async function revokeDecision(decisionId: string, reason: string) {
 export async function listStandingExceptions(policyKey?: string): Promise<StandingException[]> {
   const { data } = await api.get(`/cpg/exceptions${policyKey ? `?policyKey=${encodeURIComponent(policyKey)}` : ''}`);
   return parseResponse(standingExceptionListSchema, data, 'GET /cpg/exceptions').items;
+}
+
+// ─── E64–E70 integrations and the delivery log ─────────────────────────
+
+export type IntegrationInput = {
+  kind: IntegrationKind; name: string; boardIds: string[]; events: CpgEvent[]; enabled: boolean;
+  config: Record<string, unknown>; apiToken?: string;
+};
+
+export async function listIntegrations(): Promise<Integration[]> {
+  const { data } = await api.get('/cpg/integrations');
+  return parseResponse(listOf(integrationSchema), data, 'GET /cpg/integrations').items;
+}
+
+export async function createIntegration(input: IntegrationInput): Promise<IntegrationWithSecret> {
+  const { data } = await api.post('/cpg/integrations', input);
+  return parseResponse(integrationWithSecretSchema, data, 'POST /cpg/integrations');
+}
+
+export async function updateIntegration(integrationId: string, patch: Partial<Pick<IntegrationInput, 'name' | 'boardIds' | 'events' | 'enabled' | 'config'>>): Promise<Integration> {
+  const { data } = await api.patch(`/cpg/integrations/${id(integrationId)}`, patch);
+  return parseResponse(integrationSchema, data, 'PATCH /cpg/integrations/:id');
+}
+
+/** A webhook gets a new signing secret (returned once); a Jira integration takes the new token. */
+export async function rotateIntegrationSecret(integrationId: string, apiToken?: string): Promise<IntegrationWithSecret> {
+  const { data } = await api.post(`/cpg/integrations/${id(integrationId)}/rotate-secret`, apiToken ? { apiToken } : {});
+  return parseResponse(integrationWithSecretSchema, data, 'POST /cpg/integrations/:id/rotate-secret');
+}
+
+export async function testIntegration(integrationId: string): Promise<Delivery> {
+  const { data } = await api.post(`/cpg/integrations/${id(integrationId)}/test`, {});
+  return parseResponse(deliverySchema, data, 'POST /cpg/integrations/:id/test');
+}
+
+export async function listDeliveries(q: { status?: DeliveryStatus; limit?: number; cursor?: string } = {}): Promise<DeliveryList> {
+  const { data } = await api.get('/cpg/deliveries', { params: q });
+  return parseResponse(deliveryListSchema, data, 'GET /cpg/deliveries');
+}
+
+export async function retryDelivery(deliveryId: string): Promise<Delivery> {
+  const { data } = await api.post(`/cpg/deliveries/${id(deliveryId)}/retry`, {});
+  return parseResponse(deliverySchema, data, 'POST /cpg/deliveries/:id/retry');
 }

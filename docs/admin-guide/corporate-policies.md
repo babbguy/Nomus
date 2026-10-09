@@ -338,8 +338,8 @@ Before relying on it:
 ## Integrations: email, Jira and webhooks
 
 Nomus can tell people and other systems when a case needs them. An Org Admin (or anyone with
-`integrations.manage`) configures integrations with `POST /api/v1/cpg/integrations`; the
-dashboard page arrives in a later release. Each integration chooses its events and, optionally, the
+`integrations.manage`) configures them on **Governance > Integrations**
+(`/governance/integrations`), or with `POST /api/v1/cpg/integrations`. Each integration chooses its events and, optionally, the
 boards it serves (`boardIds`; empty means every board). A case whose findings belong to several
 boards is split: each board gets its own email, webhook call and Jira issue.
 
@@ -362,7 +362,24 @@ snippets, justifications, comments and file paths stay in Nomus, behind sign-in 
    minutes, and deduplicate on `X-Nomus-Delivery-Id`. Use the webhook for Slack, Teams, Trello,
    Linear or any other tool through a small bridge.
 
-Use `POST /api/v1/cpg/integrations/:id/test` to send a test notification. Secrets are stored
+### The Integrations page
+
+- **Add or edit** an email, Jira or webhook integration: its events, the boards it serves and
+  whether it is enabled. The type cannot change after it is created.
+- **Secrets** are shown only as their last four characters (`••••a1b2`). A new webhook's signing
+  secret appears once, in a dialog that says to copy it now; **Rotate secret** generates another
+  and shows it the same way. For Jira, **Replace token** takes a new API token.
+- **Send test** sends a test notification now and shows the result under the integration:
+  delivered, queued for a retry (with the time, in UTC), or failed with the reason. An email test
+  goes to you.
+- **Delivery log** lists every delivery with its event and case, status, attempts, last error,
+  next retry and creation time (UTC). Filter it by status. A red banner appears when a delivery
+  has failed permanently and nobody has retried it; fix the integration, then press **Retry** on
+  the row. A retry is a new delivery that names the failed one, so the banner clears.
+- **Webhook payload and signature** at the bottom shows the exact headers and body a webhook
+  receives and how to verify the signature, with a link to the API reference.
+
+You can also use `POST /api/v1/cpg/integrations/:id/test`. Secrets are stored
 encrypted with the instance key (`NOMUS_SIGNING_KEY_SECRET`), shown only by their last four
 characters, and never written to logs or the audit log. Jira and webhook targets must be public
 HTTPS addresses; `NOMUS_CPG_ALLOW_PRIVATE_TARGETS=true` allows private addresses for test setups
@@ -372,7 +389,8 @@ Deliveries are queued with the change that caused them and sent in the backgroun
 broken receiver never delays a reviewer. Failed sends are retried for about 21 hours (the schedule
 survives restarts). A delivery that fails for good, or at once on a response such as `401` or
 `404` that retrying cannot fix, is logged at error level and audited as `delivery.failed`. Check
-`GET /api/v1/cpg/deliveries?status=failed`, fix the integration, then retry the delivery.
+`GET /api/v1/cpg/deliveries?status=failed`, fix the integration, then retry the delivery (the Retry button on the page, or
+`POST /api/v1/cpg/deliveries/:id/retry`).
 
 ## Audit and export
 

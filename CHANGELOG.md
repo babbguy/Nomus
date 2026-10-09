@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 7 (integrations, dashboard): the new Governance > Integrations
+  page (`integrations.manage`) creates and edits email, Jira and webhook integrations, shows
+  secrets only by their last four characters, shows a new webhook signing secret once after create
+  or rotate, sends a test with its result inline, and lists the delivery log with attempts, last
+  error and next retry. A banner flags deliveries that failed permanently, each with a Retry
+  button, and a help panel shows the exact webhook payload and how to verify its signature. The
+  test notification now links to this page.
 - Corporate policy governance, phase 7 (integrations, engine): review-case notifications by email
   (through Resend), to Jira Cloud (one issue per case and owning board, then comments) and to a
   generic JSON webhook signed with `X-Nomus-Signature: sha256=…` over the timestamp and body, for

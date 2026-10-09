@@ -156,6 +156,7 @@ describe('no source code in any notification (constraint 2)', () => {
 
     const log = await call(app, 'GET', '/api/v1/cpg/deliveries?limit=200', { cookie: owner.cookie });
     expect(log.json.items.length).toBe(rows.length);
+    expect(log.json.items.find((d: { event: string }) => d.event === 'integration.test').payload.summary.link).toMatch(/\/governance\/integrations$/);
     const everything = [...sent.map((s) => `${s.url}\n${JSON.stringify(s.headers)}\n${s.body}`), ...rows.map((r) => r.payload), log.text];
     expect(sent.length).toBeGreaterThan(rows.length - 1);
     expect(everything.filter((t) => t.includes(SENTINEL))).toEqual([]);
