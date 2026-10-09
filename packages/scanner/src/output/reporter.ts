@@ -167,8 +167,9 @@ function lineSpan(f: Pick<CorporateFinding, 'startLine' | 'endLine'>): string {
 
 /** The corporate section of the console report. */
 export function formatCorporateConsoleReport(findings: readonly CorporateFinding[], summary: CorporateScanSummary): string {
-  const files = `${summary.scannedFileCount} file${summary.scannedFileCount === 1 ? '' : 's'} checked`;
-  const head = `Corporate policies: ${summary.policyCount} active polic${summary.policyCount === 1 ? 'y' : 'ies'}, ${files} (bundle ${summary.bundleHash?.slice(0, 12) ?? 'none'})`;
+  const files = `${summary.scannedFileCount} file${summary.scannedFileCount === 1 ? '' : 's'} checked for corporate policies (every repository file in a policy's scope, of any type)`;
+  const head = `Corporate policies: ${summary.policyCount} active polic${summary.policyCount === 1 ? 'y' : 'ies'} (bundle ${summary.bundleHash?.slice(0, 12) ?? 'none'})
+${files}`;
   if (findings.length === 0) return `\n${head}\nNo corporate policy findings.\n`;
   const blocking = findings.filter((f) => f.blocking).length;
   const lines = ['', head, `${findings.length} corporate policy finding(s), ${blocking} blocking:`, ''];
