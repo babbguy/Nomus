@@ -2,19 +2,12 @@ import { sql } from 'drizzle-orm';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { getDb } from './client.js';
+import { logger } from '../logger.js';
 import * as schema from './schema.js';
 
-/**
- * Auto-create all tables on startup using Drizzle schema metadata.
- * Uses CREATE TABLE IF NOT EXISTS — safe to run repeatedly.
- *
- * @param db Optional database handle — tests pass an isolated in-memory DB;
- *           production callers omit it and get the shared connection.
- */
-export function runMigrations(db: BetterSQLite3Database<any> = getDb()): void {
-
-  // All tables in dependency order (foreign keys respected)
-  const tables = [
+/** All tables in dependency order (foreign keys respected). */
+function migratedTables() {
+  return [
     schema.organizations,
     schema.apiKeys,
     schema.usageRecords,
@@ -66,9 +59,9 @@ export function runMigrations(db: BetterSQLite3Database<any> = getDb()): void {
     schema.billSponsors,
     schema.billNews,
     // Scout Accuracy Ledger (bill_outcomes UNIQUE(bill_id) is emitted
-    // inline in the CREATE TABLE via the column-level isUnique flag below —
-    // this migrator does not create separate indexes, so the exactly-once
-    // constraint MUST live on the column definition)
+    // inline in the CREATE TABLE via the column-level isUnique flag below;
+    // separately declared index()/uniqueIndex() entries are created by
+    // createDeclaredIndexes() after the tables and column alterations)
     schema.billOutcomes,
     schema.accuracySnapshots,
     // Attestation Reliance Network (FK → attestation_receipts, which
@@ -79,6 +72,20 @@ export function runMigrations(db: BetterSQLite3Database<any> = getDb()): void {
     schema.clauseMatches,
     schema.clauseLearningEvents,
   ];
+}
+
+/**
+ * Auto-create all tables on startup using Drizzle schema metadata.
+ * Uses CREATE TABLE IF NOT EXISTS — safe to run repeatedly. Every index
+ * declared with index()/uniqueIndex() in schema.ts is then created with
+ * CREATE [UNIQUE] INDEX IF NOT EXISTS (see createDeclaredIndexes).
+ *
+ * @param db Optional database handle — tests pass an isolated in-memory DB;
+ *           production callers omit it and get the shared connection.
+ */
+export function runMigrations(db: BetterSQLite3Database<any> = getDb()): void {
+
+  const tables = migratedTables();
 
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -211,6 +218,99 @@ export function runMigrations(db: BetterSQLite3Database<any> = getDb()): void {
     } catch {
       // Table/column not present yet — ignore
     }
+  }
+
+  // Indexes last: they may cover columns added by the alterations above.
+  createDeclaredIndexes(db, tables);
+}
+
+export interface DeclaredIndex {
+  table: string;
+  name: string;
+  unique: boolean;
+  columns: string[];
+}
+
+/** Thrown when a UNIQUE index cannot be created because data already violates it. */
+export class DuplicateKeysError extends Error {
+  constructor(message: string, readonly violations: Array<{ table: string; index: string; keys: string[] }>) {
+    super(message);
+    this.name = 'DuplicateKeysError';
+  }
+}
+
+/**
+ * Every index declared in the Drizzle schema (index() / uniqueIndex() in a
+ * table's extra config), read from the table metadata — there is no second list.
+ */
+export function listDeclaredIndexes(tables: ReturnType<typeof migratedTables> = migratedTables()): DeclaredIndex[] {
+  const out: DeclaredIndex[] = [];
+  for (const table of tables) {
+    const config = getTableConfig(table);
+    for (const idx of config.indexes) {
+      const c = idx.config;
+      if (c.where) {
+        throw new Error(`Index ${c.name} on ${config.name} is partial (WHERE); the migrator does not support partial indexes`);
+      }
+      const columns = c.columns.map((col) => {
+        const name = (col as { name?: unknown }).name;
+        if (typeof name !== 'string') {
+          throw new Error(`Index ${c.name} on ${config.name} uses an expression column; the migrator supports plain columns only`);
+        }
+        return name;
+      });
+      out.push({ table: config.name, name: c.name, unique: !!c.unique, columns });
+    }
+  }
+  return out;
+}
+
+/**
+ * Create every declared index idempotently. Before any UNIQUE index that does
+ * not yet exist is created, existing rows are checked for duplicate keys; if
+ * any are found startup fails with an error naming table, index and keys, and
+ * no data is touched. Each index creation is logged once at info level.
+ */
+function createDeclaredIndexes(
+  db: BetterSQLite3Database<any>,
+  tables: ReturnType<typeof migratedTables>,
+): void {
+  const existing = new Set(
+    (db.all(sql.raw(`SELECT name FROM sqlite_master WHERE type = 'index'`)) as Array<{ name: string }>)
+      .map((r) => r.name),
+  );
+  const pending = listDeclaredIndexes(tables).filter((i) => !existing.has(i.name));
+
+  const violations: Array<{ table: string; index: string; keys: string[] }> = [];
+  for (const idx of pending.filter((i) => i.unique)) {
+    const cols = idx.columns.join(', ');
+    const notNull = idx.columns.map((c) => `${c} IS NOT NULL`).join(' AND ');
+    const rows = db.all(sql.raw(
+      `SELECT ${cols}, COUNT(*) AS n FROM ${idx.table} WHERE ${notNull} GROUP BY ${cols} HAVING COUNT(*) > 1 ORDER BY ${cols} LIMIT 20`,
+    )) as Array<Record<string, unknown>>;
+    if (rows.length > 0) {
+      violations.push({
+        table: idx.table,
+        index: idx.name,
+        keys: rows.map((r) => `(${idx.columns.map((c) => JSON.stringify(r[c])).join(', ')}) x${r.n}`),
+      });
+    }
+  }
+  if (violations.length > 0) {
+    const detail = violations
+      .map((v) => `table ${v.table}, unique index ${v.index}: duplicated keys ${v.keys.join('; ')}`)
+      .join(' | ');
+    throw new DuplicateKeysError(
+      `Cannot create unique index: existing rows contain duplicate keys. No data was changed; resolve the duplicates and restart. ${detail}`,
+      violations,
+    );
+  }
+
+  for (const idx of pending) {
+    db.run(sql.raw(
+      `CREATE ${idx.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${idx.name} ON ${idx.table} (${idx.columns.join(', ')})`,
+    ));
+    logger.info({ table: idx.table, index: idx.name, unique: idx.unique, columns: idx.columns }, 'Created database index');
   }
 }
 
