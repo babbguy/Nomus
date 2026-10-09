@@ -7,8 +7,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- Corporate policy governance, phase 2 (dashboard): the policy pages under **Governance**.
-  Policies (`/governance/policies`: the policy log with state, tier, owning boards,
+- Corporate policy governance, phase 2 (dashboard): the policy registry pages under
+  **Governance**. Policies (`/governance/policies`: the policy log with state, tier, owning boards,
   active and pending versions, and the grace period or enforce-from date); New policy
   (`/governance/policies/new`: write a policy in plain English with violating and compliant code
   examples, compile it, read the rule both as plain English and as the exact JSON, see every
@@ -18,7 +18,13 @@ All notable changes to this project are documented here. The format follows
   author approves it); a policy page (`/governance/policies/:id`: versions with their status,
   approval votes, activation signatures and supersede history, a diff between any two versions,
   the four-eyes status of a pending version with Approve and Reject only for eligible approvers and
-  the reason for everyone else, withdraw, new version and proposed retirement).
+  the reason for everyone else, withdraw, new version and proposed retirement); Boards
+  (`/governance/boards`: create, rename, archive, add and remove members, and the policies each
+  board owns); and Quorum (`/governance/quorum`: the signed configuration in force, an editor that
+  validates with the engine's own rules as you type and lists every change before saving a new
+  version with a change note, and the version history with the changes of each version). The
+  rules no setting can change (no self-approval, no bulk decisions on the prohibited tier,
+  advisory never blocks) are shown and cannot be configured.
 - Corporate policy governance, phase 2 (scanner library): `@nomus/scanner/corporate`, the pure
   library the engine, the VS Code extension and the GitHub Action share for corporate policies: the
   rule schema and closed vocabularies, globs, regex safety, the deterministic matcher, the finding
