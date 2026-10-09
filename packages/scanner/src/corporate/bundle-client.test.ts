@@ -235,7 +235,7 @@ describe('verifyCiVerdict', () => {
   const evaluatedAt = '2026-10-09T10:00:00.000Z';
   function verdict(payloadOver: Record<string, unknown> = {}, over: Record<string, unknown> = {}) {
     const signedPayload = canonicalJson({ kind: 'nomus.cpg-ci-run.v1', runId, ...scan, verdict: 'fail', counts, findingsDigest: 'c'.repeat(64), evaluatedAt, ...payloadOver });
-    return { runId, verdict: 'fail', reasons: ['corp.x @ a.ts:1: rejected'], caseId: null, caseUrl: null, findings: [], counts, evaluatedAt, signedPayload, signature: signText(signedPayload), ...over };
+    return { runId, verdict: 'fail', reasons: ['corp.x @ a.ts:1: rejected'], caseId: null, caseRef: null, caseUrl: null, findings: [], counts, evaluatedAt, signedPayload, signature: signText(signedPayload), ...over };
   }
 
   it('accepts a verdict signed for this scan', () => {
