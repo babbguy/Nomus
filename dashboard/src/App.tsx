@@ -6,7 +6,8 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import Shell from './components/layout/Shell';
 import PermissionRoute from './components/layout/PermissionRoute';
 import {
-  ACCESS_REQUIREMENT, AUDIT_REQUIREMENT, POLICIES_REQUIREMENT, POLICY_AUTHOR_REQUIREMENT, SETTINGS_REQUIREMENT,
+  ACCESS_REQUIREMENT, AUDIT_REQUIREMENT, BOARDS_REQUIREMENT, POLICIES_REQUIREMENT, POLICY_AUTHOR_REQUIREMENT, QUORUM_REQUIREMENT,
+  SETTINGS_REQUIREMENT,
 } from './lib/cpg-permissions';
 import Login from './pages/Login';
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -53,6 +54,8 @@ const GovernanceSettings = lazy(() => import('./pages/governance/GovernanceSetti
 const GovernancePolicies = lazy(() => import('./pages/governance/GovernancePolicies'));
 const PolicyNew = lazy(() => import('./pages/governance/PolicyNew'));
 const PolicyDetail = lazy(() => import('./pages/governance/PolicyDetail'));
+const GovernanceBoards = lazy(() => import('./pages/governance/GovernanceBoards'));
+const GovernanceQuorum = lazy(() => import('./pages/governance/GovernanceQuorum'));
 const ScanAdmin = lazy(() => import('./pages/admin/ScanAdmin'));
 const ScoutFeeds = lazy(() => import('./pages/admin/ScoutFeeds'));
 const ScoutReview = lazy(() => import('./pages/admin/ScoutReview'));
@@ -163,6 +166,8 @@ export default function App() {
         <Route path="governance/policies" element={<PermissionRoute {...POLICIES_REQUIREMENT}><GovernancePolicies /></PermissionRoute>} />
         <Route path="governance/policies/new" element={<PermissionRoute {...POLICY_AUTHOR_REQUIREMENT}><PolicyNew /></PermissionRoute>} />
         <Route path="governance/policies/:id" element={<PermissionRoute {...POLICIES_REQUIREMENT}><PolicyDetail /></PermissionRoute>} />
+        <Route path="governance/boards" element={<PermissionRoute {...BOARDS_REQUIREMENT}><GovernanceBoards /></PermissionRoute>} />
+        <Route path="governance/quorum" element={<PermissionRoute {...QUORUM_REQUIREMENT}><GovernanceQuorum /></PermissionRoute>} />
       </Route>
 
       {/* 404 */}

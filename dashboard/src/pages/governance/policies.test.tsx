@@ -3,9 +3,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { PolicyTable } from './GovernancePolicies';
 import { PolicyDetailView, DiffCard } from './PolicyDetail';
+import { BoardsView } from './GovernanceBoards';
+import { QuorumView } from './GovernanceQuorum';
+import QuorumEditor from './quorum/QuorumEditor';
 import CompileResult from './policies/CompileResult';
 import * as fx from '../../test/cpg-fixtures';
-import type { CompileRecord, CpgMe, PolicyDetail } from '../../api/cpg';
+import type { CompileRecord, CpgMe, PolicyDetail, QuorumVersion } from '../../api/cpg';
 
 function html(node: React.ReactElement): string {
   return renderToStaticMarkup(<MemoryRouter>{node}</MemoryRouter>);
@@ -142,5 +145,53 @@ describe('Policy detail', () => {
     expect(t).toContain('Tier Review required Prohibited');
     expect(t).toContain('Owning boards AI Review Board AI Review Board, Legal Board');
     expect(text(<DiffCard versions={[detail.versions[0]]} />)).toContain('only one version');
+  });
+});
+
+describe('Boards', () => {
+  it('lists members and the policies each board owns', () => {
+    const t = text(<BoardsView boards={fx.boards} policies={[fx.policyHead]} users={fx.users} canManage onEdit={noop} onArchive={noop} onAddMember={noop} onRemoveMember={noop} />);
+    expect(t).toContain('AI Review Board');
+    expect(t).toContain('approver@example.org');
+    expect(t).toContain('corp.no-gpt-4-32k');
+    expect(t).toContain('Without members nobody can review');
+    expect(t).toContain('Choose a user...');
+    expectClean(t);
+  });
+
+  it('readers without boards.manage see counts, not names; empty state', () => {
+    const readerBoards = fx.boards.map((b) => ({ ...b, members: null }));
+    const t = text(<BoardsView boards={readerBoards} policies={[]} users={null} canManage={false} onEdit={noop} onArchive={noop} onAddMember={noop} onRemoveMember={noop} />);
+    expect(t).toContain('1 member. Names are visible to people who manage boards.');
+    expect(t).not.toContain('approver@example.org');
+    expect(t).not.toContain('Archive');
+    expect(text(<BoardsView boards={[]} policies={[]} users={null} canManage={false} onEdit={noop} onArchive={noop} onAddMember={noop} onRemoveMember={noop} />)).toContain('No review boards yet');
+  });
+});
+
+describe('Quorum', () => {
+  it('shows the version in force, its signature, the fixed rules and every tier', () => {
+    const t = text(<QuorumView version={fx.quorumVersion as QuorumVersion} boardNames={new Map()} policyNames={new Map()} names={names} />);
+    expect(t).toContain('Version 2 (in force)');
+    expect(t).toContain('owner@example.org');
+    expect(t).toContain('Nobody can approve their own proposal');
+    expect(t).toContain('Bulk decisions are never allowed on the Prohibited tier');
+    expect(t).toContain('Never allowed (fixed)');
+    expect(t).toContain('2 approvals; one from each owning board; expiry up to 90 days (default 30)');
+    expect(t).toContain('Proposals lapse after 30 days');
+    expect(t).toContain('None: every policy follows its tier.');
+    expectClean(t);
+  });
+
+  it('the editor locks prohibited bulk and saves only a changed, valid config with a note', () => {
+    const page = html(<QuorumEditor current={fx.quorumVersion as QuorumVersion} boards={fx.boards} policies={[fx.policyHead]} onCancel={noop} onSaved={noop} />);
+    const t = text(<QuorumEditor current={fx.quorumVersion as QuorumVersion} boards={fx.boards} policies={[fx.policyHead]} onCancel={noop} onSaved={noop} />);
+    expect(t).toContain('never allowed on the Prohibited tier (fixed, not configurable)');
+    expect(t).toContain('There is no setting for self-approval.');
+    expect(t).toContain('No changes yet.');
+    expect(page).toMatch(/<button[^>]*disabled=""[^>]*>Save as version 3<\/button>/);
+    expect(page).not.toContain('id="q-prohibited-bulk-approvals"');
+    expect(page).toContain('id="q-review-required-bulk-approvals"');
+    expectClean(t);
   });
 });

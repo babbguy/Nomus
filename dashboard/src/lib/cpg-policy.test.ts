@@ -5,6 +5,7 @@ import {
   describeRule, enforcementSummary, formatUtc, fourEyesStatus, jsonDiff, policyErrorMessage, userRoleLabel, versionDiff,
 } from './cpg-policy';
 import { compileInputProblems, ruleEditProblems, tomorrowUtc } from './cpg-policy-forms';
+import { pathLabel, quorumChanges, quorumIssues, removeAt, setAt, slotSummary, toggledSlot } from './cpg-quorum-form';
 
 const detail = fx.policyDetail as PolicyDetail;
 const meAs = (userId: string, permissions: string[]): CpgMe => fx.me({
@@ -164,5 +165,42 @@ describe('authoring form checks', () => {
     expect(ruleEditProblems(JSON.stringify({ schemaVersion: 1, match: { all: [{ kind: 'sdk_import', sdks: ['openai'] }] }, files: {}, message: 'Do not import the OpenAI SDK.' }))).toEqual([]);
     expect(ruleEditProblems(JSON.stringify({ ...fx.sdkRule, extra: 1 }))[0]).toMatch(/Unrecognized key/);
     expect(ruleEditProblems(JSON.stringify({ ...fx.sdkRule, match: { all: [] } }))[0]).toMatch(/^rule\.match\.all/);
+  });
+});
+
+describe('quorum form', () => {
+  it('the seed configuration is valid', () => {
+    expect(quorumIssues(fx.quorumConfig)).toEqual([]);
+  });
+
+  it('bulk can never be enabled on the prohibited tier', () => {
+    const bad = setAt(fx.quorumConfig, ['tiers', 'prohibited', 'bulk'], fx.quorumConfig.tiers['review-required'].bulk);
+    const issues = quorumIssues(bad);
+    expect(issues.some((i) => i.path === 'tiers.prohibited.bulk.allowed')).toBe(true);
+  });
+
+  it('reports out-of-range numbers and cross-field rules on the slot the admin edited', () => {
+    const zero = setAt(fx.quorumConfig, ['tiers', 'review-required', 'snippet', 'approvals'], 0);
+    expect(quorumIssues(zero)).toEqual([{ path: 'tiers.review-required.snippet.approvals', message: 'Number must be greater than or equal to 1' }]);
+    const inverted = setAt(fx.quorumConfig, ['tiers', 'prohibited', 'snippet', 'defaultExpiryDays'], 120);
+    expect(quorumIssues(inverted).map((i) => i.message)).toContain('defaultExpiryDays must be <= maxExpiryDays');
+    const tooLong = setAt(fx.quorumConfig, ['standingExceptions', 'maxExpiryDays'], 20);
+    const msgs = quorumIssues(tooLong).map((i) => `${i.path}: ${i.message}`);
+    expect(msgs).toContain('tiers.review-required.standing.maxExpiryDays: exceeds standingExceptions.maxExpiryDays');
+    expect(msgs).toContain('standingExceptions.defaultExpiryDays: must be <= maxExpiryDays');
+    expect(quorumIssues(setAt(fx.quorumConfig, ['policyApproval', 'approvals'], -1))[0].path).toBe('policyApproval.approvals');
+  });
+
+  it('updates are immutable; changes and labels are readable', () => {
+    const next = setAt(fx.quorumConfig, ['proposalLapseDays'], 45);
+    expect(fx.quorumConfig.proposalLapseDays).toBe(30);
+    expect(quorumChanges(fx.quorumConfig, next)).toEqual([{ field: 'Proposal lapses after (days)', before: '30', after: '45' }]);
+    const withOverride = setAt(next, ['policyOverrides', fx.POLICY_ID], { snippet: toggledSlot(true, undefined) });
+    expect(quorumChanges(next, withOverride, new Map([[fx.POLICY_ID, 'corp.no-gpt-4-32k']]))[0].field).toBe('Override for corp.no-gpt-4-32k');
+    expect(removeAt(withOverride, ['policyOverrides', fx.POLICY_ID]).policyOverrides).toEqual({});
+    expect(pathLabel('tiers.prohibited.snippet.approvals')).toBe('Prohibited · One finding (snippet) · Approvals');
+    expect(toggledSlot(false, fx.quorumConfig.tiers.prohibited.snippet)).toEqual({ allowed: false });
+    expect(slotSummary(fx.quorumConfig.tiers.prohibited.snippet)).toBe('2 approvals; one from each owning board; expiry up to 90 days (default 30)');
+    expect(slotSummary({ allowed: false })).toBe('Not allowed');
   });
 });
