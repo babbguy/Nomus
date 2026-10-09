@@ -21,7 +21,8 @@ import { preparePolicyRepo } from './cpg-scanner.mjs';
 import { uploads } from './cpg-cases.mjs';
 import { approvalPageChecks } from './cpg-browser.mjs';
 
-const REPO = 'github.com/gate-org/policy-repo';
+// canonicalRepo() form, as the GitHub Action and the extension send it, so the cpg-action area sees these decisions.
+const REPO = 'gate-org/policy-repo';
 const BRANCH = 'feat/policy-approvals';
 const RATIONALE = 'Reviewed for the support chat; the gateway client replaces it before expiry.';
 const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
@@ -207,6 +208,8 @@ export async function cpgApprovalsChecks(ctx) {
     gate.check('the merged PR closes the case as merged, and its signed closure record lists the CI run',
       merged.json?.closed === true && closure?.reason === 'merged' && closure.signatureValid === true && closure.record?.ciRunIds?.includes(v?.runId),
       'closed, merged, valid, run listed', `${merged.status} ${JSON.stringify(merged.json)} ${closure?.reason} ${closure?.signatureValid} ${JSON.stringify(closure?.record?.ciRunIds)}`);
+    // The cpg-action area runs the Action against these decisions.
+    data.cpg.decisions = { piiStatus: rejected?.status, legacyStatus: (await status(legacy))?.status };
   } finally {
     const revoke = await owner.client.post(`/api/v1/cpg/grants/${devGrant.json?.id}/revoke`, { reason: 'Gate: self-approval check done' });
     if (legalGrant) {
