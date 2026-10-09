@@ -6,13 +6,14 @@ policy in plain English, Nomus compiles it into a deterministic rule, and someon
 author approves it (see the [admin guide](../admin-guide/corporate-policies.md)).
 
 This page covers what developers see: corporate policy findings in the scanner CLI and in the VS Code
-extension.
+extension, and requesting a review of a finding from VS Code.
 
 ## Contents
 
 - [How it works](#how-it-works)
 - [Scanner CLI](#scanner-cli)
 - [VS Code extension](#vs-code-extension)
+- [Requesting a review in VS Code](#requesting-a-review-in-vs-code)
 - [When the policy bundle cannot be used](#when-the-policy-bundle-cannot-be-used)
 - [What is not in this release](#what-is-not-in-this-release)
 
@@ -178,6 +179,83 @@ Policies** (also the refresh button on the view) and **Nomus: Refresh All Views*
 | `nomus.corporate.enabled` | `true` | Show corporate policy findings. Local and advisory: switching it off does not change what CI enforces. |
 | `nomus.corporate.maxCacheAgeHours` | `72` | How long a verified, cached bundle may be used while the server is unreachable. |
 
+## Requesting a review in VS Code
+
+A blocking finding (needs review) can stay in your code if the board that owns the policy approves
+it. You ask for that from VS Code, on your branch, before or after you open a pull request. Nomus
+keeps one **review case** per repository and branch: requesting review again later updates the
+same case with a new revision instead of opening another one.
+
+**Request a review.** Run **Nomus: Request Policy Review** (also the pull-request button on the
+Corporate Policies view). The extension:
+
+1. checks that you are signed in as yourself (an organization API key in `nomus.apiKey` cannot
+   request reviews) and that you have the Developer role;
+2. reads the repository and branch from `.git` (a detached HEAD or a missing `origin` remote is
+   reported, and nothing is sent);
+3. scans the workspace with the verified policy bundle and asks Nomus which blocking findings
+   still need review;
+4. lists them, all selected, as `PROHIBITED · corp.no-direct-openai · src/chat.ts:12-14` with the
+   policy title underneath; clear the ones you do not want to send;
+5. asks for a justification for each one (20 to 4,000 characters): why the code is needed and how
+   its risk is controlled. After the first one you can choose **Use this justification for the
+   remaining findings** or **Write each one**;
+6. sends the findings and justifications, and confirms, for example
+   `Review case CPG-1A2B3C4D opened (revision 1). Sent to: AI Review Board, Legal Board.`, with an
+   **Open case** button for the dashboard.
+
+Every current corporate finding of the branch is sent with its code snippet, so the case is a full
+snapshot; the snippets stay on your Nomus server and are never put in emails or tickets.
+
+**Drafts.** Your justifications are saved as you type them and kept until Nomus accepts the
+request. If you press Esc, or the request fails, the next **Request Policy Review** fills them in
+again. Nothing is queued: a request that was not sent is never sent later without you.
+
+| Situation | What you see |
+|---|---|
+| No blocking findings | `Nothing needs review: no blocking corporate policy findings in this workspace.` |
+| Every blocking finding already approved or excepted | `Nothing needs review: every blocking finding is approved or excepted.` |
+| Signed in with an organization API key | `Requesting review needs your Nomus sign-in (not an organization API key). Sign in again?` with **Sign in** |
+| Esc during the justifications | `Review not requested. Your justifications are saved as a draft.` |
+| Nomus unreachable | `Nomus is unreachable: the review request was not sent. Your justifications are saved as a draft.` |
+| Nomus refuses the request | `The review request was not sent: <the reason>. Your justifications are saved as a draft.` |
+
+**The case in the Corporate Policies view.** Above the findings, the view shows your branch's case
+and what to do next:
+
+```
+Case CPG-1A2B3C4D · changes requested (revision 1)
+  AI Review Board: changes requested
+  Legal Board: needs review (1 blocking)
+  Changes requested by Dana (AI Review Board): "Route this call through the approved gateway…"
+  Open in dashboard
+```
+
+- Each board that owns one of your findings has a lane: `needs review (n blocking)`,
+  `changes requested`, or `decided`.
+- An open change request shows who asked and what they asked for. Click it (or use its reply
+  button) to answer.
+- With no case yet and blocking findings present, the view says
+  `No review case for this branch: run "Nomus: Request Policy Review"`.
+
+**Change requests.** When a reviewer asks for changes, the next refresh shows a warning,
+`CPG-1A2B3C4D: Changes requested by Dana (AI Review Board): "…"`, with **Reply** and **Open case**.
+To answer, run **Nomus: Reply to Change Request**, write your reply, and choose
+**This resolves the request** or **Reply without resolving it**. Once every request is resolved,
+the extension offers **Resubmit**, and the view shows `Every change request is resolved: resubmit
+for review` (or run **Nomus: Resubmit Policy Review**). Changing the code and requesting review
+again also puts the case back in review, with a new revision.
+
+**Refreshing and notifications.** The case is refreshed when you sign in, with **Nomus: Refresh
+Corporate Policies**, after each review command, and on save at most once a minute. Notifications
+are only for the case of the branch you have checked out: a warning for each new change request,
+and information when findings are decided or the case is closed (for example
+`Review case CPG-1A2B3C4D is closed: the pull request was merged.`).
+
+**Offline.** The view keeps the last case status it received, marked
+`as of 2026-10-09 13:45 UTC (offline)`. Requests, replies and resubmissions are not sent while
+offline, and the error says so; your text is kept as a draft.
+
 ## When the policy bundle cannot be used
 
 The extension never shows "no violations" when it cannot check. Every problem is visible, in the
@@ -198,6 +276,6 @@ policies were NOT checked when the bundle cannot be fetched (see [Exit codes](#s
 
 ## What is not in this release
 
-Requesting a review of a finding, review cases, approvals and exceptions, and the CI gate for
-corporate findings come in later releases. In this release the CLI and the extension show findings
-only.
+Reviewers' decisions (approvals, rejections and standing exceptions), the review pages of the
+dashboard and the CI gate for corporate findings come in later releases. Until then, a review case
+collects justifications, change requests and replies, and reviewers cannot approve findings yet.

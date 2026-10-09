@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 4 (review cases in VS Code): **Nomus: Request Policy Review**
+  scans the workspace, lists the branch's blocking findings that still need review, asks for a
+  justification for each (or one for all) and opens or updates the branch's review case; drafts are
+  kept until the server accepts them, so a cancelled, offline or refused request loses nothing. The
+  Corporate Policies view shows the case (state, lanes, open change requests) and what to do next,
+  with a warning when a reviewer requests changes, and replying and resubmitting work from the
+  editor. Offline, the last case status is shown marked "as of". The engine adds
+  `POST /api/v1/cpg/findings/status`, organization-key reads of the case by branch, the `boardId`
+  filter on the case list and a 4 MiB limit on review requests, and the GitHub App attaches a pull
+  request to its branch's case when it opens and closes the case when it closes.
 - Corporate policy governance, phase 4 (review cases API): developers request review for a branch's
   corporate findings (one case per branch; unchanged findings add no revision) with a justification per
   finding; board members request changes on their lane, and the developer replies, resolves and
