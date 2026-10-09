@@ -55,7 +55,7 @@ Response `200`:
 | 401 | `{"error":"Invalid email or password"}` (response time is padded to blunt user enumeration) |
 | 429 | per-IP limit exceeded |
 
-If `mustChangePassword` is `true` the dashboard routes the user to `/change-password`. The API enforces this too: until the password is changed, the session may only call `GET /auth/me`, `POST /auth/force-change-password` and `POST /auth/logout`. Every other session-authenticated endpoint (including `PATCH /auth/profile`, the `/org` routes, and the VS Code device sign-in callback) answers `403` with `{ "error": "...", "status": 403, "code": "password_change_required" }`. API keys are not affected.
+If `mustChangePassword` is `true` the dashboard routes the user to `/change-password`. The API enforces this too: until the password is changed, the session may only call `GET /auth/me`, `POST /auth/force-change-password` and `POST /auth/logout`. Every other session-authenticated endpoint (including `PATCH /auth/profile`, the `/org` routes, and the VS Code device sign-in callback) answers `403` with `{ "error": "...", "status": 403, "code": "password_change_required" }`. Organization API keys are not affected; a user-bound key (the VS Code extension key) is refused in the same way until its user has changed the password.
 
 ---
 
@@ -181,8 +181,12 @@ callback URI must use the `vscode://` scheme.
    { "apiKey": "nk_live_...", "orgName": "Nomus Admin", "userEmail": "you@example.com" }
    ```
 
-   The key is labeled "VS Code Extension" with scopes `read:policies`, `evaluate`, `stream`. Any
-   earlier active key with that label is revoked.
+   The key is labeled "VS Code Extension" with scopes `read:policies`, `evaluate`, `stream`, and is
+   **bound to the user who signed in**: it acts as that user, stops working when the user is
+   deactivated or moved to another organization, and gets `403 password_change_required` while the
+   user has a temporary password. Signing in again revokes only that user's earlier extension key;
+   other users' keys are not affected. (Before v1.2.0 the key was organization-wide and any earlier
+   "VS Code Extension" key in the organization was revoked.)
 
 Errors are `400` (missing or invalid state or code), `401` (not logged in), `429` (too many pending
 requests).

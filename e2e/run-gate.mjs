@@ -40,6 +40,8 @@ import { pipelineChecks } from './checks/pipeline.mjs';
 import { browserChecks } from './checks/browser.mjs';
 import { logChecks } from './checks/server-logs.mjs';
 import { resourceChecks, readProbe } from './checks/resources.mjs';
+import { cpgSetup } from './checks/cpg-setup.mjs';
+import { cpgRbacChecks } from './checks/cpg-rbac.mjs';
 
 const gateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -141,9 +143,26 @@ async function main() {
     const areas = [
       ['scanner', scannerChecks], ['action', actionChecks], ['mcp', mcpChecks], ['vscode', vscodeChecks],
       ['attestations', attestationChecks], ['rules-sse', rulesSseChecks], ['pipeline', pipelineChecks], ['browser', browserChecks],
+      // Corporate Policy Governance (v1.2.0): after every v1.1.0 area, against a
+      // second org created by cpg-setup.mjs, so no existing expectation changes.
+      ['cpg-rbac', cpgRbacChecks],
     ];
     for (const [area, fn] of areas) {
       if (!wants(area)) continue;
+      // The shared CPG setup runs once, before the first selected cpg-* area.
+      if (area.startsWith('cpg-')) {
+        let ready = false;
+        try {
+          ready = await cpgSetup(ctx);
+        } catch (err) {
+          gate.check('cpg-setup completed', false, 'no exception', errText(err));
+          console.error(err);
+        }
+        if (!ready) {
+          gate.blocked(`${area} checks`, 'the shared CPG setup (cpg-setup.mjs) failed');
+          continue;
+        }
+      }
       gate.section(area);
       try {
         await fn(ctx);

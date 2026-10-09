@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Corporate policy governance, phase 1 (engine): per-organization role-based access control.
+  Seven system roles (Org Admin, Policy Author, Policy Approver, Case Reviewer, Exception Approver,
+  Developer, Auditor), custom roles, org-, team- and repository-scoped grants, teams with
+  repository patterns, per-organization governance settings (off by default) and a hash-chained,
+  append-only audit log. New endpoints under `/api/v1/cpg` (`/me`, `/permissions`, `/roles`,
+  `/users`, `/grants/:id/revoke`, `/teams`, `/settings`, `/audit`) and
+  `POST /api/v1/tenants/:id/org-admins` for platform administrators to restore an Org Admin. See
+  `docs/admin-guide/roles-and-permissions.md` and `docs/api-reference/governance.md`.
+- Numbered, checksummed database migrations for the new tables, with foreign keys, CHECK
+  constraints and triggers that refuse updates and deletes on append-only tables. An edited
+  migration stops the engine at startup instead of drifting.
+
+### Changed
+- On upgrade, each organization's earliest member becomes Org Admin and every member becomes
+  Developer; platform administrators get no organization role. Developer keeps the v1.1.0 member
+  abilities (`PATCH /org`, organization API keys) as grants an Org Admin can remove.
+- `PATCH /api/v1/org`, `/api/v1/org/api-keys` and `GET /api/v1/org/members` now check the
+  `org.profile.update`, `org.api_keys.manage` and `org.members.read` permissions. Members keep
+  access through Developer, and platform administrator sessions keep v1.1.0 access.
+- A new member created in an organization with no active Org Admin also becomes its Org Admin.
+  Moving a user to another organization revokes their grants in the old one.
+- The VS Code extension key from device sign-in is now bound to the user who signed in. It stops
+  working when that user is deactivated or moved, and is refused with `password_change_required`
+  while the user has a temporary password.
+
+### Fixed
+- A second developer signing in to VS Code in the same organization revoked the first
+  developer's key. Signing in now replaces only your own extension key.
+
 ## [1.1.0] - 2026-10-08
 
 ### Security

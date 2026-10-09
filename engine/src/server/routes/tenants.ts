@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
 import { organizations } from '../../db/schema.js';
@@ -9,6 +10,11 @@ import { createApiKey, listApiKeys, revokeApiKey } from '../../tenant/api-keys.j
 import { logger } from '../../logger.js';
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { safeParseInt, safeJson, actorOf } from '../utils.js';
+import { rawSqlite } from '../../db/migrations/runner.js';
+import { ensureOrgRbac } from '../../cpg/rbac/seed.js';
+import { createGrant, getRoleByKey } from '../../cpg/rbac/grants.js';
+import { CpgError, cpgError, cpgErrorResponse } from '../../cpg/errors.js';
+import { grantResponseSchema, serializeGrant } from '../../cpg/contracts.js';
 
 export const tenantRoutes = new Hono<AppEnv>();
 
@@ -67,7 +73,11 @@ tenantRoutes.post('/', async (c) => {
     updatedAt: now,
   };
 
-  db.insert(organizations).values(org).run();
+  // The org and its CPG system roles and settings row are created together.
+  rawSqlite(db).transaction(() => {
+    db.insert(organizations).values(org).run();
+    ensureOrgRbac(db, org.id);
+  })();
 
   return c.json({
     id: org.id,
@@ -188,4 +198,36 @@ tenantRoutes.get('/:id/usage', (c) => {
   );
 
   return c.json({ orgId, since, stats });
+});
+
+// Grant Org Admin to a user of this org (E18). The platform operator's
+// bootstrap and recovery path for an org with no Org Admin; the only CPG
+// action a platform admin can take (design spec §3.4). Audited in the org's
+// CPG audit chain.
+const orgAdminGrantSchema = z.object({ userId: z.string().uuid() }).strict();
+
+tenantRoutes.post('/:id/org-admins', async (c) => {
+  const { data: body, error: jsonError } = await safeJson(c);
+  if (jsonError) return cpgError(c, 400, 'invalid_json', jsonError);
+  const parsed = orgAdminGrantSchema.safeParse(body);
+  if (!parsed.success) return cpgError(c, 400, 'invalid_input', 'Invalid input', parsed.error.issues);
+
+  const db = getDb();
+  const orgId = c.req.param('id');
+  const org = db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, orgId)).get();
+  if (!org) return cpgError(c, 404, 'not_found', 'Organization not found');
+
+  try {
+    ensureOrgRbac(db, orgId);
+    const role = getRoleByKey(db, orgId, 'org_admin');
+    if (!role) throw new CpgError(404, 'not_found', 'Org Admin role not found');
+    const { grant, created } = createGrant(db, {
+      orgId, userId: parsed.data.userId, roleId: role.id, scopeType: 'org', actor: actorOf(c),
+    });
+    logger.info({ orgId, userId: parsed.data.userId, grantId: grant.id, created, actor: actorOf(c) }, 'Org Admin granted by platform operator');
+    return c.json(grantResponseSchema.parse(serializeGrant(db, grant)), created ? 201 : 200);
+  } catch (err) {
+    if (err instanceof CpgError) return cpgErrorResponse(c, err);
+    throw err;
+  }
 });

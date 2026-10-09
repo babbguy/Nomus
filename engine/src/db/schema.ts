@@ -30,6 +30,9 @@ export const apiKeys = sqliteTable('api_keys', {
   expiresAt: text('expires_at'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').notNull(),
+  // CPG: set for user-bound keys (VS Code device sign-in); NULL for org keys.
+  // Added to existing databases by the alterations list in migrate.ts.
+  userId: text('user_id'),
 }, (table) => [
   index('idx_api_keys_hash').on(table.keyHash),
   index('idx_api_keys_org').on(table.orgId),

@@ -29,6 +29,19 @@ export function passwordChangeRequiredResponse(c: Context): Response {
 }
 
 /**
+ * Record who an API key acts as: a user-bound key (VS Code device sign-in)
+ * carries its user's id; an org key carries none.
+ */
+function setKeyIdentity(c: Context<AppEnv>, userId: string | null): void {
+  if (userId) {
+    c.set('userId', userId);
+    c.set('identity', 'user_key');
+  } else {
+    c.set('identity', 'org_key');
+  }
+}
+
+/**
  * API key authentication middleware.
  * Extracts Bearer token from Authorization header, resolves to tenant context.
  */
@@ -46,6 +59,12 @@ export function requireAuth(...requiredScopes: string[]) {
       throw new HTTPException(401, { message: 'Invalid or expired API key' });
     }
 
+    // A user-bound key acts as its user, so the temporary-password block
+    // applies to it exactly as to that user's session.
+    if (tenant.passwordChangeRequired) {
+      return passwordChangeRequiredResponse(c);
+    }
+
     if (requiredScopes.length > 0) {
       const hasAllScopes = requiredScopes.every((s) => tenant.scopes.includes(s));
       if (!hasAllScopes) {
@@ -60,6 +79,7 @@ export function requireAuth(...requiredScopes: string[]) {
     c.set('scopes', tenant.scopes);
     c.set('rateLimitRpm', tenant.rateLimitRpm);
     c.set('maxSseConnections', tenant.maxSseConnections);
+    setKeyIdentity(c, tenant.userId);
 
     const start = performance.now();
     await next();
@@ -111,6 +131,8 @@ export function requireSession(requiredRole?: 'platform_admin' | 'member') {
     // so apply the configured default request limit.
     c.set('orgId', user.orgId);
     c.set('userId', user.id);
+    c.set('identity', 'session');
+    c.set('userRole', user.role);
     c.set('rateLimitRpm', env().NOMUS_RATE_LIMIT_RPM);
     c.set('maxSseConnections', env().NOMUS_MAX_SSE_CONNECTIONS_PER_ORG);
     c.set('scopes', ['read:policies', 'stream', 'evaluate', ...(user.role === 'platform_admin' ? ['admin'] : [])]);
@@ -168,6 +190,8 @@ export function requireSessionOrApiKey(...requiredScopes: string[]) {
 
           c.set('orgId', user.orgId);
           c.set('userId', user.id);
+          c.set('identity', 'session');
+          c.set('userRole', user.role);
           c.set('rateLimitRpm', env().NOMUS_RATE_LIMIT_RPM);
           c.set('maxSseConnections', env().NOMUS_MAX_SSE_CONNECTIONS_PER_ORG);
           c.set('scopes', sessionScopes);
@@ -182,6 +206,10 @@ export function requireSessionOrApiKey(...requiredScopes: string[]) {
       const tenant = resolveApiKey(token);
 
       if (tenant) {
+        if (tenant.passwordChangeRequired) {
+          return passwordChangeRequiredResponse(c);
+        }
+
         if (requiredScopes.length > 0) {
           const hasAllScopes = requiredScopes.every((s) => tenant.scopes.includes(s));
           if (!hasAllScopes) {
@@ -194,6 +222,7 @@ export function requireSessionOrApiKey(...requiredScopes: string[]) {
         c.set('scopes', tenant.scopes);
         c.set('rateLimitRpm', tenant.rateLimitRpm);
         c.set('maxSseConnections', tenant.maxSseConnections);
+        setKeyIdentity(c, tenant.userId);
         await next();
         return;
       }

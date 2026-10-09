@@ -15,7 +15,8 @@ are unversioned. The dashboard calls the API same-origin at `/api/v1`.
 
 - [Authentication](./auth.md) - login, sessions, OAuth, device flow, API keys
 - [Health and status](./health.md) - `/health`, `/ready`, `/api/v1/status`, `/api/v1/admin/status`
-- [Your organization](./org.md) - profile, self-service API keys, member list (any signed-in user)
+- [Your organization](./org.md) - profile, self-service API keys, member list
+- [Governance](./governance.md) - roles, permissions, org users and grants, teams, governance settings and audit log (`/api/v1/cpg`)
 - [Scan findings](./scan.md) - upload and query scanner findings
 - [Sources and rules](./regulations.md) - add, edit and retire regulations and rules (admin)
 

@@ -92,7 +92,7 @@ Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and type `Nomus`:
 | `nomus.apiKey` | empty | Optional API key (an alternative to Sign In) |
 | `nomus.dashboardUrl` | empty | Dashboard URL (derived from the API URL if empty) |
 
-If the workspace folder contains a `.nomus.yml` (or `.nomus.yaml` / `.nomus.json`), it takes precedence over `nomus.jurisdictions`: the extension scans with that file's `jurisdictions`, `sector`, `data_types` and `ignore`, exactly as the Nomus CLI and GitHub Action do, so the editor and CI agree. The API key and API URL still come from Sign In and the settings above. An invalid `.nomus.yml` is reported as an error instead of being ignored.
+If the workspace folder contains a `.nomus.yml` (or `.nomus.yaml` / `.nomus.json`), it takes precedence over `nomus.jurisdictions`: the extension scans with that file's `jurisdictions`, `sector`, `data_types` and `ignore`, exactly as the Nomus CLI and GitHub Action do, so the editor and CI agree. The API key and API URL still come from Sign In and the settings above. Sign In issues a key bound to you: a teammate signing in to the same organization does not sign you out, and signing in again replaces only your own key. An invalid `.nomus.yml` is reported as an error instead of being ignored.
 
 ---
 
