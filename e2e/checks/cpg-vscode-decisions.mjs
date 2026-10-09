@@ -5,8 +5,10 @@
 //
 // dev@ requests review on a new branch of the policy-repo fixture. Its
 // findings already carry the decisions cpg-approvals made for the repository
-// (chat.ts approved, the PII finding rejected); a standing exception limited
-// to this branch excepts the legacy finding. A fresh extension host, given an
+// (chat.ts approved, the PII finding rejected). The branch adds a legacy file
+// whose snippet has no decision (old_chat.ts is approved by cpg-approvals, and
+// an approval outranks an exception, §7.4), and a standing exception limited
+// to this branch excepts it. A fresh extension host, given an
 // org key with read:policies (the by-branch status accepts it), polls the
 // branch's case and rebuilds the diagnostics. Afterwards the exception is
 // revoked, the case withdrawn, the Exception Approver grant revoked and
@@ -23,6 +25,7 @@ import { uploads } from './cpg-cases.mjs';
 import { writeGitDir } from './cpg-vscode.mjs';
 
 const REPO = 'gate-org/policy-repo';
+const BRANCH_FILE = 'src/legacy/branch_chat.ts';
 const BRANCH = 'feat/policy-decisions';
 const SEV = { 0: 'Error', 1: 'Warning', 2: 'Information', 3: 'Hint' };
 const inDays = (n) => new Date(Date.now() + n * 86_400_000).toISOString();
@@ -38,6 +41,15 @@ export async function cpgVscodeDecisionsChecks(ctx) {
   const work = path.join(outDir, 'work', 'cpg-vscode-decisions');
   const workspace = preparePolicyRepo(ctx, path.join(work, 'policy-repo'));
   writeGitDir(workspace, BRANCH, 'https://github.com/Gate-Org/Policy-Repo.git');
+  fs.writeFileSync(path.join(workspace, BRANCH_FILE), `import OpenAI from 'openai';
+
+const branchClient = new OpenAI();
+
+export async function branchAsk(question: string): Promise<string> {
+  const answer = await branchClient.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: question }] });
+  return answer.choices[0]?.message?.content ?? '';
+}
+`);
 
   const enable = await owner.client.patch('/api/v1/cpg/settings', { enabled: true });
   const keyRes = await owner.client.post('/api/v1/org/api-keys', { label: 'cpg vscode decisions gate', scopes: ['read:policies', 'evaluate'] });
@@ -54,7 +66,7 @@ export async function cpgVscodeDecisionsChecks(ctx) {
       { cwd: workspace, env: { NOMUS_API_KEY: keyRes.json.key }, timeout: 120_000 })).stdout);
     const findings = scan?.corporateFindings ?? [];
     const blocking = findings.filter((f) => f.blocking);
-    const legacy = blocking.find((f) => f.policyKey === 'corp.no-direct-openai' && f.file === 'src/legacy/old_chat.ts');
+    const legacy = blocking.find((f) => f.policyKey === 'corp.no-direct-openai' && f.file === BRANCH_FILE);
     const opened = await users.dev.client.post('/api/v1/cpg/cases/request-review', {
       repo: REPO, branch: BRANCH, headSha: null, bundleHash: scan?.corporate?.bundleHash, findings: uploads(workspace, findings),
       justifications: blocking.map((f) => ({ fingerprint: f.fingerprint, body: 'Needed for the support chat until the gateway client supports streaming.' })),
@@ -68,8 +80,8 @@ export async function cpgVscodeDecisionsChecks(ctx) {
     const finalVote = await users['legal-reviewer'].client.post(`/api/v1/cpg/proposals/${proposed.json?.id}/votes`, { vote: 'approve' });
     exceptionId = finalVote.json?.decisionIds?.[0] ?? null;
     const byStatus = Object.fromEntries((opened.json?.case?.resolutions ?? []).map((r) => [r.fingerprint, r.status]));
-    if (!gate.check(`dev@ requests review on ${BRANCH}: the repository's decisions already apply (chat.ts approved, the PII finding rejected); a branch-only standing exception excepts the legacy finding`,
-      opened.status === 201 && Object.values(byStatus).includes('approved') && Object.values(byStatus).includes('rejected') && finalVote.json?.proposalStatus === 'finalized' && !!exceptionId,
+    if (!gate.check(`dev@ requests review on ${BRANCH}: the repository's decisions already apply (chat.ts approved, the PII finding rejected); the branch adds an undecided legacy finding, and a branch-only standing exception for src/legacy/** is finalized`,
+      opened.status === 201 && !!legacy && Object.values(byStatus).includes('approved') && Object.values(byStatus).includes('rejected') && finalVote.json?.proposalStatus === 'finalized' && !!exceptionId,
       '201 with approved and rejected; exception finalized', `${opened.status} ${JSON.stringify(byStatus)} ${finalVote.status} ${finalVote.json?.proposalStatus}`)) return;
 
     // ── the extension: a fresh host on the same branch ──
@@ -93,7 +105,7 @@ export async function cpgVscodeDecisionsChecks(ctx) {
     };
     const shown = {
       chat: await corporate('src/chat.ts', 'typescript'),
-      legacy: await corporate('src/legacy/old_chat.ts', 'typescript'),
+      legacy: await corporate(BRANCH_FILE, 'typescript'),
       pii: await corporate('app/summarize.py', 'python'),
     };
     fs.writeFileSync(path.join(outDir, 'cpg-vscode-decisions-evidence.json'), JSON.stringify(shown, null, 2));
