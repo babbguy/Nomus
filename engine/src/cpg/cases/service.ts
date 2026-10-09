@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { canonicalJson, MAX_SNIPPET_LINES, normalizeSnippet, parseFingerprint, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
@@ -68,6 +68,20 @@ export function getCase(db: Db, orgId: string, caseId: string): CaseRow {
   return c;
 }
 
+/** A case that still accepts writes (§5.7: 409 case_closed otherwise). */
+export function openCase(db: Db, orgId: string, caseId: string): CaseRow {
+  const c = getCase(db, orgId, caseId);
+  if (c.closedAt) throw new CpgError(409, 'case_closed', 'The case is closed');
+  return c;
+}
+
+/** Every fingerprint must be a finding of the case's latest revision (422 unknown_fingerprint). */
+export function assertLatestFingerprints(db: Db, caseId: string, fingerprints: readonly string[]): void {
+  const known = new Set(latestFindings(db, caseId).map((f) => f.fingerprint));
+  const unknown = fingerprints.filter((fp) => !known.has(fp));
+  if (unknown.length > 0) throw new CpgError(422, 'unknown_fingerprint', 'Not a finding of the latest revision', { fingerprints: unknown });
+}
+
 /** §5.4: sha256 of the sorted fingerprints joined with newlines. */
 export function findingsDigest(fingerprints: readonly string[]): string {
   return sha256Hex([...fingerprints].sort().join('\n'));
@@ -121,8 +135,7 @@ export function findOrCreateCase(db: Db, key: CaseKey, actor: string): { case: C
  */
 export function addRevision(db: Db, orgId: string, caseId: string, input: RevisionInput, actor: string): RevisionResult {
   return rawSqlite(db).transaction((): RevisionResult => {
-    const c = getCase(db, orgId, caseId);
-    if (c.closedAt) throw new CpgError(409, 'case_closed', 'The case is closed');
+    const c = openCase(db, orgId, caseId);
     const now = new Date().toISOString();
     const findings = resolveFindings(db, orgId, input.findings, now);
 
@@ -222,16 +235,31 @@ function activeVersion(db: Db, orgId: string, policyKey: string, version: number
   return { id: row.id, policyId: row.policyId, tier: row.tier, enforceFrom: row.enforceFrom };
 }
 
-function addCaseEvent(db: Db, c: Pick<CaseRow, 'id' | 'orgId'>, event: CaseEvent, actor: string, details: Record<string, unknown>, createdAt: string): void {
+export function addCaseEvent(db: Db, c: Pick<CaseRow, 'id' | 'orgId'>, event: CaseEvent, actor: string, details: Record<string, unknown>, createdAt: string): void {
   const { seq } = db.select({ seq: sql<number>`coalesce(max(${cpgCaseEvents.seq}), 0) + 1` })
     .from(cpgCaseEvents).where(eq(cpgCaseEvents.caseId, c.id)).get()!;
   db.insert(cpgCaseEvents).values({ id: randomUUID(), caseId: c.id, orgId: c.orgId, seq, event, actor, details: canonicalJson(details), createdAt }).run();
 }
 
 /**
- * The facts of §5.2 over the latest revision. Decisions (Phase 5) and change
- * requests (4a.2) have no writer yet; they join these facts with their services.
+ * The case's change requests that no later revision or resubmit cleared
+ * (§5.3 row 5), each with whether a reply marked it resolved. Derived from
+ * the append-only case events, so resolving one is never a mutation.
  */
+export function openChangeRequests(db: Db, caseId: string): Map<string, { resolved: boolean }> {
+  const open = new Map<string, { resolved: boolean }>();
+  const events = db.select({ event: cpgCaseEvents.event, details: cpgCaseEvents.details }).from(cpgCaseEvents)
+    .where(eq(cpgCaseEvents.caseId, caseId)).orderBy(asc(cpgCaseEvents.seq)).all();
+  for (const { event, details } of events) {
+    const d = JSON.parse(details) as { commentId?: string; threadId?: string; resolves?: boolean; via?: string };
+    if (event === 'changes_requested') open.set(d.commentId!, { resolved: false });
+    else if (event === 'comment_added' && d.resolves === true && open.has(d.threadId!)) open.set(d.threadId!, { resolved: true });
+    else if (event === 'revision_added' || (event === 'submitted' && d.via === 'resubmit')) open.clear();
+  }
+  return open;
+}
+
+/** The facts of §5.2 over the latest revision. Decisions (Phase 5) have no writer yet. */
 function caseFacts(db: Db, caseId: string): CaseFacts {
   const blocking = new Set(latestFindings(db, caseId).filter(isBlocking).map((f) => f.fingerprint));
   const justified = new Set(db.selectDistinct({ fingerprint: cpgJustifications.fingerprint }).from(cpgJustifications)
@@ -239,12 +267,29 @@ function caseFacts(db: Db, caseId: string): CaseFacts {
   return {
     blockingUndecided: blocking.size,
     unjustified: [...blocking].filter((fp) => !justified.has(fp)).length,
-    openChangeRequests: 0,
+    openChangeRequests: openChangeRequests(db, caseId).size,
   };
 }
 
+/**
+ * Attach the case to its pull request (§5.4): `pr_attached` the first time,
+ * `pr_changed {from, to}` when the number differs. The CI evaluate route and
+ * the GitHub App call it; a closed case refuses it.
+ */
+export function attachPullRequest(db: Db, orgId: string, caseId: string, prNumber: number, actor: string): CaseRow {
+  return rawSqlite(db).transaction((): CaseRow => {
+    const c = openCase(db, orgId, caseId);
+    if (c.prNumber === prNumber) return c;
+    const now = new Date().toISOString();
+    db.update(cpgCases).set({ prNumber, updatedAt: now }).where(eq(cpgCases.id, caseId)).run();
+    addCaseEvent(db, c, c.prNumber === null ? 'pr_attached' : 'pr_changed', actor,
+      c.prNumber === null ? { prNumber } : { from: c.prNumber, to: prNumber }, now);
+    return getCase(db, orgId, caseId);
+  }).immediate();
+}
+
 /** Re-derive the projected state (§5.2) and record the move, refusing any §5.3 forbids. */
-function refreshCaseState(db: Db, c: CaseRow, actor: string, now: string): void {
+export function refreshCaseState(db: Db, c: CaseRow, actor: string, now: string): void {
   const to = deriveCaseState(caseFacts(db, c.id));
   if (to === c.state) return;
   assertTransition(c.state, to);

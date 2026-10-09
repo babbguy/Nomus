@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import { canonicalJson, sha256Hex } from './canonical.js';
 import { corporateRuleSchema } from './rule-schema.js';
-import { TIERS } from './vocab.js';
+import { FINGERPRINT_RE } from './fingerprint.js';
+import { CANONICAL_REPO_RE } from './repo.js';
+import { LANGUAGES, POLICY_KEY_RE, TIERS } from './vocab.js';
 
 /**
  * Client contracts shared by the engine, the VS Code extension and the
- * GitHub Action (design spec §8.6, §9.3). Phase 2 defines the bundle; the
- * review-case and CI contracts are added by later phases.
+ * GitHub Action (design spec §8.6, §9.3): the bundle (Phase 2) and the
+ * review-case contracts (Phase 4); the CI contracts arrive with Phase 6.
  *
  * The signed payload builders live here too, so the server that signs and
  * the client that verifies build byte-identical canonical JSON.
@@ -89,6 +91,93 @@ export interface PolicyActivationPayload {
   enforceFrom: string;
   activatedAt: string;
 }
+
+// ─── Review cases (§9.3): request review, case status, finding resolutions ──
+
+const repo = z.string().regex(CANONICAL_REPO_RE);
+const branch = z.string().min(1).max(255).refine((b) => !b.startsWith('refs/') && !/[\u0000-\u001f]/.test(b), 'a branch name without refs/ or control characters');
+const fingerprint = z.string().regex(FINGERPRINT_RE);
+const relPath = z.string().min(1).max(500).refine((p) => !p.startsWith('/') && !p.includes('..') && !p.includes('\\'), 'a repo-relative path');
+
+export const findingUploadSchema = z.object({
+  fingerprint,
+  policyKey: z.string().regex(POLICY_KEY_RE),
+  policyVersion: z.number().int().min(1),
+  filePath: relPath,
+  startLine: z.number().int().min(1),
+  endLine: z.number().int().min(1),
+  language: z.enum(LANGUAGES),
+  /** Normalized snippet text; may be left out when the server already stores it. */
+  snippet: z.string().max(32768).optional(),
+}).strict().refine((f) => f.endLine >= f.startLine, 'endLine must be >= startLine');
+
+export const justificationInputSchema = z.object({ fingerprint, body: z.string().trim().min(20).max(4000) }).strict();
+
+export const requestReviewRequestSchema = z.object({
+  repo,
+  branch,
+  headSha: z.string().regex(/^[0-9a-f]{40}$/).nullable(),
+  bundleHash: sha256,
+  findings: z.array(findingUploadSchema).min(1).max(500),
+  justifications: z.array(justificationInputSchema).max(500),
+}).strict();
+
+export const findingResolutionSchema = z.object({
+  fingerprint,
+  status: z.enum(['advisory', 'grace', 'approved', 'excepted', 'rejected', 'expired', 'pending', 'changes_requested', 'needs_review']),
+  blocking: z.boolean(),
+  tier: z.enum(TIERS),
+  /** Null only for a finding of a retired policy. */
+  enforceFrom: isoDate.nullable(),
+  decisionId: z.string().uuid().nullable(),
+  exceptionDecisionId: z.string().uuid().nullable(),
+  expiresAt: isoDate.nullable(),
+}).strict();
+
+export const caseStatusSchema = z.object({
+  id: z.string().uuid(),
+  ref: z.string(),
+  repo,
+  branch,
+  prNumber: z.number().int().nullable(),
+  state: z.enum(['open', 'in_review', 'changes_requested', 'decided', 'closed']),
+  closeReason: z.string().nullable(),
+  latestRevision: z.number().int(),
+  url: z.string().url(),
+  lanes: z.array(z.object({
+    boardId: z.string().uuid(),
+    boardName: z.string(),
+    state: z.enum(['needs_review', 'changes_requested', 'decided']),
+    blocking: z.number().int(),
+    decided: z.number().int(),
+  }).strict()),
+  openChangeRequests: z.array(z.object({
+    commentId: z.string().uuid(),
+    boardName: z.string(),
+    authorName: z.string(),
+    body: z.string(),
+    fingerprints: z.array(fingerprint),
+    createdAt: isoDate,
+  }).strict()),
+  resolutions: z.array(findingResolutionSchema),
+  updatedAt: isoDate,
+}).strict();
+
+export const requestReviewResponseSchema = z.object({
+  created: z.boolean(),
+  revisionCreated: z.boolean(),
+  case: caseStatusSchema,
+}).strict();
+
+export const caseByBranchResponseSchema = z.object({ case: caseStatusSchema.nullable() }).strict();
+
+export const findingsStatusRequestSchema = z.object({ repo, branch, fingerprints: z.array(fingerprint).min(1).max(1000) }).strict();
+export const findingsStatusResponseSchema = z.object({ items: z.array(findingResolutionSchema), evaluatedAt: isoDate }).strict();
+
+export type FindingUpload = z.infer<typeof findingUploadSchema>;
+export type RequestReviewRequest = z.infer<typeof requestReviewRequestSchema>;
+export type FindingResolution = z.infer<typeof findingResolutionSchema>;
+export type CaseStatus = z.infer<typeof caseStatusSchema>;
 
 /** The activation payload of a bundle policy, as the server signed it (§8.5). */
 export function policyActivationPayload(orgId: string, p: Omit<BundlePolicy, 'activationSignature' | 'rule'>): PolicyActivationPayload {

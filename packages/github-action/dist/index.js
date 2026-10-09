@@ -274293,15 +274293,163 @@ function validateCorporateRule(input) {
     return reasons.length === 0 ? { ok: true, rule, reasons: [] } : { ok: false, rule: null, reasons };
 }
 //# sourceMappingURL=rule-schema.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/fingerprint.js
+
+/**
+ * The corporate finding fingerprint (design spec §6). This is the only
+ * implementation: the engine, the VS Code extension and the GitHub Action
+ * all import it, so an approval recorded by the server matches the finding
+ * the editor and CI compute.
+ *
+ *   fingerprint = sha256(normalizeSnippet(snippet)) + ':' + policyKey + ':' + policyVersion
+ *
+ * The file path and line numbers are deliberately not part of it (owner
+ * decision D10): moving code does not re-flag it, editing it does.
+ */
+/** The largest snippet range, in lines; longer ranges are truncated and flagged. */
+const MAX_SNIPPET_LINES = 400;
+/**
+ * Exactly three operations (§6.2): CRLF and lone CR become LF; trailing
+ * whitespace is stripped from every line; runs of blank lines collapse to
+ * one. Comments, indentation, case and Unicode form are left alone, so any
+ * semantic edit changes the hash.
+ */
+function normalizeSnippet(s) {
+    const lines = s.replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((l) => l.trimEnd());
+    const out = [];
+    for (const l of lines) {
+        if (l === '' && out.length > 0 && out[out.length - 1] === '')
+            continue;
+        out.push(l);
+    }
+    return out.join('\n');
+}
+/** sha256 of the UTF-8 bytes of the normalized snippet, lowercase hex. */
+function snippetHash(snippet) {
+    return (0,external_node_crypto_.createHash)('sha256').update(normalizeSnippet(snippet), 'utf8').digest('hex');
+}
+function fingerprintOf(snippet, policyKey, policyVersion) {
+    if (policyKey.includes(':'))
+        throw new Error(`policyKey may not contain ':' (${policyKey})`);
+    if (!Number.isInteger(policyVersion) || policyVersion < 1)
+        throw new Error(`policyVersion must be a positive integer (${policyVersion})`);
+    return `${snippetHash(snippet)}:${policyKey}:${policyVersion}`;
+}
+const FINGERPRINT_RE = /^[0-9a-f]{64}:corp\.[a-z0-9][a-z0-9._-]{0,84}:[1-9][0-9]{0,6}$/;
+/** Split a fingerprint on its first and last ':' (§6.3). Returns null when malformed. */
+function parseFingerprint(fp) {
+    if (!FINGERPRINT_RE.test(fp))
+        return null;
+    const first = fp.indexOf(':');
+    const last = fp.lastIndexOf(':');
+    return { snippetHash: fp.slice(0, first), policyKey: fp.slice(first + 1, last), policyVersion: Number(fp.slice(last + 1)) };
+}
+/** Drop one leading U+FEFF (§6.1): `readFileSync` keeps a BOM that VS Code's `getText()` never has. */
+function stripBom(content) {
+    return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+}
+/** Split file content into lines on CRLF, CR or LF (§6.1); line N is element N-1. */
+function splitLines(content) {
+    return content.split(/\r\n|\r|\n/);
+}
+/**
+ * The snippet of a matched range (§6.1): widen by the context lines, clamp
+ * to the file, cap at {@link MAX_SNIPPET_LINES} lines. `lines` comes from
+ * {@link splitLines} of BOM-stripped content.
+ */
+function extractSnippet(lines, start, end, contextBefore = 0, contextAfter = 0) {
+    const total = Math.max(lines.length, 1);
+    let s = Math.max(1, Math.min(start, end) - contextBefore);
+    let e = Math.min(total, Math.max(start, end) + contextAfter);
+    if (s > total)
+        s = total;
+    if (e < s)
+        e = s;
+    let truncated = false;
+    if (e - s + 1 > MAX_SNIPPET_LINES) {
+        e = s + MAX_SNIPPET_LINES - 1;
+        truncated = true;
+    }
+    return { startLine: s, endLine: e, snippet: lines.slice(s - 1, e).join('\n'), truncated };
+}
+//# sourceMappingURL=fingerprint.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/repo.js
+/**
+ * Repository identity (design spec §2.2): lowercase `owner/name` for
+ * github.com, `host/owner/name` for any other host. The engine, the
+ * extension and the action all canonicalise through {@link canonicalRepo},
+ * so a case opened from the editor and a CI run of the same repository land
+ * on the same record.
+ */
+const CANONICAL_REPO_RE = /^[a-z0-9.-]+(\/[a-z0-9._-]+){1,2}$/;
+/**
+ * Canonicalise a repository reference: `owner/name`, `host/owner/name`,
+ * `https://host/owner/name(.git)`, `git@host:owner/name(.git)` or
+ * `ssh://git@host[:port]/owner/name(.git)`. Returns null when the input is
+ * not a repository reference.
+ */
+function canonicalRepo(input) {
+    if (typeof input !== 'string')
+        return null;
+    let s = input.trim();
+    if (s.length === 0 || s.length > 400)
+        return null;
+    let host = null;
+    let path;
+    const scp = /^[\w.-]+@([\w.-]+):(?!\/)(.+)$/.exec(s); // git@host:owner/name
+    if (scp) {
+        host = scp[1];
+        path = scp[2];
+    }
+    else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+        let url;
+        try {
+            url = new URL(s);
+        }
+        catch {
+            return null;
+        }
+        if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol))
+            return null;
+        host = url.hostname;
+        path = url.pathname;
+    }
+    else {
+        path = s;
+    }
+    s = path.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+    const parts = s.split('/');
+    if (host !== null) {
+        if (parts.length !== 2)
+            return null;
+        parts.unshift(host);
+    }
+    if (parts.length < 2 || parts.length > 3)
+        return null;
+    if (parts.length === 3 && parts[0].toLowerCase() === 'github.com')
+        parts.shift();
+    if (parts.some((p) => p === '' || p === '.' || p === '..'))
+        return null;
+    const repo = parts.join('/').toLowerCase();
+    return CANONICAL_REPO_RE.test(repo) && repo.length <= 200 ? repo : null;
+}
+function isCanonicalRepo(repo) {
+    return canonicalRepo(repo) === repo;
+}
+//# sourceMappingURL=repo.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/contracts.js
+
+
 
 
 
 
 /**
  * Client contracts shared by the engine, the VS Code extension and the
- * GitHub Action (design spec §8.6, §9.3). Phase 2 defines the bundle; the
- * review-case and CI contracts are added by later phases.
+ * GitHub Action (design spec §8.6, §9.3): the bundle (Phase 2) and the
+ * review-case contracts (Phase 4); the CI contracts arrive with Phase 6.
  *
  * The signed payload builders live here too, so the server that signs and
  * the client that verifies build byte-identical canonical JSON.
@@ -274358,6 +274506,78 @@ function bundleHashOf(policies) {
 function bundleSignedText(b) {
     return canonicalJson({ kind: BUNDLE_KIND, orgId: b.orgId, enabled: b.enabled, bundleHash: b.bundleHash, generatedAt: b.generatedAt });
 }
+// ─── Review cases (§9.3): request review, case status, finding resolutions ──
+const repo = stringType().regex(CANONICAL_REPO_RE);
+const branch = stringType().min(1).max(255).refine((b) => !b.startsWith('refs/') && !/[\u0000-\u001f]/.test(b), 'a branch name without refs/ or control characters');
+const fingerprint = stringType().regex(FINGERPRINT_RE);
+const relPath = stringType().min(1).max(500).refine((p) => !p.startsWith('/') && !p.includes('..') && !p.includes('\\'), 'a repo-relative path');
+const findingUploadSchema = objectType({
+    fingerprint,
+    policyKey: stringType().regex(POLICY_KEY_RE),
+    policyVersion: numberType().int().min(1),
+    filePath: relPath,
+    startLine: numberType().int().min(1),
+    endLine: numberType().int().min(1),
+    language: enumType(LANGUAGES),
+    /** Normalized snippet text; may be left out when the server already stores it. */
+    snippet: stringType().max(32768).optional(),
+}).strict().refine((f) => f.endLine >= f.startLine, 'endLine must be >= startLine');
+const justificationInputSchema = objectType({ fingerprint, body: stringType().trim().min(20).max(4000) }).strict();
+const requestReviewRequestSchema = objectType({
+    repo,
+    branch,
+    headSha: stringType().regex(/^[0-9a-f]{40}$/).nullable(),
+    bundleHash: sha256,
+    findings: arrayType(findingUploadSchema).min(1).max(500),
+    justifications: arrayType(justificationInputSchema).max(500),
+}).strict();
+const findingResolutionSchema = objectType({
+    fingerprint,
+    status: enumType(['advisory', 'grace', 'approved', 'excepted', 'rejected', 'expired', 'pending', 'changes_requested', 'needs_review']),
+    blocking: booleanType(),
+    tier: enumType(TIERS),
+    /** Null only for a finding of a retired policy. */
+    enforceFrom: isoDate.nullable(),
+    decisionId: stringType().uuid().nullable(),
+    exceptionDecisionId: stringType().uuid().nullable(),
+    expiresAt: isoDate.nullable(),
+}).strict();
+const caseStatusSchema = objectType({
+    id: stringType().uuid(),
+    ref: stringType(),
+    repo,
+    branch,
+    prNumber: numberType().int().nullable(),
+    state: enumType(['open', 'in_review', 'changes_requested', 'decided', 'closed']),
+    closeReason: stringType().nullable(),
+    latestRevision: numberType().int(),
+    url: stringType().url(),
+    lanes: arrayType(objectType({
+        boardId: stringType().uuid(),
+        boardName: stringType(),
+        state: enumType(['needs_review', 'changes_requested', 'decided']),
+        blocking: numberType().int(),
+        decided: numberType().int(),
+    }).strict()),
+    openChangeRequests: arrayType(objectType({
+        commentId: stringType().uuid(),
+        boardName: stringType(),
+        authorName: stringType(),
+        body: stringType(),
+        fingerprints: arrayType(fingerprint),
+        createdAt: isoDate,
+    }).strict()),
+    resolutions: arrayType(findingResolutionSchema),
+    updatedAt: isoDate,
+}).strict();
+const requestReviewResponseSchema = objectType({
+    created: booleanType(),
+    revisionCreated: booleanType(),
+    case: caseStatusSchema,
+}).strict();
+const caseByBranchResponseSchema = objectType({ case: caseStatusSchema.nullable() }).strict();
+const findingsStatusRequestSchema = objectType({ repo, branch, fingerprints: arrayType(fingerprint).min(1).max(1000) }).strict();
+const findingsStatusResponseSchema = objectType({ items: arrayType(findingResolutionSchema), evaluatedAt: isoDate }).strict();
 /** The activation payload of a bundle policy, as the server signed it (§8.5). */
 function policyActivationPayload(orgId, p) {
     return {
@@ -274527,88 +274747,6 @@ function languageOf(path) {
     return 'other';
 }
 //# sourceMappingURL=languages.js.map
-;// CONCATENATED MODULE: ../scanner/dist/corporate/fingerprint.js
-
-/**
- * The corporate finding fingerprint (design spec §6). This is the only
- * implementation: the engine, the VS Code extension and the GitHub Action
- * all import it, so an approval recorded by the server matches the finding
- * the editor and CI compute.
- *
- *   fingerprint = sha256(normalizeSnippet(snippet)) + ':' + policyKey + ':' + policyVersion
- *
- * The file path and line numbers are deliberately not part of it (owner
- * decision D10): moving code does not re-flag it, editing it does.
- */
-/** The largest snippet range, in lines; longer ranges are truncated and flagged. */
-const MAX_SNIPPET_LINES = 400;
-/**
- * Exactly three operations (§6.2): CRLF and lone CR become LF; trailing
- * whitespace is stripped from every line; runs of blank lines collapse to
- * one. Comments, indentation, case and Unicode form are left alone, so any
- * semantic edit changes the hash.
- */
-function normalizeSnippet(s) {
-    const lines = s.replace(/\r\n?/g, '\n')
-        .split('\n')
-        .map((l) => l.trimEnd());
-    const out = [];
-    for (const l of lines) {
-        if (l === '' && out.length > 0 && out[out.length - 1] === '')
-            continue;
-        out.push(l);
-    }
-    return out.join('\n');
-}
-/** sha256 of the UTF-8 bytes of the normalized snippet, lowercase hex. */
-function snippetHash(snippet) {
-    return (0,external_node_crypto_.createHash)('sha256').update(normalizeSnippet(snippet), 'utf8').digest('hex');
-}
-function fingerprintOf(snippet, policyKey, policyVersion) {
-    if (policyKey.includes(':'))
-        throw new Error(`policyKey may not contain ':' (${policyKey})`);
-    if (!Number.isInteger(policyVersion) || policyVersion < 1)
-        throw new Error(`policyVersion must be a positive integer (${policyVersion})`);
-    return `${snippetHash(snippet)}:${policyKey}:${policyVersion}`;
-}
-const FINGERPRINT_RE = /^[0-9a-f]{64}:corp\.[a-z0-9][a-z0-9._-]{0,84}:[1-9][0-9]{0,6}$/;
-/** Split a fingerprint on its first and last ':' (§6.3). Returns null when malformed. */
-function parseFingerprint(fp) {
-    if (!FINGERPRINT_RE.test(fp))
-        return null;
-    const first = fp.indexOf(':');
-    const last = fp.lastIndexOf(':');
-    return { snippetHash: fp.slice(0, first), policyKey: fp.slice(first + 1, last), policyVersion: Number(fp.slice(last + 1)) };
-}
-/** Drop one leading U+FEFF (§6.1): `readFileSync` keeps a BOM that VS Code's `getText()` never has. */
-function stripBom(content) {
-    return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
-}
-/** Split file content into lines on CRLF, CR or LF (§6.1); line N is element N-1. */
-function splitLines(content) {
-    return content.split(/\r\n|\r|\n/);
-}
-/**
- * The snippet of a matched range (§6.1): widen by the context lines, clamp
- * to the file, cap at {@link MAX_SNIPPET_LINES} lines. `lines` comes from
- * {@link splitLines} of BOM-stripped content.
- */
-function extractSnippet(lines, start, end, contextBefore = 0, contextAfter = 0) {
-    const total = Math.max(lines.length, 1);
-    let s = Math.max(1, Math.min(start, end) - contextBefore);
-    let e = Math.min(total, Math.max(start, end) + contextAfter);
-    if (s > total)
-        s = total;
-    if (e < s)
-        e = s;
-    let truncated = false;
-    if (e - s + 1 > MAX_SNIPPET_LINES) {
-        e = s + MAX_SNIPPET_LINES - 1;
-        truncated = true;
-    }
-    return { startLine: s, endLine: e, snippet: lines.slice(s - 1, e).join('\n'), truncated };
-}
-//# sourceMappingURL=fingerprint.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/matcher.js
 
 
