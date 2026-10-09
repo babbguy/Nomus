@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 4 (review cases API): developers request review for a branch's
+  corporate findings (one case per branch; unchanged findings add no revision) with a justification per
+  finding; board members request changes on their lane, and the developer replies, resolves and
+  resubmits. Reviewer context explains each flagged snippet with the configured LLM provider, always
+  labelled with provider and model, on by default when a provider is configured and switchable off;
+  failures are recorded and can be retried. Closing a case signs a closure record that the stored
+  history reproduces. Endpoints under `/api/v1/cpg/cases` (see the API reference).
 - Corporate policy governance, phase 4 (review cases, engine core): the review case store, with
   one open case per organization, repository and branch, and revisions that snapshot the branch's
   corporate findings (no new revision when nothing changed; new, carried and resolved counts). The
