@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 
 const NOW = '2026-10-09T12:00:00.000Z';
+/** A valid corporate rule, so the org's signed bundle (and CI evaluate) can be built from fixture policies. */
+const RULE = JSON.stringify({ schemaVersion: 1, match: { all: [{ kind: 'sdk_call', sdks: ['openai'] }] }, files: { include: ['**/*'] }, message: 'Call OpenAI only through the gateway.' });
 
 export function caseFixtures(sqlite: Database.Database) {
   const run = (sql: string, ...params: unknown[]) => sqlite.prepare(sql).run(...params);
@@ -27,12 +29,14 @@ export function caseFixtures(sqlite: Database.Database) {
     run(`INSERT INTO cpg_compile_records (id, org_id, requested_by, input_text, input_hash, examples, prompt_version, status, compiled_rule, compiled_rule_hash, created_at)
          VALUES (?, ?, ?, 'A policy text that is long enough.', ?, '{}', 1, 'compiled', '{}', ?, ?)`, compileId, org, author, h, h, NOW);
     run(`INSERT INTO cpg_policy_versions (id, policy_id, org_id, version, kind, title, plain_text, tier, owning_board_ids, rule, rule_hash, compile_record_id, edited_from_compile, created_by, created_at)
-         VALUES (?, ?, ?, 1, 'define', ?, 'text', ?, ?, '{}', ?, ?, 0, ?, ?)`, versionId, policyId, org, `Policy ${key}`, tier, JSON.stringify(boards), h, compileId, author, NOW);
+         VALUES (?, ?, ?, 1, 'define', ?, 'text', ?, ?, ?, ?, ?, 0, ?, ?)`, versionId, policyId, org, `Policy ${key}`, tier, JSON.stringify(boards), RULE, h, compileId, author, NOW);
     if (opts.state === 'proposed') {
       run("INSERT INTO cpg_policy_heads (policy_id, org_id, state, pending_version_id, updated_at) VALUES (?, ?, 'proposed', ?, ?)", policyId, org, versionId, NOW);
     } else {
       run(`INSERT INTO cpg_policy_heads (policy_id, org_id, state, active_version_id, active_version, enforce_from, activation_signature, updated_at)
            VALUES (?, ?, 'active', ?, 1, ?, 'sig', ?)`, policyId, org, versionId, opts.enforceFrom ?? NOW, NOW);
+      run("INSERT INTO cpg_policy_version_events (id, version_id, org_id, event, actor, details, created_at) VALUES (?, ?, ?, 'activated', 'test', ?, ?)",
+        randomUUID(), versionId, org, JSON.stringify({ activatedAt: NOW }), NOW);
     }
     return versionId;
   }

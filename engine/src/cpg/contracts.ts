@@ -5,7 +5,8 @@ import { cpgRoles, cpgTeamRepos, cpgUserRoles } from '../db/schema-cpg.js';
 import { PERMISSION_KEYS } from './rbac/catalog.js';
 import { rolePermissionKeys, type GrantRow, type RoleRow } from './rbac/grants.js';
 import {
-  CANONICAL_REPO_RE, FINGERPRINT_RE, LANGUAGES, POLICY_KEY_RE, TIERS, caseStatusSchema, corporateRuleSchema, requestReviewRequestSchema,
+  CANONICAL_REPO_RE, FINGERPRINT_RE, LANGUAGES, POLICY_KEY_RE, TIERS, caseStatusSchema, ciEvaluateResponseSchema, corporateRuleSchema, findingResolutionSchema,
+  requestReviewRequestSchema,
 } from '@nomus/scanner/corporate';
 import { quorumConfigSchema } from './quorum/schema.js';
 import { requirementSchema } from './quorum/evaluate.js';
@@ -768,3 +769,29 @@ export type ProposalVoteResponse = z.infer<typeof proposalVoteSchema>;
 export type DecisionResponse = z.infer<typeof decisionResponseSchema>;
 export type RevocationResponse = z.infer<typeof revocationResponseSchema>;
 export type StandingException = z.infer<typeof standingExceptionSchema>;
+
+// ─── Phase 6: CI runs (E63) ─────────────────────────────────────────────
+
+export const ciRunListQuerySchema = z.object({
+  repo: z.string().regex(CANONICAL_REPO_RE).optional(),
+  sha: z.string().regex(/^[0-9a-f]{40}$/).optional(),
+  caseId: uuid.optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  cursor: z.string().max(200).optional(),
+}).strict();
+
+const ciCountsSchema = ciEvaluateResponseSchema.shape.counts;
+
+/** A recorded CI evaluation with its signed verdict (§2.3 T31); `findings` carry no snippet text. */
+export const ciRunResponseSchema = z.object({
+  id: uuid, repo: z.string(), branch: z.string(), prNumber: z.number().int().nullable(), headSha: z.string(), eventName: z.string(),
+  bundleHash: sha256Hex, scannedFileCount: z.number().int(), verdict: z.enum(['pass', 'fail']), counts: ciCountsSchema, caseId: uuid.nullable(),
+  findings: z.array(z.object({
+    fingerprint: fingerprintSchema, filePath: z.string(), startLine: z.number().int(), endLine: z.number().int(),
+    status: findingResolutionSchema.shape.status, decisionId: uuid.nullable(), exceptionDecisionId: uuid.nullable(),
+  }).strict()),
+  evaluatedAt: isoDate,
+  /** Canonical JSON (§11.2), signed with the instance Ed25519 key; verify it offline against /.well-known/nomus-keys. */
+  signedPayload: z.string(), signature: z.string(), signatureValid: z.boolean(),
+}).strict();
+export const ciRunListResponseSchema = z.object({ items: z.array(ciRunResponseSchema), nextCursor: z.string().nullable() }).strict();

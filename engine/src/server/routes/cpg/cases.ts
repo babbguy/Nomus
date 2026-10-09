@@ -1,5 +1,4 @@
 import { Hono, type Context } from 'hono';
-import { bodyLimit } from 'hono/body-limit';
 import { and, desc, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
@@ -30,8 +29,8 @@ import {
   caseByBranchQuerySchema, caseListQuerySchema, caseListResponseSchema, closeCaseRequestSchema, commentRequestSchema, commentResponseSchema,
   emptyRequestSchema, justificationResponseSchema, requestChangesRequestSchema,
 } from '../../../cpg/contracts.js';
-import { CpgError, cpgError, notFound } from '../../../cpg/errors.js';
-import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission } from './helpers.js';
+import { CpgError, notFound } from '../../../cpg/errors.js';
+import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission, uploadBodyLimit } from './helpers.js';
 
 /**
  * Review cases (design spec §5, E40 to E53). Permissions are checked against
@@ -49,13 +48,6 @@ type Db = BetterSQLite3Database<any>;
 const auth = (userKey: boolean) => [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: userKey })] as const;
 /** Reads the CI action also makes: an org key with read:policies is accepted ("K[read:policies]"). */
 const readAuth = [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: true, allowOrgKey: true })] as const;
-
-/** §9.1: request-review bodies over 4 MiB are refused before they are read. */
-const MAX_REVIEW_BODY = 4 * 1024 * 1024;
-const reviewBodyLimit = bodyLimit({
-  maxSize: MAX_REVIEW_BODY,
-  onError: (c) => cpgError(c, 413, 'payload_too_large', 'The request body is over 4 MiB', { maxBytes: MAX_REVIEW_BODY }),
-});
 
 /** The case named by :id, with `permission` checked on its repository. */
 function caseFor(c: Context<AppEnv>, permission: PermissionKey): { db: Db; actor: CpgActor; kase: CaseRow } {
@@ -82,7 +74,7 @@ const origin = (c: Context<AppEnv>) => new URL(c.req.url).origin;
 const statusOf = (c: Context<AppEnv>, db: Db, kase: CaseRow) => caseStatus(db, getCase(db, kase.orgId, kase.id), origin(c));
 
 // E40 request review: find or create the branch's case, add a revision, record the justifications.
-cpgCaseRoutes.post('/cases/request-review', ...auth(true), reviewBodyLimit, handle(async (c) => {
+cpgCaseRoutes.post('/cases/request-review', ...auth(true), uploadBodyLimit, handle(async (c) => {
   const body = await parseBody(c, requestReviewRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();

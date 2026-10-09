@@ -69,6 +69,12 @@ export function getCase(db: Db, orgId: string, caseId: string): CaseRow {
   return c;
 }
 
+/** The open case of (org, repo, branch), if any (§5.1: at most one). */
+export function findOpenCase(db: Db, key: CaseKey): CaseRow | undefined {
+  return db.select().from(cpgCases)
+    .where(and(eq(cpgCases.orgId, key.orgId), eq(cpgCases.repo, key.repo), eq(cpgCases.branch, key.branch), isNull(cpgCases.closedAt))).get();
+}
+
 /** A case that still accepts writes (§5.7: 409 case_closed otherwise). */
 export function openCase(db: Db, orgId: string, caseId: string): CaseRow {
   const c = getCase(db, orgId, caseId);

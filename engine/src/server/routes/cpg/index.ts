@@ -10,6 +10,7 @@ import { cpgPolicyRoutes } from './policies.js';
 import { cpgBundleRoutes } from './bundle.js';
 import { cpgCaseRoutes } from './cases.js';
 import { cpgProposalRoutes } from './proposals.js';
+import { cpgCiRoutes } from './ci.js';
 
 /**
  * Corporate Policy Governance API, mounted at /api/v1/cpg (design spec §9).
@@ -27,6 +28,7 @@ cpgRoutes.route('/audit', cpgAuditRoutes);
 cpgRoutes.route('/boards', cpgBoardRoutes);
 cpgRoutes.route('/quorum', cpgQuorumRoutes);
 cpgRoutes.route('/bundle', cpgBundleRoutes);
+cpgRoutes.route('/ci', cpgCiRoutes);
 cpgRoutes.route('/', cpgCaseRoutes);
 cpgRoutes.route('/', cpgProposalRoutes);
 cpgRoutes.route('/', cpgPolicyRoutes);
