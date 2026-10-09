@@ -26,6 +26,9 @@
 // cases the cpg-cases area opened: the list and the detail (with the stored
 // reviewer context) as the AI reviewer, the developer's own case, and a case
 // closed for this check, read-only with its signed closure record.
+//
+// Phase 5b (design spec §16.5 check 11) adds the decision pages, run from the
+// cpg-approvals area once decisions exist (approvalPageChecks below).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -498,5 +501,54 @@ async function caseChecks(ctx, browser) {
     const restore = await owner.client.patch('/api/v1/cpg/settings', { enabled: false, reviewerContextLlm: before.json?.reviewerContextLlm ?? false });
     gate.check('governance switched off again and the reviewer-context setting restored after the case pages', restore.status === 200 && restore.json?.enabled === false,
       '200 enabled false', `${restore.status} ${restore.json?.enabled}`);
+  }
+}
+
+/**
+ * Phase 5b (design spec §16.5 check 11): the decision pages on the case the
+ * cpg-approvals area decided. The Legal reviewer sees the voting panel and
+ * approves the pending proposal through the UI; its developer is never
+ * offered a decision on their own case; the exceptions page lists the
+ * src/legacy/** exception. Called by cpg-approvals while governance is on;
+ * the rows are reported under cpg-browser.
+ */
+export async function approvalPageChecks(ctx, { caseId, pendingId, status }) {
+  const { gate } = ctx;
+  const { users } = ctx.data.cpg;
+  const area = gate.area;
+  gate.section('cpg-browser');
+  fs.mkdirSync(path.join(ctx.outDir, 'pages'), { recursive: true });
+  const browser = await launchBrowser();
+  try {
+    const legal = await openAs(browser, ctx, users['legal-reviewer'].client);
+    const detail = await visit(ctx, legal, 'legal-reviewer', `/governance/cases/${caseId}`, {
+      must: ['Decisions', 'An approval is pending: 1 of 2 approvals; still needed: an approver from Legal Board', 'Signature verified', 'Vetoed', 'Revoked', 'Approve', 'Reject'],
+      mustNot: ['Decisions arrive in a later release'],
+    });
+    gate.check('Legal reviewer case detail shows the decisions: signed decisions verified, vetoed and revoked history, and the voting panel of the pending proposal, no 4xx',
+      detail.problems.length === 0, 'decision history and voting panel', detail.problems.slice(0, 4));
+    const voted = await uiStep(legal, 'approve in the UI', async () => {
+      await legal.page.click(`#proposal-${pendingId} [data-testid=vote-form] button:has-text("Approve")`);
+      await legal.page.waitForSelector('text=Decided: 1 signed decision recorded.', { timeout: 10_000 });
+    });
+    const after = await status();
+    gate.check('the Legal reviewer approves the pending proposal in the browser: finalized, and findings/status says approved',
+      voted.length === 0 && after?.status === 'approved', 'Decided notice, approved', [...voted, after?.status].slice(0, 4));
+    const exceptions = await visit(ctx, legal, 'legal-reviewer', '/governance/exceptions', { must: ['Standing exceptions', 'src/legacy/**', 'corp.no-direct-openai', 'Revoked'] });
+    gate.check('Legal reviewer /governance/exceptions lists the src/legacy/** exception with its status and history, no 4xx',
+      exceptions.problems.length === 0, 'src/legacy/** listed', exceptions.problems.slice(0, 4));
+    await legal.context.close();
+
+    const dev = await openAs(browser, ctx, users.dev.client);
+    const own = await visit(ctx, dev, 'dev', `/governance/cases/${caseId}`, {
+      must: ['You opened, justified or revised this case, so you cannot propose or vote on its decisions (four-eyes).'],
+      mustNot: ['Propose approval', 'Propose a bulk decision'],
+    });
+    gate.check('the developer (holding Case Reviewer) is never offered a decision on their own case, and is told why, no 4xx',
+      own.problems.length === 0, 'four-eyes reason, no propose buttons', own.problems.slice(0, 4));
+    await dev.context.close();
+  } finally {
+    await browser.close();
+    gate.section(area);
   }
 }
