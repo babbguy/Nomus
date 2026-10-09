@@ -20,6 +20,7 @@ are unversioned. The dashboard calls the API same-origin at `/api/v1`.
 - [Policy registry](./policy-registry.md) - review boards, the approval quorum, compiling and approving corporate policies, the signed policy bundle and the policy-log export (`/api/v1/cpg`)
 - [Review cases](./review-cases.md) - request review, justifications, comments and change requests, reviewer context and closing a case (`/api/v1/cpg/cases`)
 - [CI gate](./ci-gate.md) - the server's signed pass or fail verdict on a CI scan, closing a case with its pull request, and recorded CI runs (`/api/v1/cpg/ci`)
+- [Integrations](./integrations.md) - email, Jira and signed webhook notifications, the delivery log and retries (`/api/v1/cpg/integrations`, `/api/v1/cpg/deliveries`)
 - [Approvals](./approvals.md) - snippet and bulk proposals, votes, quorum and signed decisions (`/api/v1/cpg/proposals`, `/api/v1/cpg/decisions`)
 - [Scan findings](./scan.md) - upload and query scanner findings
 - [Sources and rules](./regulations.md) - add, edit and retire regulations and rules (admin)

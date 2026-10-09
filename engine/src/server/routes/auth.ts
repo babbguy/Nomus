@@ -9,7 +9,7 @@ import { users, sessions, organizations, passwordResetTokens } from '../../db/sc
 import { safeJson } from '../utils.js';
 import { passwordChangeRequiredResponse } from '../middleware/auth.js';
 import { logger } from '../../logger.js';
-import { getResendApiKey } from '../../services/notifications.js';
+import { getResendApiKey, resendEndpoint } from '../../services/notifications.js';
 
 export const authRoutes = new Hono();
 
@@ -331,7 +331,7 @@ authRoutes.post('/forgot-password', authRateLimit(3), async (c) => {
   // Send via Resend if configured, otherwise log to console
   if (getResendApiKey()) {
     try {
-      await fetch('https://api.resend.com/emails', {
+      await fetch(resendEndpoint(), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${getResendApiKey()}`,

@@ -20,6 +20,7 @@ import { addCaseEvent, findOrCreateCase, addRevision, getCase, type CaseRow } fr
 import { addJustification } from '../../../cpg/cases/justifications.js';
 import { addComment, requestChanges, resubmit, type CommentRow } from '../../../cpg/cases/comments.js';
 import { closeCase } from '../../../cpg/cases/close.js';
+import { notifyCase } from '../../../cpg/notify/outbox.js';
 import { reviewerContext } from '../../../cpg/cases/context.js';
 import {
   caseDetail, caseStatus, caseSummaries, commentOf, findingsStatus, justificationOf, reviewerContextOf, revisionDetail,
@@ -94,6 +95,8 @@ cpgCaseRoutes.post('/cases/request-review', ...auth(true), uploadBodyLimit, hand
     const { revision, revisionCreated } = addRevision(db, actor.orgId, kase.id, { source, headSha: body.headSha, bundleHash: body.bundleHash, findings: body.findings }, userActor);
     const added = body.justifications.filter((j) => addJustification(db, { orgId: actor.orgId, caseId: kase.id, userId: actor.userId, ...j }).added).length;
     addCaseEvent(db, kase, 'submitted', userActor, { via: 'request_review', revision: revision.revision }, new Date().toISOString());
+    // A re-request with no code change notifies nobody again.
+    if (revisionCreated) notifyCase(db, getCase(db, actor.orgId, kase.id), 'case.review_requested');
     appendAuditEvent(db, {
       orgId: actor.orgId, actor: userActor, action: 'case.review_requested', targetType: 'case', targetId: kase.id,
       payload: { created, revision: revision.revision, revisionCreated, findings: body.findings.length, justificationsAdded: added },

@@ -4,6 +4,7 @@ import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgDecisions } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
 import { refreshOpenCases } from '../cases/service.js';
+import { notifyExpiry } from '../notify/outbox.js';
 import type { DecisionRow } from './resolve.js';
 
 /**
@@ -11,8 +12,8 @@ import type { DecisionRow } from './resolve.js';
  * exceptions that are about to expire, or have expired, get one audit marker
  * per (decision, threshold), and every open case is re-derived, so a case
  * whose approval expired leaves `decided`. Idempotent: a second run at the
- * same instant writes nothing. Notifications arrive in Phase 7; until then
- * the hook does nothing.
+ * same instant writes nothing. Each notice is queued for the org's
+ * integrations in the same transaction (Phase 7).
  */
 
 type Db = BetterSQLite3Database<any>;
@@ -26,7 +27,7 @@ export type ExpiryThreshold = (typeof THRESHOLDS)[number][0];
 export interface ExpiryNotice { decision: DecisionRow; threshold: ExpiryThreshold }
 export interface SweepResult { notices: number; casesMoved: number }
 
-export function sweepDecisions(db: Db, now: Date = new Date(), notify: (n: ExpiryNotice) => void = () => {}): SweepResult {
+export function sweepDecisions(db: Db, now: Date = new Date(), notify: (n: ExpiryNotice) => void = (n) => notifyExpiry(db, n)): SweepResult {
   const at = now.toISOString();
   const horizon = new Date(now.getTime() + 7 * DAY_MS).toISOString();
   return rawSqlite(db).transaction((): SweepResult => {

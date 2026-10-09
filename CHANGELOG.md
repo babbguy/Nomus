@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 7 (integrations, engine): review-case notifications by email
+  (through Resend), to Jira Cloud (one issue per case and owning board, then comments) and to a
+  generic JSON webhook signed with `X-Nomus-Signature: sha256=…` over the timestamp and body, for
+  review requests, change requests, replies, decisions, closed cases and expiring or expired
+  approvals. Notifications carry a summary and a link only, never code, snippets, justifications or
+  file paths. Deliveries are queued in the same transaction as the change, retried for about
+  21 hours across restarts, and listed with every attempt by `GET /api/v1/cpg/deliveries`; a
+  permanent failure is logged and audited. Configure them with `/api/v1/cpg/integrations` (secrets
+  are encrypted and never returned). New settings: `NOMUS_RESEND_API_URL` and
+  `NOMUS_CPG_ALLOW_PRIVATE_TARGETS`.
 - Corporate policy governance, phase 6 (CI gate, GitHub Action): when corporate policies are on,
   the action scans the whole checkout after its regulatory scan, asks the engine for its verdict,
   verifies the signature and fails the job unless every blocking finding has a valid decision.

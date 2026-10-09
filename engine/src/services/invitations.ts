@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
-import { getResendApiKey } from './notifications.js';
+import { getResendApiKey, resendEndpoint } from './notifications.js';
 
 /**
  * Inviting a user with a temporary password. Shared by the platform-admin
@@ -24,7 +24,7 @@ export function sendInvitationEmail(input: { email: string; tempPassword: string
   const appUrl = config.NOMUS_CORS_ORIGIN;
   const resendKey = getResendApiKey();
   if (resendKey) {
-    fetch('https://api.resend.com/emails', {
+    fetch(resendEndpoint(), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${resendKey}`,

@@ -4,6 +4,7 @@ import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgCaseEvents, cpgCaseRevisions, cpgCases, cpgCiRuns, cpgDecisions } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
+import { notifyCase } from '../notify/outbox.js';
 import { cpgSign } from '../policies/signing.js';
 import { addCaseEvent, getCase, openCase, type CaseRow } from './service.js';
 import { assertTransition } from './state.js';
@@ -62,6 +63,8 @@ export function closeCase(db: Db, input: { orgId: string; caseId: string; reason
       orgId: c.orgId, actor: input.actor, action: 'case.closed', targetType: 'case', targetId: c.id,
       payload: { reason: input.reason, from: c.state, note: input.note },
     });
-    return getCase(db, input.orgId, input.caseId);
+    const after = getCase(db, input.orgId, input.caseId);
+    notifyCase(db, after, 'case.closed');
+    return after;
   }).immediate();
 }

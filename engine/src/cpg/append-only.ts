@@ -30,6 +30,8 @@ export const APPEND_ONLY_TABLES = [
   { table: 'cpg_decisions', drizzleName: 'cpgDecisions' },
   { table: 'cpg_revocations', drizzleName: 'cpgRevocations' },
   { table: 'cpg_ci_runs', drizzleName: 'cpgCiRuns' },
+  { table: 'cpg_integration_links', drizzleName: 'cpgIntegrationLinks' },
+  { table: 'cpg_delivery_attempts', drizzleName: 'cpgDeliveryAttempts' },
 ] as const;
 
 /**
@@ -52,4 +54,6 @@ export const PROJECTION_TABLES = [
   { table: 'cpg_boards', drizzleName: 'cpgBoards' },
   { table: 'cpg_policy_heads', drizzleName: 'cpgPolicyHeads' },
   { table: 'cpg_cases', drizzleName: 'cpgCases' },
+  { table: 'cpg_integrations', drizzleName: 'cpgIntegrations' },
+  { table: 'cpg_notification_deliveries', drizzleName: 'cpgNotificationDeliveries' },
 ] as const;

@@ -132,6 +132,19 @@ function seedCiRun(caseId: string): void {
   randomUUID(), orgId, keyId, 'a'.repeat(40), H, caseId, NOW);
 }
 
+const integration = { id: '', deliveryId: '' };
+function seedIntegration(caseId: string): void {
+  integration.id = randomUUID();
+  integration.deliveryId = randomUUID();
+  run(`INSERT INTO cpg_integrations (id, org_id, kind, name, board_ids, events, config, secret_enc, secret_last4, enabled, created_by, created_at, updated_by, updated_at)
+       VALUES (?, ?, 'jira', 'Jira', '[]', '["case.closed"]', '{}', 'enc:x', 'abcd', 1, 'test', ?, 'test', ?)`, integration.id, orgId, NOW, NOW);
+  run(`INSERT INTO cpg_integration_links (id, org_id, integration_id, case_id, board_id, external_key, external_url, created_at)
+       VALUES (?, ?, ?, ?, ?, 'GOV-1', 'https://jira.gate.example.org/browse/GOV-1', ?)`, randomUUID(), orgId, integration.id, caseId, registry.boardId, NOW);
+  run(`INSERT INTO cpg_notification_deliveries (id, org_id, integration_id, channel, event, case_id, board_id, payload, payload_sha256, status, attempts, next_attempt_at, created_at, updated_at)
+       VALUES (?, ?, ?, 'jira', 'case.closed', ?, ?, '{}', ?, 'pending', 0, ?, ?, ?)`, integration.deliveryId, orgId, integration.id, caseId, registry.boardId, H, NOW, NOW, NOW);
+  run("INSERT INTO cpg_delivery_attempts (id, delivery_id, attempt, started_at, duration_ms, http_status) VALUES (?, ?, 1, ?, 5, 503)", randomUUID(), integration.deliveryId, NOW);
+}
+
 beforeAll(() => {
   runMigrations(db);
   orgId = insertOrg();
@@ -144,6 +157,7 @@ beforeAll(() => {
   const seeded = seedCase();
   seedApprovals(seeded);
   seedCiRun(seeded.caseId);
+  seedIntegration(seeded.caseId);
 });
 
 describe('strictly append-only tables refuse UPDATE and DELETE', () => {
@@ -286,7 +300,25 @@ describe('projection guards', () => {
   });
 
   it('is listed as projections', () => {
-    expect(PROJECTION_TABLES.map((t) => t.table).sort()).toEqual(['cpg_boards', 'cpg_cases', 'cpg_org_settings', 'cpg_policy_heads', 'cpg_roles', 'cpg_teams']);
+    expect(PROJECTION_TABLES.map((t) => t.table).sort()).toEqual(['cpg_boards', 'cpg_cases', 'cpg_integrations', 'cpg_notification_deliveries', 'cpg_org_settings', 'cpg_policy_heads', 'cpg_roles', 'cpg_teams']);
+  });
+
+  it('cpg_integrations: config and secret change; identity and kind do not; no delete', () => {
+    expect(triggerError(() => run("UPDATE cpg_integrations SET name = 'Jira GOV', secret_enc = 'enc:y', secret_last4 = 'wxyz' WHERE id = ?", integration.id))).toBeNull();
+    expect(triggerError(() => run("UPDATE cpg_integrations SET kind = 'webhook' WHERE id = ?", integration.id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run("UPDATE cpg_integrations SET secret_enc = 'plain' WHERE id = ?", integration.id))).toBe('SQLITE_CONSTRAINT_CHECK');
+    expect(triggerError(() => run('DELETE FROM cpg_integrations WHERE id = ?', integration.id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+  });
+
+  it('cpg_notification_deliveries: only the queue state moves, forward; a terminal delivery is final; no delete', () => {
+    const id = integration.deliveryId;
+    expect(triggerError(() => run("UPDATE cpg_notification_deliveries SET payload = '{\"x\":1}' WHERE id = ?", id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run("UPDATE cpg_notification_deliveries SET status = 'pending', next_attempt_at = NULL WHERE id = ?", id))).toBe('SQLITE_CONSTRAINT_CHECK');
+    expect(triggerError(() => run('UPDATE cpg_notification_deliveries SET attempts = 1, next_attempt_at = ?, updated_at = ? WHERE id = ?', NOW, NOW, id))).toBeNull();
+    expect(triggerError(() => run('UPDATE cpg_notification_deliveries SET attempts = 0 WHERE id = ?', id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run("UPDATE cpg_notification_deliveries SET status = 'delivered', attempts = 2, next_attempt_at = NULL WHERE id = ?", id))).toBeNull();
+    expect(triggerError(() => run("UPDATE cpg_notification_deliveries SET status = 'failed' WHERE id = ?", id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run('DELETE FROM cpg_notification_deliveries WHERE id = ?', id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
   });
 
   it('cpg_boards: name and description change; identity and kind do not; archiving is final; no delete', () => {

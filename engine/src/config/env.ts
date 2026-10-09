@@ -104,6 +104,11 @@ const envSchema = z.object({
   // Email — Resend
   NOMUS_RESEND_API_KEY: z.string().optional(),
   NOMUS_FROM_EMAIL: z.string().default('Nomus <noreply@example.com>'),
+  NOMUS_RESEND_API_URL: z.string().url().default('https://api.resend.com'),
+
+  // CPG integrations: allow Jira and webhook targets on private or loopback
+  // addresses. Off by default; the release gate sets it for its local fakes.
+  NOMUS_CPG_ALLOW_PRIVATE_TARGETS: z.enum(['true', 'false']).default('false'),
 
   // Push Notifications — ntfy (free, self-hostable)
   NOMUS_NTFY_URL: z.string().optional(), // default: https://ntfy.sh
@@ -177,6 +182,10 @@ function validateStartupRequirements(config: Env): void {
     } else {
       warnings.push('NOMUS_CORS_ORIGIN not set — defaulting to http://localhost:5173 for development');
     }
+  }
+
+  if (isProd && config.NOMUS_CPG_ALLOW_PRIVATE_TARGETS === 'true') {
+    warnings.push('NOMUS_CPG_ALLOW_PRIVATE_TARGETS is true: CPG integrations may target private and loopback addresses');
   }
 
   // The admin login must not be a shipped placeholder or a publicly listed
