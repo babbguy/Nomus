@@ -93,9 +93,21 @@ Video Interview Act (820 ILCS 42), used for the manual-upload pipeline.
    negative relative times, the data the gate created is shown, and the same
    number (rules, attestations, findings, AI systems, score) agrees across pages
    and with the API. A screenshot of every page is saved.
-10. **Server logs.** No error-level log line, unhandled rejection, stack trace or
+10. **Corporate policy governance: RBAC** (`cpg-rbac`). Runs after every
+    v1.1.0 area against a second organization, `gate-policy`, created by
+    `checks/cpg-setup.mjs` (shared by all `cpg-*` areas): the platform admin
+    invites its owner, who invites seven governance users; each must change the
+    temporary password before any `/api/v1/cpg` call works. The area then checks
+    the upgrade migration (the `gate-health` member is Org Admin and Developer;
+    the platform admin has no organization permission but keeps `/org`),
+    role grants, the Developer role's legacy `/org` grants being removed and
+    restored, the last-Org-Admin guard, VS Code device sign-in for two users at
+    once (both user-bound keys stay active; re-signing in replaces only that
+    user's key) and a valid audit hash chain. `gate-health` never enables
+    governance, so no earlier expectation changes.
+11. **Server logs.** No error-level log line, unhandled rejection, stack trace or
     5xx during the run (allow-list in `checks/server-logs.mjs`).
-11. **Resources.** Peak RSS of the engine stays under 512 MiB; idle CPU is
+12. **Resources.** Peak RSS of the engine stays under 512 MiB; idle CPU is
     recorded (and must stay under 20 % of one core).
 
 ## Output
@@ -112,7 +124,7 @@ Video Interview Act (820 ILCS 42), used for the manual-upload pipeline.
 | Option | Effect |
 |--------|--------|
 | `--build` / `--no-build` | Always / never run `npm run build:all` first |
-| `--only=scanner,action` | Run only some areas (bring-up always runs); for debugging, not for release decisions |
+| `--only=scanner,action` | Run only some areas (bring-up always runs; `cpg-setup` runs before the first selected `cpg-*` area); for debugging, not for release decisions |
 | `--target=<dir>` | Test the build in another checkout (for example an older release) with this gate |
 | `NOMUS_GATE_OUT=<dir>` | Write output somewhere other than `e2e/out/` |
 | `NOMUS_GATE_CHROMIUM=<path>` | Use an existing Chrome/Chromium executable |

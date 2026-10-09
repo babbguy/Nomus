@@ -108,5 +108,51 @@
   },
   "pipeline": {
     "rulesCreated": 7
+  },
+  "cpg": {
+    "org": {
+      "name": "Gate Policy Org",
+      "slug": "gate-policy",
+      "ownerEmail": "owner@gate.example.org"
+    },
+    "users": {
+      "author": {
+        "email": "author@gate.example.org",
+        "role": "policy_author"
+      },
+      "approver": {
+        "email": "approver@gate.example.org",
+        "role": "policy_approver"
+      },
+      "ai-reviewer": {
+        "email": "ai-reviewer@gate.example.org",
+        "role": "case_reviewer"
+      },
+      "legal-reviewer": {
+        "email": "legal-reviewer@gate.example.org",
+        "role": "case_reviewer"
+      },
+      "exceptions": {
+        "email": "exceptions@gate.example.org",
+        "role": "exception_approver"
+      },
+      "dev": {
+        "email": "dev@gate.example.org",
+        "role": "developer"
+      },
+      "auditor": {
+        "email": "auditor@gate.example.org",
+        "role": "auditor"
+      }
+    },
+    "systemRoles": [
+      "auditor",
+      "case_reviewer",
+      "developer",
+      "exception_approver",
+      "org_admin",
+      "policy_approver",
+      "policy_author"
+    ]
   }
 }
