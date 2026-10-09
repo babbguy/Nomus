@@ -2,33 +2,11 @@ import axios from 'axios';
 import type { DetectedImport } from '../detect/imports.js';
 import type { DetectorSignal } from '../detect/detector.js';
 import type { NomusConfig } from '../config/schema.js';
+import { NomusApiError, isNomusApiError } from '../errors.js';
 
-/**
- * Thrown when the Nomus API cannot be reached, returns a non-2xx status,
- * or returns a response the scanner cannot interpret.
- *
- * Consumers MUST treat this as "compliance status UNKNOWN" and fail closed —
- * never as an empty (passing) scan result. A backend outage must never turn
- * a CI compliance gate green.
- */
-export class NomusApiError extends Error {
-  /** Underlying error or offending response payload, for diagnostics. */
-  readonly detail: unknown;
-
-  constructor(message: string, detail?: unknown) {
-    super(message, detail instanceof Error ? { cause: detail } : undefined);
-    this.name = 'NomusApiError';
-    this.detail = detail;
-  }
-}
-
-/**
- * Type guard that survives module duplication (bundlers, npm-linked copies)
- * where `instanceof NomusApiError` may fail across realms.
- */
-export function isNomusApiError(err: unknown): err is NomusApiError {
-  return err instanceof Error && err.name === 'NomusApiError';
-}
+// NomusApiError lives in ../errors.ts so the corporate bundle client can use it
+// without importing this module's HTTP client; re-exported for existing importers.
+export { NomusApiError, isNomusApiError };
 
 /** The engine's generic action condition — satisfied by any AI capability. */
 const GENERIC_AI_ACTION = 'ai_operation';

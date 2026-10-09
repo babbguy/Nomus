@@ -264767,6 +264767,7 @@ function findCallsAst(sf, lines, bindings) {
                 if (resolved && (chain.parts.length > 0 || chain.dynamic)) {
                     const { spec, binding } = resolved;
                     const line = lineOf(node, sf);
+                    const endLine = sf.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
                     const evidence = lineTextAt(lines, line);
                     let hit;
                     if (chain.dynamic) {
@@ -264776,6 +264777,7 @@ function findCallsAst(sf, lines, bindings) {
                             capabilities: spec.defaultCapabilities,
                             confidence: 0.3,
                             line,
+                            endLine,
                             evidence,
                             binding: 'dynamic',
                         };
@@ -264801,6 +264803,7 @@ function findCallsAst(sf, lines, bindings) {
                             capabilities: known ?? spec.defaultCapabilities,
                             confidence: known ? 0.95 : 0.6,
                             line,
+                            endLine,
                             evidence,
                             binding,
                         };
@@ -264879,12 +264882,14 @@ function findCallsRegex(content) {
             if (CLASS_INDEX.has(method))
                 continue;
             const known = methods[method];
+            const line = offsetToLine(content, m.index);
             push({
                 sdk,
                 method,
                 capabilities: known ?? defaults,
                 confidence: known ? 0.95 : 0.6,
-                line: offsetToLine(content, m.index),
+                line,
+                endLine: line,
                 evidence: content.slice(m.index, Math.min(m.index + 200, content.length)).split('\n')[0],
                 binding: 'name-heuristic',
             });
@@ -264900,12 +264905,14 @@ function findCallsRegex(content) {
     DYNAMIC_RE.lastIndex = 0;
     let dm;
     while ((dm = DYNAMIC_RE.exec(content)) !== null) {
+        const line = offsetToLine(content, dm.index);
         hits.push({
             sdk: dm[1],
             method: null,
             capabilities: ['text_generation'],
             confidence: 0.3,
-            line: offsetToLine(content, dm.index),
+            line,
+            endLine: line,
             evidence: content.slice(dm.index, Math.min(dm.index + 200, content.length)).split('\n')[0],
             binding: 'dynamic',
         });
@@ -264951,6 +264958,7 @@ class SdkUsageDetector {
                     metadata: {
                         sdk: hit.sdk,
                         method: hit.method,
+                        endLine: hit.endLine,
                         narrowed: true,
                         engine,
                         binding: hit.binding,
@@ -273439,8 +273447,7 @@ axios.default = axios;
 // this module should only have a default export
 /* harmony default export */ const lib_axios = (axios);
 
-;// CONCATENATED MODULE: ../scanner/dist/match/rule-matcher.js
-
+;// CONCATENATED MODULE: ../scanner/dist/errors.js
 /**
  * Thrown when the Nomus API cannot be reached, returns a non-2xx status,
  * or returns a response the scanner cannot interpret.
@@ -273448,6 +273455,10 @@ axios.default = axios;
  * Consumers MUST treat this as "compliance status UNKNOWN" and fail closed —
  * never as an empty (passing) scan result. A backend outage must never turn
  * a CI compliance gate green.
+ *
+ * Lives in its own module (re-exported by match/rule-matcher.ts) so the
+ * corporate bundle client can throw it without importing the HTTP client of
+ * the regulatory matcher.
  */
 class NomusApiError extends Error {
     /** Underlying error or offending response payload, for diagnostics. */
@@ -273465,6 +273476,13 @@ class NomusApiError extends Error {
 function isNomusApiError(err) {
     return err instanceof Error && err.name === 'NomusApiError';
 }
+//# sourceMappingURL=errors.js.map
+;// CONCATENATED MODULE: ../scanner/dist/match/rule-matcher.js
+
+
+// NomusApiError lives in ../errors.ts so the corporate bundle client can use it
+// without importing this module's HTTP client; re-exported for existing importers.
+
 /** The engine's generic action condition — satisfied by any AI capability. */
 const GENERIC_AI_ACTION = 'ai_operation';
 /** The SDK a signal is about, or undefined for signals that describe data, not an SDK. */
