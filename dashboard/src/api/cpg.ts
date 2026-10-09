@@ -14,8 +14,10 @@ import {
 } from './cpg-quorum';
 
 import {
-  caseCommentSchema, caseDetailSchema, caseListSchema, caseStatusSchema, reviewerContextSchema, revisionDetailSchema,
-  type CaseComment, type CaseDetail, type CaseList, type CaseState, type ReviewerContext, type RevisionDetail,
+  caseCommentSchema, caseDetailSchema, caseListSchema, caseStatusSchema, castVoteSchema, decisionSchema, proposalListSchema, proposalSchema,
+  reviewerContextSchema, revisionDetailSchema, revocationSchema, standingExceptionListSchema,
+  type CaseComment, type CaseDetail, type CaseList, type CaseState, type CastVote, type Decision, type Proposal, type ProposalStatus,
+  type ReviewerContext, type RevisionDetail, type StandingException, type StandingPattern,
 } from './cpg-case-schemas';
 
 export * from './cpg-schemas';
@@ -25,7 +27,8 @@ export * from './cpg-case-schemas';
 /**
  * Typed client for the Corporate Policy Governance API (/api/v1/cpg):
  * RBAC, settings and the audit log (E1 to E17); boards, quorum, compile and
- * the policy log (E19 to E37); review cases (E41 to E52). Every response is parsed with its zod
+ * the policy log (E19 to E37); review cases (E41 to E52); proposals,
+ * decisions and standing exceptions (E54 to E60). Every response is parsed with its zod
  * contract (cpg-schemas.ts, cpg-quorum.ts); a response that does not match
  * throws CpgContractError, which pages show as a load failure.
  */
@@ -379,4 +382,48 @@ export async function requestCaseChanges(caseId: string, input: { boardId: strin
 export async function endCase(caseId: string, how: 'withdraw' | 'close', reason: string) {
   const { data } = await api.post(`/cpg/cases/${id(caseId)}/${how}`, { reason });
   return parseResponse(caseStatusSchema, data, `POST /cpg/cases/:id/${how}`);
+}
+
+// ─── E54 to E60 proposals, votes, decisions, standing exceptions ───────
+
+export type ProposalInput =
+  | { caseId: string; scope: 'snippet' | 'bulk'; outcome: 'approve' | 'reject'; fingerprints: string[]; expiresAt?: string; rationale: string }
+  | { scope: 'standing'; caseId?: string; pattern: StandingPattern; expiresAt: string; rationale: string };
+
+export async function propose(input: ProposalInput): Promise<Proposal> {
+  const { data } = await api.post('/cpg/proposals', input);
+  return parseResponse(proposalSchema, data, 'POST /cpg/proposals');
+}
+
+/** A case's proposals, oldest first. */
+export async function listCaseProposals(caseId: string): Promise<Proposal[]> {
+  const { data } = await api.get(`/cpg/proposals?caseId=${encodeURIComponent(caseId)}`);
+  return parseResponse(proposalListSchema, data, 'GET /cpg/proposals').items;
+}
+
+/** The organization's standing exception proposals the caller may read, oldest first. */
+export async function listStandingProposals(status?: ProposalStatus): Promise<Proposal[]> {
+  const { data } = await api.get(`/cpg/proposals?scope=standing${status ? `&status=${status}` : ''}`);
+  return parseResponse(proposalListSchema, data, 'GET /cpg/proposals').items;
+}
+
+export async function voteOnProposal(proposalId: string, vote: 'approve' | 'reject', comment: string): Promise<CastVote> {
+  const { data } = await api.post(`/cpg/proposals/${proposalId}/votes`, { vote, ...(comment.trim() ? { comment: comment.trim() } : {}) });
+  return parseResponse(castVoteSchema, data, 'POST /cpg/proposals/:id/votes');
+}
+
+export async function getDecision(decisionId: string): Promise<Decision> {
+  const { data } = await api.get(`/cpg/decisions/${decisionId}`);
+  return parseResponse(decisionSchema, data, 'GET /cpg/decisions/:id');
+}
+
+export async function revokeDecision(decisionId: string, reason: string) {
+  const { data } = await api.post(`/cpg/decisions/${decisionId}/revoke`, { reason });
+  return parseResponse(revocationSchema, data, 'POST /cpg/decisions/:id/revoke');
+}
+
+/** Finalized standing exceptions the caller may read, oldest first. */
+export async function listStandingExceptions(policyKey?: string): Promise<StandingException[]> {
+  const { data } = await api.get(`/cpg/exceptions${policyKey ? `?policyKey=${encodeURIComponent(policyKey)}` : ''}`);
+  return parseResponse(standingExceptionListSchema, data, 'GET /cpg/exceptions').items;
 }

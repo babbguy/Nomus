@@ -9,9 +9,13 @@ import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import DataFreshness from '../../components/ui/DataFreshness';
-import { endCase, getCase, getCaseRevision, type CaseDetail as CaseDetailData, type CpgMe, type RevisionDetail } from '../../api/cpg';
+import {
+  endCase, getCase, getCaseRevision, getQuorum, listCaseProposals,
+  type CaseDetail as CaseDetailData, type CpgMe, type Proposal, type QuorumConfig, type RevisionDetail,
+} from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { cpgErrorCode } from '../../lib/cpg-errors';
+import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import { SOURCE_LABEL, actorLabel, caseActions, closeReasonLabel, type CaseActions } from '../../lib/cpg-cases';
 import GovernanceHeader from './GovernanceHeader';
@@ -19,11 +23,13 @@ import { Field, Mono } from './policies/parts';
 import { CaseStateBadge, LaneList, Path, PullRequest, RepoBranch } from './cases/parts';
 import { FindingList } from './cases/Findings';
 import { Blocked, Discussion, RequestChangesForm } from './cases/Discussion';
+import { DecisionsCard, FindingDecision, type DecisionContext } from './cases/Decisions';
 
 /**
- * /governance/cases/:id (E43, E44, E51, E52, E46, E47, E49, E50): one review
- * case with its lanes, revisions, findings (snippet, justification, reviewer
- * context), change requests and comments. Decisions arrive in Phase 5.
+ * /governance/cases/:id (E43, E44, E51, E52, E46, E47, E49, E50, E54 to
+ * E60): one review case with its lanes, revisions, findings (snippet,
+ * justification, reviewer context, decision), proposals and votes, change
+ * requests and comments.
  */
 export default function CaseDetail() {
   const { id = '' } = useParams();
@@ -100,6 +106,31 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
   const closed = c.state === 'closed';
   const resolutions = isLatest && !closed ? new Map(c.resolutions.map((r) => [r.fingerprint, r])) : null;
 
+  // Proposals (refetched with the case) and the quorum in force, for expiry limits; the quorum needs policy.read.
+  const [proposals, setProposals] = useState<{ key: string; items: Proposal[] } | { key: string; error: string } | null>(null);
+  const [quorum, setQuorum] = useState<QuorumConfig | null>(null);
+  const readsQuorum = hasOrgPermission(me, 'policy.read');
+  const proposalsKey = JSON.stringify([c.id, retryKey, fetchedAt]);
+  useEffect(() => {
+    let cancelled = false;
+    listCaseProposals(c.id)
+      .then((items) => { if (!cancelled) setProposals({ key: proposalsKey, items }); })
+      .catch((err) => { if (!cancelled) setProposals({ key: proposalsKey, error: policyErrorMessage(err, 'Failed to load the decisions') }); });
+    return () => { cancelled = true; };
+  }, [c.id, proposalsKey]);
+  useEffect(() => {
+    if (!readsQuorum) return;
+    let cancelled = false;
+    getQuorum().then((q) => { if (!cancelled) setQuorum(q.config); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [readsQuorum]);
+  const boards = new Map([...(me?.boards ?? []), ...c.lanes.map((l) => ({ id: l.boardId, name: l.boardName }))].map((b) => [b.id, b.name]));
+  const currentProposals = proposals?.key === proposalsKey ? proposals : null;
+  const ctx: DecisionContext | null = currentProposals && 'items' in currentProposals ? {
+    detail, me, quorum, proposals: currentProposals.items, readOnly: actions.readOnly,
+    boardName: (id) => boards.get(id) || 'another required board', onChanged,
+  } : null;
+
   return (
     <div className="space-y-4">
       <GovernanceHeader
@@ -131,7 +162,7 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
         <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-1"><Route size={16} className="text-accent" /> Lanes</h2>
         <p className="text-xs text-text-muted mb-3">
           {closed ? 'The boards that owned a finding of the last revision when the case closed.'
-            : 'Each board that owns a finding of the latest revision reviews its own lane. Decisions arrive in a later release.'}
+            : 'Each board that owns a finding of the latest revision reviews its own lane; a lane is decided when every blocking finding it owns is.'}
         </p>
         <LaneList lanes={c.lanes} closed={closed} />
         {!actions.readOnly && <RequestChanges detail={detail} actions={actions} isLatest={isLatest} findings={findings?.findings ?? null} onPosted={onChanged} />}
@@ -181,8 +212,12 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
         {revision < 1 ? <p className="text-sm text-text-muted">No revision has been submitted yet.</p>
           : findingsError ? <ErrorState compact message={findingsError} onRetry={() => setRetryKey((k) => k + 1)} />
             : !findings ? <div className="flex justify-center py-6"><Spinner /></div>
-              : <FindingList caseId={c.id} findings={findings.findings} resolutions={resolutions} closed={closed} />}
+              : <FindingList caseId={c.id} findings={findings.findings} resolutions={resolutions} closed={closed}
+                  decision={ctx ? (f, r) => <FindingDecision ctx={ctx} finding={f} resolution={r} /> : undefined} />}
       </Card>
+
+      <DecisionsCard ctx={ctx} findings={isLatest ? findings?.findings ?? null : null}
+        error={currentProposals && 'error' in currentProposals ? currentProposals.error : null} onRetry={() => setRetryKey((k) => k + 1)} />
 
       <Discussion detail={detail} actions={actions} onPosted={onChanged} />
       <DataFreshness fetchedAt={fetchedAt} />

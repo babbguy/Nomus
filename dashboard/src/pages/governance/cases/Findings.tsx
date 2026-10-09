@@ -19,12 +19,14 @@ const MAX_CONTEXT_ATTEMPTS = 5;
  * the generated reviewer context. `resolutions` are the latest revision's
  * (null when an older revision is shown).
  */
-export function FindingList({ caseId, findings, resolutions, closed = false }: {
+export function FindingList({ caseId, findings, resolutions, closed = false, decision }: {
   caseId: string;
   findings: CaseFinding[];
   resolutions: Map<string, FindingResolution> | null;
   /** A closed case shows stored context only; it never generates any. */
   closed?: boolean;
+  /** The decision panel of a blocking finding with a resolution (the latest revision of an open case). */
+  decision?: (f: CaseFinding, r: FindingResolution) => React.ReactNode;
 }) {
   if (findings.length === 0) return <p className="text-sm text-text-muted">This revision has no findings: every earlier finding was fixed.</p>;
   return (
@@ -60,6 +62,7 @@ export function FindingList({ caseId, findings, resolutions, closed = false }: {
                 <p className="text-text-muted text-xs">{f.blocking ? 'None yet. The developer justifies blocking findings when requesting review.' : 'None: this finding does not block, so it needs no review.'}</p>
               )}
             </div>
+            {r && f.blocking && decision?.(f, r)}
             <ContextPanel caseId={caseId} finding={f} closed={closed} />
           </li>
         );

@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { tierSchema } from './cpg-schemas';
 
 /**
- * Response contracts of the review-case API (/api/v1/cpg/cases, E41 to
- * E52), mirroring engine/src/cpg/contracts.ts and the shared case status of
+ * Response contracts of the review-case and approvals API (/api/v1/cpg/cases,
+ * /proposals, /decisions and /exceptions, E41 to E60), mirroring engine/src/cpg/contracts.ts and the shared case status of
  * @nomus/scanner/corporate. Strict like cpg-schemas.ts, and zod-only so the
  * engine's route tests can parse real responses with it.
  */
@@ -73,7 +73,9 @@ export const caseDetailSchema = z.object({
   openedAt: isoDate,
   openedBy: actorRefSchema,
   closure: caseClosureSchema.nullable(),
-  viewer: z.object({ comment: z.boolean(), review: z.boolean(), close: z.boolean(), withdraw: z.boolean() }).strict(),
+  viewer: z.object({
+    comment: z.boolean(), review: z.boolean(), close: z.boolean(), withdraw: z.boolean(), revoke: z.boolean(), selfApproval: z.boolean(),
+  }).strict(),
   revisions: z.array(revisionSummarySchema),
   justifications: z.array(justificationSchema),
   comments: z.array(caseCommentSchema),
@@ -93,6 +95,74 @@ export const reviewerContextSchema = z.object({
   whatItDoes: z.string().nullable(), whyFlagged: z.string().nullable(), provider: z.string().nullable(), model: z.string().nullable(),
   promptVersion: z.number().int(), attempt: z.number().int().nullable(), error: z.string().nullable(), createdAt: isoDate.nullable(),
 }).strict();
+
+// ─── Proposals, votes, decisions and standing exceptions (E54 to E60) ───
+
+export const LANGUAGES = ['typescript', 'javascript', 'python', 'java', 'go', 'other'] as const;
+const outcomeSchema = z.enum(['approve', 'reject']);
+const scopeSchema = z.enum(['snippet', 'bulk', 'standing']);
+export const proposalStatusSchema = z.enum(['pending', 'finalized', 'vetoed', 'invalidated', 'void', 'lapsed']);
+
+export const standingPatternSchema = z.object({
+  repos: z.array(z.string()), teamIds: z.array(uuid), paths: z.array(z.string()), excludePaths: z.array(z.string()),
+  policyKey: z.string(), policyVersion: z.number().int(),
+  conditions: z.object({
+    branches: z.array(z.string()).optional(), languages: z.array(z.enum(LANGUAGES)).optional(),
+    snippetMustMatch: z.object({ source: z.string(), flags: z.enum(['', 'i']) }).strict().optional(), maxLinesPerFinding: z.number().int().optional(),
+  }).strict(),
+}).strict();
+
+export const proposalVoteSchema = z.object({
+  id: uuid, voterUserId: uuid, voterName: z.string(), vote: outcomeSchema, boards: z.array(uuid), permissions: z.array(z.string()), comment: z.string(), createdAt: isoDate,
+}).strict();
+
+export const proposalSchema = z.object({
+  id: uuid, caseId: uuid.nullable(), scope: scopeSchema, outcome: outcomeSchema, status: proposalStatusSchema,
+  policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(), tier: tierSchema,
+  fingerprints: z.array(fingerprint), pattern: standingPatternSchema.nullable(), requestedExpiresAt: isoDate.nullable(), rationale: z.string(),
+  required: z.object({
+    approvals: z.number().int(), boardCoverage: z.enum(['all_owning', 'any_owning']), boardIds: z.array(uuid),
+    requiredPermission: z.enum(['exception.approve']).nullable(), maxExpiryDays: z.number().int(), defaultExpiryDays: z.number().int(),
+  }).strict(),
+  quorumConfigVersionAtCreation: z.number().int(),
+  proposer: z.object({ userId: uuid, name: z.string() }).strict(),
+  createdAt: isoDate, lapsesAt: isoDate,
+  votes: z.array(proposalVoteSchema), decisionIds: z.array(uuid),
+  invalidation: z.object({ reason: z.string(), at: isoDate }).strict().nullable(),
+  revocations: z.array(z.object({ decisionId: uuid, revokedByName: z.string(), reason: z.string(), revokedAt: isoDate }).strict()),
+  viewer: z.object({ canVote: z.boolean(), reason: z.string().nullable() }).strict(),
+}).strict();
+
+export const proposalListSchema = z.object({ items: z.array(proposalSchema) }).strict();
+
+export const castVoteSchema = z.object({ vote: proposalVoteSchema, proposalStatus: proposalStatusSchema, decisionIds: z.array(uuid) }).strict();
+
+export const decisionSchema = z.object({
+  id: uuid, proposalId: uuid, caseId: uuid.nullable(), scope: scopeSchema, outcome: outcomeSchema,
+  repo: z.string().nullable(), fingerprint: fingerprint.nullable(), batchId: uuid.nullable(),
+  policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(), expiresAt: isoDate.nullable(),
+  approverUserIds: z.array(uuid), quorumConfigVersion: z.number().int(), quorumConfigHash: z.string(), finalizedAt: isoDate,
+  signedPayload: z.string(), signature: z.string(), signatureValid: z.boolean(),
+}).strict();
+
+export const revocationSchema = z.object({
+  id: uuid, decisionId: uuid, revokedByUserId: uuid, reason: z.string(), revokedAt: isoDate, signedPayload: z.string(), signature: z.string(),
+}).strict();
+
+export const standingExceptionSchema = z.object({
+  id: uuid, proposalId: uuid, caseId: uuid.nullable(), policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(),
+  pattern: standingPatternSchema, expiresAt: isoDate, finalizedAt: isoDate, approverUserIds: z.array(uuid),
+  status: z.enum(['active', 'expired', 'revoked', 'lapsed']), revocation: revocationSchema.nullable(),
+}).strict();
+
+export const standingExceptionListSchema = z.object({ items: z.array(standingExceptionSchema) }).strict();
+
+export type ProposalStatus = z.infer<typeof proposalStatusSchema>;
+export type StandingPattern = z.infer<typeof standingPatternSchema>;
+export type Proposal = z.infer<typeof proposalSchema>;
+export type CastVote = z.infer<typeof castVoteSchema>;
+export type Decision = z.infer<typeof decisionSchema>;
+export type StandingException = z.infer<typeof standingExceptionSchema>;
 
 export type CaseState = z.infer<typeof caseStateSchema>;
 export type LaneState = z.infer<typeof laneStateSchema>;

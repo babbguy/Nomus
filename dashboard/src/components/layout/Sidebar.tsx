@@ -5,7 +5,7 @@ import {
   Users, UserCog, Database, Activity, ShieldCheck,
   ChevronLeft, ChevronRight, BookOpen, ScanSearch, Binoculars, Eye, Cpu, Bell,
   User, Server, Sun, Moon, Link2, Boxes, BarChart3, FlaskConical, Shield, ScrollText,
-  Layers, Download, Landmark, BookOpenCheck, ListChecks, Gavel, KeyRound, History, SlidersHorizontal, FileCheck2, UsersRound, Scale, FolderGit2,
+  Layers, Download, Landmark, BookOpenCheck, ListChecks, Gavel, KeyRound, History, SlidersHorizontal, FileCheck2, UsersRound, Scale, FolderGit2, ShieldOff,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useCpgMe } from '../../hooks/useCpgMe';
@@ -50,6 +50,7 @@ const GOVERNANCE_ICONS: Record<string, React.ComponentType<{ size?: number }>> =
   '/governance': Gavel,
   '/governance/policies': FileCheck2,
   '/governance/cases': FolderGit2,
+  '/governance/exceptions': ShieldOff,
   '/governance/boards': UsersRound,
   '/governance/quorum': Scale,
   '/governance/access': KeyRound,

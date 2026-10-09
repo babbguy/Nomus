@@ -58,6 +58,7 @@ const GovernanceBoards = lazy(() => import('./pages/governance/GovernanceBoards'
 const GovernanceQuorum = lazy(() => import('./pages/governance/GovernanceQuorum'));
 const GovernanceCases = lazy(() => import('./pages/governance/GovernanceCases'));
 const CaseDetail = lazy(() => import('./pages/governance/CaseDetail'));
+const GovernanceExceptions = lazy(() => import('./pages/governance/GovernanceExceptions'));
 const ScanAdmin = lazy(() => import('./pages/admin/ScanAdmin'));
 const ScoutFeeds = lazy(() => import('./pages/admin/ScoutFeeds'));
 const ScoutReview = lazy(() => import('./pages/admin/ScoutReview'));
@@ -172,6 +173,7 @@ export default function App() {
         <Route path="governance/quorum" element={<PermissionRoute {...QUORUM_REQUIREMENT}><GovernanceQuorum /></PermissionRoute>} />
         <Route path="governance/cases" element={<PermissionRoute {...CASES_REQUIREMENT}><GovernanceCases /></PermissionRoute>} />
         <Route path="governance/cases/:id" element={<PermissionRoute {...CASES_REQUIREMENT}><CaseDetail /></PermissionRoute>} />
+        <Route path="governance/exceptions" element={<PermissionRoute {...CASES_REQUIREMENT}><GovernanceExceptions /></PermissionRoute>} />
       </Route>
 
       {/* 404 */}
