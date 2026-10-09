@@ -108,6 +108,9 @@ cpgCaseRoutes.post('/cases/request-review', ...auth(true), uploadBodyLimit, hand
   }), result.created ? 201 : 200);
 }));
 
+/** Rows read per query while filling a page of E41. */
+const LIST_BATCH = 200;
+
 // E41 list, newest first, filtered to the repositories the caller may read.
 cpgCaseRoutes.get('/cases', ...auth(true), handle((c) => {
   const q = parseQuery(c, caseListQuerySchema);
@@ -126,17 +129,28 @@ cpgCaseRoutes.get('/cases', ...auth(true), handle((c) => {
       where f.case_id = ${cpgCases.id} and r.revision = ${cpgCases.latestRevision} and b.value = ${q.boardId})`);
   }
   if (q.mine === 'true') where.push(eq(cpgCases.openedBy, `user:${actor.userId}`));
+  let after: [string, string] | null = null;
   if (q.cursor) {
     const [at, id] = Buffer.from(q.cursor, 'base64url').toString('utf8').split('|');
     if (!at || !id) throw new CpgError(400, 'invalid_input', 'Invalid cursor', [{ path: ['cursor'], message: 'not a cursor of this list' }]);
-    where.push(or(lt(cpgCases.openedAt, at), and(eq(cpgCases.openedAt, at), lt(cpgCases.id, id))));
+    after = [at, id];
   }
-  const rows = db.select().from(cpgCases).where(and(...where)).orderBy(desc(cpgCases.openedAt), desc(cpgCases.id)).limit(q.limit + 1).all();
-  const page = rows.slice(0, q.limit);
+  // Permission is checked per row (repo and team globs), so read in batches until the page is
+  // filled: a repo-scoped reader gets full pages, and a null cursor only on the last one.
+  const visible: CaseRow[] = [];
+  for (;;) {
+    const keyset = after ? [or(lt(cpgCases.openedAt, after[0]), and(eq(cpgCases.openedAt, after[0]), lt(cpgCases.id, after[1])))] : [];
+    const batch = db.select().from(cpgCases).where(and(...where, ...keyset)).orderBy(desc(cpgCases.openedAt), desc(cpgCases.id)).limit(LIST_BATCH).all();
+    visible.push(...batch.filter((r) => can(actor, 'case.read', { repo: r.repo })));
+    if (visible.length > q.limit || batch.length < LIST_BATCH) break;
+    const end = batch[batch.length - 1];
+    after = [end.openedAt, end.id];
+  }
+  const page = visible.slice(0, q.limit);
   const last = page[page.length - 1];
   return c.json(caseListResponseSchema.parse({
-    items: caseSummaries(db, actor.orgId, page.filter((r) => can(actor, 'case.read', { repo: r.repo }))),
-    nextCursor: rows.length > q.limit ? Buffer.from(`${last.openedAt}|${last.id}`).toString('base64url') : null,
+    items: caseSummaries(db, actor.orgId, page),
+    nextCursor: visible.length > q.limit ? Buffer.from(`${last.openedAt}|${last.id}`).toString('base64url') : null,
   }));
 }));
 

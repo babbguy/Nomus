@@ -167,6 +167,27 @@ describe('isolation and listing', () => {
     expect(next.items.some((i) => first.items.some((f) => f.id === i.id))).toBe(false);
   });
 
+  it('a repo-scoped reader gets full pages: the permission filter runs before paging', async () => {
+    const other = 'gate.example.org/team/scoped';
+    const older = [];
+    for (const branch of ['feat/scoped-1', 'feat/scoped-2']) {
+      older.push(requestReviewResponseSchema.parse((await requestReview(dev, { ...reviewBody(branch), repo: other })).json).case.id);
+    }
+    await new Promise((r) => setTimeout(r, 5)); // the hidden cases below are strictly newer
+    for (const branch of ['feat/hidden-1', 'feat/hidden-2', 'feat/hidden-3']) await openCase(branch);
+    const scoped = makeUser(orgId);
+    const role = await call(app, 'POST', '/api/v1/cpg/roles', { cookie: owner.cookie, body: { key: 'repo_reader', name: 'Repo reader', permissions: ['case.read'] } });
+    expect(role.status).toBe(201);
+    const roleId = role.json.id as string;
+    expect((await call(app, 'POST', `/api/v1/cpg/users/${scoped.id}/grants`, { cookie: owner.cookie, body: { roleId, scopeType: 'repo', scopeId: other } })).status).toBe(201);
+    const list = async (cursor?: string | null) => caseListResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases?limit=1${cursor ? `&cursor=${cursor}` : ''}`, { cookie: scoped.cookie })).json);
+    const first = await list();
+    expect(first.items.map((i) => i.id)).toEqual([older[1]]);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await list(first.nextCursor);
+    expect([second.items.map((i) => i.id), second.nextCursor]).toEqual([[older[0]], null]);
+  });
+
   it('list rows name the opener and carry the lanes; the detail adds the people and what the caller may do', async () => {
     const kase = await openCase('feat/people');
     const row = caseListResponseSchema.parse((await call(app, 'GET', '/api/v1/cpg/cases?limit=1', { cookie: dev.cookie })).json).items[0];
