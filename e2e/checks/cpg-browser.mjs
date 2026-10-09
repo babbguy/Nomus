@@ -552,3 +552,44 @@ export async function approvalPageChecks(ctx, { caseId, pendingId, status }) {
     gate.section(area);
   }
 }
+
+/**
+ * Phase 7b (design spec §16.7 check 7): the integrations page on what the
+ * cpg-integrations area configured and delivered. The Org Admin sees the three
+ * integrations with masked secrets and a non-empty delivery log, sends a test
+ * from the page; a Developer is redirected. Called by cpg-integrations while
+ * governance is on; the rows are reported under cpg-browser.
+ */
+export async function integrationPageChecks(ctx, { names, secrets }) {
+  const { gate } = ctx;
+  const { owner, users } = ctx.data.cpg;
+  const area = gate.area;
+  gate.section('cpg-browser');
+  fs.mkdirSync(path.join(ctx.outDir, 'pages'), { recursive: true });
+  const browser = await launchBrowser();
+  try {
+    const admin = await openAs(browser, ctx, owner.client);
+    const page = await visit(ctx, admin, 'owner', '/governance/integrations', {
+      must: [...names, ...secrets.map((s) => `••••${s.slice(-4)}`), 'Delivery log', 'Review requested', 'Delivered', 'Webhook payload and signature'],
+      mustNot: [...secrets, 'No deliveries yet', 'No integrations yet'],
+    });
+    const rows = await admin.page.locator('[data-testid=delivery-log] tbody tr').count();
+    gate.check('Org Admin /governance/integrations lists the email, Jira and webhook integrations with masked secrets and a non-empty delivery log, no 4xx',
+      page.problems.length === 0 && rows >= 6, 'three integrations, masked secrets, at least 6 delivery rows', [...page.problems.slice(0, 4), `${rows} rows`]);
+    const tested = await uiStep(admin, 'send test in the UI', async () => {
+      await admin.page.click(`[aria-label="Send a test through ${names[2]}"]`);
+      await admin.page.waitForSelector('[data-testid=test-result]:has-text("Test delivered")', { timeout: 15_000 });
+    });
+    gate.check('the Org Admin sends a test from the page and sees it delivered inline, no 4xx', tested.length === 0, 'Test delivered notice', tested.slice(0, 4));
+    await admin.context.close();
+
+    const dev = await openAs(browser, ctx, users.dev.client);
+    const denied = await visit(ctx, dev, 'dev', '/governance/integrations', { expectLanding: '/governance', must: ["You don't have access to Integrations.", 'integrations.manage'] });
+    gate.check('Developer /governance/integrations redirects to /governance with an explanation (no integrations.manage), no 4xx',
+      denied.problems.length === 0, 'landed on /governance', denied.problems.slice(0, 4));
+    await dev.context.close();
+  } finally {
+    await browser.close();
+    gate.section(area);
+  }
+}

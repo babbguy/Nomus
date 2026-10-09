@@ -98,7 +98,7 @@ export function buildSummary(db: Db, input: SummaryInput): Omit<CaseNotification
     counts: c && laneCounts(db, c, lane, input.occurredAt),
     policies: policySummaries(db, versionIds),
     decision: input.decision ?? null,
-    link: c ? caseUrl(origin(), c.id) : `${origin()}/governance/${input.event === 'integration.test' ? 'settings' : 'exceptions'}`,
+    link: c ? caseUrl(origin(), c.id) : `${origin()}/governance/${input.event === 'integration.test' ? 'integrations' : 'exceptions'}`,
   };
 }
 

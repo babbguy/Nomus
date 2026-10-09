@@ -15,6 +15,7 @@ import { run } from '../lib/procs.mjs';
 import { waitFor } from '../lib/http.mjs';
 import { preparePolicyRepo } from './cpg-scanner.mjs';
 import { uploads } from './cpg-cases.mjs';
+import { integrationPageChecks } from './cpg-browser.mjs';
 
 const REPO = 'gate-org/policy-repo-notify';
 const BRANCH = 'feat/notify';
@@ -121,6 +122,9 @@ export async function cpgIntegrationsChecks(ctx) {
     gate.check('the sentinel is absent from every body fake Resend, fake Jira and the sink received, and from GET /cpg/deliveries',
       leaks === 0 && emails().length >= 3 && jira.requests.length >= 4 && hooks().length >= 3 && (log.json?.items ?? []).length >= 6,
       '0 of all captured bodies', `${leaks} leaks in ${captured.length} bodies (${emails().length} emails, ${jira.requests.length} Jira, ${hooks().length} webhooks, ${(log.json?.items ?? []).length} deliveries)`);
+
+    // ── 7. the integrations page shows all of it (Phase 7b) ──────────────
+    await integrationPageChecks(ctx, { names: ['Governance email', 'Jira GOV', 'Governance webhook'], secrets: [secret, jira.token] });
   } finally {
     const restore = await owner.client.patch('/api/v1/cpg/settings', { enabled: false });
     gate.check('governance switched off again', restore.status === 200 && restore.json?.enabled === false, '200 enabled false', `${restore.status} ${restore.json?.enabled}`);
