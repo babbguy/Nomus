@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import { users } from '../../../db/schema.js';
+import { cpgRoles } from '../../../db/schema-cpg.js';
 import { requireSessionOrApiKey } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
@@ -20,6 +21,19 @@ import { actorFrom, handle } from './helpers.js';
  */
 export const cpgMeRoutes = new Hono<AppEnv>();
 
+/**
+ * The distinct roles behind the caller's effective grants (active grants of
+ * unarchived roles, at any scope), sorted by key. The dashboard's user card
+ * shows the most privileged one.
+ */
+function rolesOf(db: ReturnType<typeof getDb>, roleIds: string[]): Array<{ id: string; key: string; name: string; isSystem: boolean }> {
+  const ids = [...new Set(roleIds)];
+  if (ids.length === 0) return [];
+  return db.select({ id: cpgRoles.id, key: cpgRoles.key, name: cpgRoles.name, isSystem: cpgRoles.isSystem })
+    .from(cpgRoles).where(inArray(cpgRoles.id, ids)).all()
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
 cpgMeRoutes.get('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission(null, { allowUserKey: true }), handle((c) => {
   const db = getDb();
   const actor = actorFrom(c);
@@ -33,6 +47,7 @@ cpgMeRoutes.get('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission
     isPlatformAdmin: user.role === 'platform_admin',
     permissions: summarizePermissions(actor.grants),
     boards: boardsOfUser(db, actor.orgId, actor.userId),
+    roles: rolesOf(db, actor.grants.map((g) => g.roleId)),
     identity: actor.identity,
   });
   return c.json(body);

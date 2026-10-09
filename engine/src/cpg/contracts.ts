@@ -121,6 +121,8 @@ export const meResponseSchema = z.object({
   isPlatformAdmin: z.boolean(),
   permissions: z.array(z.object({ key: z.string(), scope: scopeType, scopeId: z.string().nullable() }).strict()),
   boards: z.array(z.object({ id: uuid, name: z.string() }).strict()),
+  /** The active roles the user holds at any scope, sorted by key (the dashboard's user card names them). */
+  roles: z.array(z.object({ id: uuid, key: z.string(), name: z.string(), isSystem: z.boolean() }).strict()),
   identity: z.enum(['session', 'user_key', 'org_key']),
 }).strict();
 

@@ -74,6 +74,25 @@ describe('E1 GET /cpg/me', () => {
     const me = meResponseSchema.parse(res.json);
     expect(me.isPlatformAdmin).toBe(true);
     expect(me.permissions).toEqual([]);
+    expect(me.roles).toEqual([]);
+  });
+
+  it('names the active roles behind the permissions, sorted by key (the dashboard user card)', async () => {
+    const res = await call(app, 'GET', '/api/v1/cpg/me', { cookie: owner.cookie });
+    const me = meResponseSchema.parse(res.json);
+    expect(me.roles.map((r) => [r.key, r.name, r.isSystem])).toEqual([['developer', 'Developer', true], ['org_admin', 'Org Admin', true]]);
+    expect(me.roles.find((r) => r.key === 'org_admin')?.id).toBe(await roleId('org_admin'));
+    const a = meResponseSchema.parse((await call(app, 'GET', '/api/v1/cpg/me', { cookie: auditor.cookie })).json);
+    expect(a.roles.map((r) => r.key)).toEqual(['auditor', 'developer']);
+    // A revoked grant no longer names its role.
+    const users = await call(app, 'GET', '/api/v1/cpg/users', { cookie: owner.cookie });
+    const auditorGrant = (users.json.items as Array<{ id: string; grants: Array<{ id: string; roleKey: string }> }>)
+      .find((u) => u.id === auditor.id)!.grants.find((g) => g.roleKey === 'auditor')!;
+    expect((await call(app, 'POST', `/api/v1/cpg/grants/${auditorGrant.id}/revoke`, { cookie: owner.cookie, body: { reason: 'role label test' } })).status).toBe(200);
+    const after = meResponseSchema.parse((await call(app, 'GET', '/api/v1/cpg/me', { cookie: auditor.cookie })).json);
+    expect(after.roles.map((r) => r.key)).toEqual(['developer']);
+    const regrant = await call(app, 'POST', `/api/v1/cpg/users/${auditor.id}/grants`, { cookie: owner.cookie, body: { roleId: await roleId('auditor'), scopeType: 'org' } });
+    expect(regrant.status).toBe(201);
   });
 
   it('a user-bound key acts as its user (identity user_key); an org key is refused', async () => {
