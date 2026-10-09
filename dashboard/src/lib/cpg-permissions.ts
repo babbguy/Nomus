@@ -78,6 +78,7 @@ export const GOVERNANCE_PAGES: GovernancePage[] = [
   { to: '/governance', label: 'Overview', description: 'Your governance access and status', requires: {} },
   { to: '/governance/policies', label: 'Policies', description: 'The corporate policy log: versions, approvals, grace periods', requires: POLICIES_REQUIREMENT },
   { to: '/governance/cases', label: 'Cases', description: 'One case per branch: findings, justifications and board review', requires: CASES_REQUIREMENT },
+  { to: '/governance/exceptions', label: 'Exceptions', description: 'Standing exceptions: approvals that cover future findings matching a pattern', requires: CASES_REQUIREMENT },
   { to: '/governance/boards', label: 'Boards', description: 'Review boards, their members and the policies they own', requires: BOARDS_REQUIREMENT },
   { to: '/governance/quorum', label: 'Quorum', description: 'Who must approve what, versioned and signed', requires: QUORUM_REQUIREMENT },
   { to: '/governance/access', label: 'Access', description: 'Users, role grants, custom roles and teams', requires: ACCESS_REQUIREMENT },

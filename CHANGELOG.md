@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 5 (decisions and exceptions, dashboard): the case page shows
+  each blocking finding's decision (the signed decision with its verified signature and expiry, a
+  covering standing exception, or the pending proposal with the boards still needed), the case's
+  proposals with their votes, vetoes and revocations, and lets eligible reviewers propose snippet or
+  bulk decisions (never bulk on prohibited policies), vote and revoke; the people who opened,
+  justified or revised a case are never offered a decision on it. New **Governance > Exceptions**
+  page lists standing exceptions (pending, active, expired, revoked, lapsed, not approved), with
+  filters, proposing, voting and revocation. The new-version page warns how many standing
+  exceptions the version will lapse. The API adds `GET /api/v1/cpg/proposals?scope=standing`
+  without a case, `revocations` on proposals, the `lapsed` exception status, and the case viewer's
+  `revoke` and `selfApproval` flags; the proposer of a standing exception can no longer vote on it.
 - Corporate policy governance, phase 5 (standing exceptions and revocation, engine): an Exception
   Approver or Case Reviewer proposes a standing exception (repositories or teams, path globs, one
   policy version, optional branch, language, size and snippet conditions, a required expiry within

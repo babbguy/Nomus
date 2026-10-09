@@ -17,7 +17,7 @@ export const LANE_STATE_VARIANT: Record<LaneState, Variant> = { needs_review: 'i
 
 export const RESOLUTION_LABEL: Record<ResolutionStatus, string> = {
   advisory: 'Advisory', grace: 'Grace period', approved: 'Approved', excepted: 'Excepted', rejected: 'Rejected',
-  expired: 'Policy changed: rescan', pending: 'Decision pending', changes_requested: 'Changes requested', needs_review: 'Needs review',
+  expired: 'Approval expired', pending: 'Decision pending', changes_requested: 'Changes requested', needs_review: 'Needs review',
 };
 export const RESOLUTION_VARIANT: Record<ResolutionStatus, Variant> = {
   advisory: 'default', grace: 'default', approved: 'success', excepted: 'success', rejected: 'danger',

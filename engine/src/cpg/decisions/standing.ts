@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { checkRegexSafety, compileGlobList, globError, repoPatternError } from '@nomus/scanner/corporate';
 import {
-  cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgDecisions, cpgProposals, cpgRevocations, cpgSnippets, cpgTeamRepos, cpgTeams,
+  cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgDecisions, cpgPolicyHeads, cpgProposals, cpgRevocations, cpgSnippets, cpgTeamRepos, cpgTeams,
 } from '../../db/schema-cpg.js';
 import { standingPatternSchema, type StandingPattern } from '../contracts.js';
 import { CpgError } from '../errors.js';
@@ -41,6 +41,8 @@ export interface StandingRule {
 export interface StandingException extends StandingRule {
   decision: DecisionRow;
   revocation: typeof cpgRevocations.$inferSelect | null;
+  /** The policy's active version now (null when retired); any other version means the exception has lapsed (D11). */
+  activeVersion: number | null;
 }
 
 const anyGlob = (globs: readonly string[], value: string) => globs.length > 0 && compileGlobList(globs)(value);
@@ -111,14 +113,18 @@ export const resolveRule = (pattern: StandingPattern, teams: Map<string, string[
 
 /** Every standing exception of the org, oldest first, with its pattern (from the immutable proposal) and revocation. */
 export function standingExceptions(db: Db, orgId: string): StandingException[] {
-  const rows = db.select({ decision: cpgDecisions, pattern: cpgProposals.pattern, revocation: cpgRevocations }).from(cpgDecisions)
+  const rows = db.select({ decision: cpgDecisions, pattern: cpgProposals.pattern, revocation: cpgRevocations, head: cpgPolicyHeads }).from(cpgDecisions)
     .innerJoin(cpgProposals, eq(cpgProposals.id, cpgDecisions.proposalId))
     .leftJoin(cpgRevocations, eq(cpgRevocations.decisionId, cpgDecisions.id))
+    .leftJoin(cpgPolicyHeads, eq(cpgPolicyHeads.policyId, cpgDecisions.policyId))
     .where(and(eq(cpgDecisions.orgId, orgId), eq(cpgDecisions.scope, 'standing'), eq(cpgDecisions.outcome, 'approve')))
     .orderBy(asc(cpgDecisions.finalizedAt), asc(cpgDecisions.id)).all();
   if (rows.length === 0) return [];
   const teams = teamRepos(db, orgId);
-  return rows.map((r) => ({ ...resolveRule(standingPatternSchema.parse(JSON.parse(r.pattern!)), teams), decision: r.decision, revocation: r.revocation }));
+  return rows.map((r) => ({
+    ...resolveRule(standingPatternSchema.parse(JSON.parse(r.pattern!)), teams), decision: r.decision, revocation: r.revocation,
+    activeVersion: r.head?.state === 'active' ? r.head.activeVersion : null,
+  }));
 }
 
 /** The pattern of a standing proposal or decision's proposal, teams resolved now. */

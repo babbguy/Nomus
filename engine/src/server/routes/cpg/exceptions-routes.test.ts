@@ -5,6 +5,8 @@
  * match time, the self-approval ban for every covered case, revocation (once,
  * signed, immutable) and the sweep's idempotent notices and case moves.
  */
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { fingerprintOf, findingsStatusResponseSchema, requestReviewResponseSchema } from '@nomus/scanner/corporate';
 import { getDb } from '../../../db/client.js';
@@ -13,7 +15,7 @@ import { rawSqlite } from '../../../db/migrations/runner.js';
 import { seedDatabase } from '../../../db/seed.js';
 import { initSigningKeys } from '../../../core/signing.js';
 import { createApp } from '../../app.js';
-import { exceptionListResponseSchema, proposalDetailResponseSchema, revocationResponseSchema } from '../../../cpg/contracts.js';
+import { exceptionListResponseSchema, proposalDetailResponseSchema, proposalListResponseSchema, revocationResponseSchema } from '../../../cpg/contracts.js';
 import { listAuditEventsByAction } from '../../../cpg/audit/log.js';
 import { cpgVerify } from '../../../cpg/policies/signing.js';
 import { EXPIRY_ACTION, sweepDecisions } from '../../../cpg/decisions/sweep.js';
@@ -158,6 +160,45 @@ describe('standing exceptions', () => {
     const other = (await proposeStanding(pattern(['src/elsewhere/**']))).json.id;
     const view = proposalDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/proposals/${other}`, { cookie: dev.cookie })).json);
     expect(view.viewer).toEqual({ canVote: true, reason: null });
+    // The proposer never approves their own exception, even as an eligible approver on a board.
+    const own = (await proposeStanding(pattern(['src/own/**']), 30, legal)).json.id;
+    const mine = proposalDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/proposals/${own}`, { cookie: legal.cookie })).json);
+    expect([mine.viewer.reason, (await vote(legal, own)).json.code]).toEqual(['self_approval_forbidden', 'self_approval_forbidden']);
+  });
+
+  it('lists standing proposals without a case, shows revocations on the proposal, and an exception lapses with a new policy version (D11)', async () => {
+    const listed = await call(app, 'GET', '/api/v1/cpg/proposals?scope=standing&status=pending', { cookie: ai.cookie });
+    const pending = proposalListResponseSchema.parse(listed.json).items;
+    expect(pending.length).toBeGreaterThan(0);
+    expect(pending.every((p) => p.scope === 'standing' && p.status === 'pending' && p.caseId === null)).toBe(true);
+    expect((await call(app, 'GET', '/api/v1/cpg/proposals', { cookie: ai.cookie })).status).toBe(400);
+
+    const revoked = proposalListResponseSchema.parse((await call(app, 'GET', '/api/v1/cpg/proposals?scope=standing', { cookie: ai.cookie })).json).items
+      .find((p) => p.decisionIds.includes(exceptionId));
+    expect(revoked?.revocations.map((r) => [r.decisionId, r.reason, r.revokedByName !== ''])).toEqual([[exceptionId, 'The legacy client was removed.', true]]);
+
+    const proposed = await proposeStanding(pattern(['src/lapse/**']));
+    const firstVote = await vote(ai, proposed.json.id);
+    const id = (await vote(legal, proposed.json.id)).json.decisionIds[0] as string;
+    const statusOf = async (q = '') => exceptionListResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/exceptions${q}`, { cookie: dev.cookie })).json).items.find((x) => x.id === id)?.status;
+    expect(await statusOf()).toBe('active');
+    const sqlite = rawSqlite(getDb());
+    const policyId = (sqlite.prepare("SELECT id FROM cpg_policies WHERE org_id = ? AND policy_key = 'corp.no-openai'").get(orgId) as { id: string }).id;
+    sqlite.prepare('UPDATE cpg_policy_heads SET active_version = 2 WHERE policy_id = ?').run(policyId);
+    try {
+      expect([await statusOf(), await statusOf('?active=true')]).toEqual(['lapsed', undefined]);
+    } finally {
+      sqlite.prepare('UPDATE cpg_policy_heads SET active_version = 1 WHERE policy_id = ?').run(policyId);
+    }
+
+    // The dashboard's contracts (dashboard/src/api/cpg-case-schemas.ts) parse every response the decision pages read.
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../../../dashboard/src/api/cpg-case-schemas.ts')).href);
+    const revocation = await post(approver, `/decisions/${id}/revoke`, { reason: 'Contract check of the dashboard.' });
+    for (const [schema, body] of [
+      [d.proposalSchema, proposed.json], [d.castVoteSchema, firstVote.json], [d.proposalListSchema, listed.json], [d.revocationSchema, revocation.json],
+      [d.decisionSchema, (await call(app, 'GET', `/api/v1/cpg/decisions/${id}`, { cookie: dev.cookie })).json],
+      [d.standingExceptionListSchema, (await call(app, 'GET', '/api/v1/cpg/exceptions', { cookie: dev.cookie })).json],
+    ] as const) expect(() => schema.parse(body)).not.toThrow();
   });
 });
 

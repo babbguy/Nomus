@@ -28,7 +28,7 @@ type Db = BetterSQLite3Database<any>;
 const VOTE_PERMISSIONS = ['case.review', 'exception.approve'] as const;
 
 /** The case opener, any justification author and any revision creator may never vote on the case. */
-function isSelfApproval(db: Db, c: CaseRow, userId: string): boolean {
+export function isSelfApproval(db: Db, c: CaseRow, userId: string): boolean {
   const actor = `user:${userId}`;
   if (c.openedBy === actor) return true;
   const justified = db.select({ id: cpgJustifications.id }).from(cpgJustifications)
@@ -47,7 +47,8 @@ export interface Eligibility {
  * Throw unless `actor` may vote on proposal `p` needing `req`: `case.review`
  * on the case's repository, or for a standing exception `case.review` or
  * `exception.approve` on every repository its pattern can touch (403
- * forbidden); not self-approval (403 self_approval_forbidden); and an active
+ * forbidden); not self-approval, including the proposer of a standing
+ * exception (403 self_approval_forbidden); and an active
  * member of a required board (403 not_eligible_voter). Returns the
  * eligibility facts to store.
  */
@@ -59,8 +60,11 @@ export function eligibleBallot(db: Db, actor: CpgActor, p: ProposalRow, req: Req
     throw new CpgError(403, 'forbidden', `Missing permission ${rule ? 'case.review or exception.approve' : 'case.review'}`, { permission: 'case.review' });
   }
   const cases = [...(origin ? [origin] : []), ...(rule ? coveredOpenCases(db, p.orgId, rule) : [])];
-  if (cases.some((c) => isSelfApproval(db, c, actor.userId))) {
-    throw new CpgError(403, 'self_approval_forbidden', 'You opened, justified or revised this case, so you cannot decide on it');
+  // The proposer of a standing exception never votes on it (their proposal is not a vote, unlike a snippet or bulk one).
+  if ((rule && p.proposerUserId === actor.userId) || cases.some((c) => isSelfApproval(db, c, actor.userId))) {
+    throw new CpgError(403, 'self_approval_forbidden', rule && p.proposerUserId === actor.userId
+      ? 'You proposed this standing exception, so you cannot vote on it'
+      : 'You opened, justified or revised this case, so you cannot decide on it');
   }
   const boards = boardsOfUser(db, actor.orgId, actor.userId).map((b) => b.id).filter((id) => req.boardIds.includes(id)).sort();
   if (boards.length === 0) throw new CpgError(403, 'not_eligible_voter', 'Only a member of a required board can vote', { boardIds: req.boardIds });

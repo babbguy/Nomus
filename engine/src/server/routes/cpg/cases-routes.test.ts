@@ -175,8 +175,8 @@ describe('isolation and listing', () => {
     const detail = async (user: TestUser) => caseDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}`, { cookie: user.cookie })).json);
     const asDev = await detail(dev);
     expect(asDev).toMatchObject({ openedAt: row.openedAt, openedBy: row.openedBy, closure: null });
-    expect(asDev.viewer).toEqual({ comment: true, review: false, close: false, withdraw: true });
-    expect((await detail(reviewer)).viewer).toEqual({ comment: true, review: true, close: true, withdraw: true });
+    expect(asDev.viewer).toEqual({ comment: true, review: false, close: false, withdraw: true, revoke: false, selfApproval: true });
+    expect((await detail(reviewer)).viewer).toEqual({ comment: true, review: true, close: true, withdraw: true, revoke: false, selfApproval: false });
     const findings = revisionDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}/revisions/1`, { cookie: dev.cookie })).json).findings;
     expect(findings.map((f) => [f.policyKey, f.policyTitle.length > 0, f.policyId.length])).toEqual([['corp.no-openai', true, 36], ['corp.no-pii', true, 36]]);
   });

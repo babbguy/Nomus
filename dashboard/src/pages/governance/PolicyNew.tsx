@@ -6,9 +6,12 @@ import Button from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
 import ErrorState from '../../components/ui/ErrorState';
 import {
-  compilePolicy, getPolicy, getQuorum, listBoards, proposePolicy, proposePolicyVersion,
+  compilePolicy, getPolicy, getQuorum, listBoards, listStandingExceptions, proposePolicy, proposePolicyVersion,
   type Board, type CodeExample, type CompileRecord, type PolicyDetail, type QuorumVersion, type Tier,
 } from '../../api/cpg';
+import { useCpgMe } from '../../hooks/useCpgMe';
+import { holdsPermission } from '../../lib/cpg-permissions';
+import { lapsingCount } from '../../lib/cpg-approvals';
 import { TIER_DESCRIPTION, TIER_LABEL, policyErrorMessage } from '../../lib/cpg-policy';
 import { compileInputProblems, graceFields, ruleEditProblems, tomorrowUtc, type GraceMode } from '../../lib/cpg-policy-forms';
 import GovernanceHeader from './GovernanceHeader';
@@ -37,6 +40,10 @@ export default function PolicyNew() {
   const [quorum, setQuorum] = useState<QuorumVersion | null>(null);
   const [base, setBase] = useState<PolicyDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const { me } = useCpgMe();
+  const readsExceptions = holdsPermission(me, 'case.read');
+  /** Active standing exceptions on the current version, which the new version will lapse (D11). */
+  const [lapsing, setLapsing] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   // Step 1: text and examples.
@@ -86,6 +93,15 @@ export default function PolicyNew() {
       .catch((err) => { if (!cancelled) setLoadError(policyErrorMessage(err, 'Failed to load boards and the quorum configuration')); });
     return () => { cancelled = true; };
   }, [policyId, reloadKey]);
+
+  const baseKey = base?.policy.policyKey;
+  const baseVersion = base?.policy.activeVersion ?? null;
+  useEffect(() => {
+    if (!baseKey || baseVersion === null || !readsExceptions) return;
+    let cancelled = false;
+    listStandingExceptions(baseKey).then((x) => { if (!cancelled) setLapsing(lapsingCount(x, baseKey, baseVersion)); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [baseKey, baseVersion, readsExceptions]);
 
   async function compile() {
     setCompiling(true);
@@ -271,6 +287,12 @@ export default function PolicyNew() {
               </div>
               {proposalProblems.length > 0 && (
                 <ul className="mt-3 text-xs text-warning list-disc pl-5" data-testid="proposal-problems">{proposalProblems.map((p) => <li key={p}>{p}</li>)}</ul>
+              )}
+              {lapsing !== null && lapsing > 0 && (
+                <p className="text-xs text-warning mt-3" data-testid="lapse-warning">
+                  {lapsing} standing exception{lapsing === 1 ? '' : 's'} will lapse when this version is approved: {lapsing === 1 ? 'it is' : 'they are'} pinned
+                  to v{baseVersion}. Propose {lapsing === 1 ? 'it' : 'them'} again for the new version on the <Link to="/governance/exceptions" className="underline">Exceptions</Link> page.
+                </p>
               )}
               {proposeError && <p className="text-sm text-danger mt-3" role="alert" data-testid="propose-error">{proposeError}</p>}
               <div className="flex justify-end mt-4">

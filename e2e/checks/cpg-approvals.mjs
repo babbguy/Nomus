@@ -1,5 +1,6 @@
 // CPG Phase 5a: approvals, standing exceptions and revocation, design spec
-// §16.5 release-gate checks 1 to 10, over HTTP against the built engine.
+// §16.5 release-gate checks 1 to 10, over HTTP against the built engine, and
+// check 11 (the decision pages in a browser, via cpg-browser.mjs).
 //
 // dev@ requests review on a new branch for the corporate findings the real
 // CLI reports on the policy-repo fixture. ai-reviewer@ (AI Review Board) and
@@ -16,6 +17,7 @@ import path from 'node:path';
 import { run } from '../lib/procs.mjs';
 import { preparePolicyRepo } from './cpg-scanner.mjs';
 import { uploads } from './cpg-cases.mjs';
+import { approvalPageChecks } from './cpg-browser.mjs';
 
 const REPO = 'github.com/gate-org/policy-repo';
 const BRANCH = 'feat/policy-approvals';
@@ -180,6 +182,13 @@ export async function cpgApprovalsChecks(ctx) {
       revoked.status === 201 && revoked.json?.decisionId === exceptionId && afterRevoke?.status === 'needs_review' && reopened === 'in_review'
         && again.status === 409 && again.json?.code === 'already_revoked',
       '201, needs_review, in_review, 409 already_revoked', `${revoked.status} ${afterRevoke?.status} ${reopened} ${again.status} ${again.json?.code}`);
+
+    // ── 11 (5b). the decision pages in a browser, with a pending proposal to vote on ──
+    const pending = await ai.post('/api/v1/cpg/proposals', { caseId, scope: 'snippet', outcome: 'approve', fingerprints: [legacy], expiresAt: inDays(30), rationale: RATIONALE });
+    if (gate.check('ai-reviewer@ proposes approving the legacy finding again after the revocation: pending, 1 of 2',
+      pending.status === 201 && pending.json?.status === 'pending', '201 pending', `${pending.status} ${pending.json?.status}`)) {
+      await approvalPageChecks(ctx, { caseId, pendingId: pending.json.id, status: () => status(legacy) });
+    }
   } finally {
     const revoke = await owner.client.post(`/api/v1/cpg/grants/${devGrant.json?.id}/revoke`, { reason: 'Gate: self-approval check done' });
     if (legalGrant) {
