@@ -233,6 +233,18 @@ All notable changes to this project are documented here. The format follows
   findings status, CI evaluate and pr-closed) is now canonicalised, so every form names one
   repository; team and standing-exception repository patterns and repository-scoped grants drop a
   leading `github.com/` host.
+- Scanner: the fix suggestion for a Python file was a JavaScript snippet naming a fixed model
+  (`model: 'claude-sonnet'`). Suggestions now follow the file's language (Python, or
+  JavaScript/TypeScript; prose for other languages) and log the model the request used.
+- Scanner CLI: with corporate policies on, the console says what each file count is ("Found 5
+  source files for the regulatory scan", "6 files checked for corporate policies (every repository
+  file in a policy's scope, of any type)"). Output without corporate policies is unchanged.
+- VS Code: offline, the regulatory error now says which results are unavailable and that the
+  corporate findings shown come from the cached bundle; a tampered cache while offline gives one
+  error message instead of three.
+- Dashboard: the review case list is denser (relative times with the UTC time on hover, the opening
+  time in the case column, narrower lanes), and on narrow screens the sidebar starts closed and
+  closes after you pick a page instead of covering it.
 - Corporate policy governance: the review case list checked repository permissions after taking a
   page, so a reader limited to some repositories could get short or empty pages while more of
   their cases existed. Pages are now filled before they are returned.
