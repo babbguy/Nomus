@@ -88,6 +88,18 @@
           ],
           "default": "medium",
           "description": "Minimum severity to flag as error"
+        },
+        "nomus.corporate.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show your organization's corporate policy findings (from its signed policy bundle) next to regulatory findings. Local and advisory: CI enforces corporate policies."
+        },
+        "nomus.corporate.maxCacheAgeHours": {
+          "type": "number",
+          "default": 72,
+          "minimum": 1,
+          "maximum": 720,
+          "description": "How long a verified, cached corporate policy bundle may be used while the Nomus server is unreachable. Older caches are not used and corporate findings are hidden."
         }
       }
     },
@@ -139,6 +151,11 @@
       {
         "command": "nomus.refreshViews",
         "title": "Nomus: Refresh All Views"
+      },
+      {
+        "command": "nomus.cpg.refresh",
+        "title": "Nomus: Refresh Corporate Policies",
+        "icon": "$(refresh)"
       }
     ],
     "viewsContainers": {
@@ -167,6 +184,19 @@
         {
           "id": "nomus.radar",
           "name": "Regulatory Radar"
+        },
+        {
+          "id": "nomus.corporate",
+          "name": "Corporate Policies"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "nomus.cpg.refresh",
+          "when": "view == nomus.corporate",
+          "group": "navigation"
         }
       ]
     }

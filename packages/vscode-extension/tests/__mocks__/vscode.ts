@@ -35,9 +35,9 @@ export class Position {
 }
 
 export class Uri {
-  constructor(public fsPath: string) {}
+  constructor(public fsPath: string, public scheme = 'file') {}
   static file(path: string) { return new Uri(path); }
-  static parse(str: string) { return new Uri(str); }
+  static parse(str: string) { return new Uri(str, /^([a-zA-Z][\w+.-]*):/.exec(str)?.[1] ?? 'file'); }
   toString() { return this.fsPath; }
 }
 
@@ -68,6 +68,10 @@ export class ThemeColor {
   constructor(public id: string) {}
 }
 
+export class ThemeIcon {
+  constructor(public id: string, public color?: ThemeColor) {}
+}
+
 export class EventEmitter<T> {
   private listeners: ((e: T) => void)[] = [];
   event = (listener: (e: T) => void) => {
@@ -83,6 +87,7 @@ export class TreeItem {
   tooltip?: string;
   command?: { command: string; title: string; arguments?: unknown[] };
   contextValue?: string;
+  iconPath?: ThemeIcon;
 
   constructor(
     public label: string,
