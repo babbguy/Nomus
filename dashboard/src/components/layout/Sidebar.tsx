@@ -5,11 +5,12 @@ import {
   Users, UserCog, Database, Activity, ShieldCheck,
   ChevronLeft, ChevronRight, BookOpen, ScanSearch, Binoculars, Eye, Cpu, Bell,
   User, Server, Sun, Moon, Link2, Boxes, BarChart3, FlaskConical, Shield, ScrollText,
-  Layers, Download, Landmark, BookOpenCheck, ListChecks, Gavel, KeyRound, History, SlidersHorizontal,
+  Layers, Download, Landmark, BookOpenCheck, ListChecks, Gavel, KeyRound, History, SlidersHorizontal, FileCheck2,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { showGovernanceNav, visibleGovernancePages } from '../../lib/cpg-permissions';
+import { userRoleLabel } from '../../lib/cpg-policy';
 import { useAppStore } from '../../stores/appStore';
 import { cn } from '../../lib/cn';
 
@@ -47,6 +48,7 @@ function NavItem({ to, icon, label, collapsed, end }: NavItemProps) {
 
 const GOVERNANCE_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   '/governance': Gavel,
+  '/governance/policies': FileCheck2,
   '/governance/access': KeyRound,
   '/governance/audit': History,
   '/governance/settings': SlidersHorizontal,
@@ -88,6 +90,9 @@ export default function Sidebar() {
   const { sidebarOpen, toggleSidebar, theme, toggleTheme } = useAppStore();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'platform_admin';
+  // The governance role for org users who hold one (brief §9); the legacy label otherwise.
+  const { me } = useCpgMe();
+  const roleLabel = userRoleLabel(user?.role, isAdmin ? null : me);
   const collapsed = !sidebarOpen;
   const iconSize = 18;
 
@@ -207,7 +212,7 @@ export default function Sidebar() {
               </div>
               <div className="min-w-0 text-left">
                 <p className="text-sm font-medium text-text-primary truncate">{user?.name}</p>
-                <p className="text-[10px] text-text-muted truncate">{user?.role === 'platform_admin' ? 'Admin' : 'Member'}</p>
+                <p className="text-[10px] text-text-muted truncate" data-testid="sidebar-role" title={me && !isAdmin && me.roles.length > 1 ? me.roles.map((r) => r.name).join(', ') : undefined}>{roleLabel}</p>
               </div>
             </button>
             <div className="flex items-center gap-1">

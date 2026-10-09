@@ -75,6 +75,9 @@ Shown according to the user's organization permissions from `GET /api/v1/cpg/me`
 | `GovernanceAccess` | `/governance/access` | `org.members.read` and a `rbac.*.manage` permission | Users and grants (org, team or repository scope), role permission matrix and editor, teams |
 | `GovernanceAudit` | `/governance/audit` | `audit.read` | Hash-chained governance audit log with the chain-verification result |
 | `GovernanceSettings` | `/governance/settings` | `policy.read` (changes: `org.settings.manage`) | Turn governance on, reviewer-context generation with its data disclosure |
+| `GovernancePolicies` | `/governance/policies` | `policy.read` | The corporate policy log: state, tier, owning boards, versions, grace period or enforcement date |
+| `PolicyNew` | `/governance/policies/new` (`?policy=<id>` for a new version) | `policy.read` and `policy.author` | Plain-English authoring with code examples, compile (generated output labelled), rejection reasons, propose |
+| `PolicyDetail` | `/governance/policies/:id` | `policy.read` (votes: `policy.approve`, never the author or compile requester) | Versions, votes, signatures, supersede history, version diff, four-eyes status, withdraw, new version, retirement |
 
 ### Public and auth pages
 
@@ -98,9 +101,12 @@ Shown according to the user's organization permissions from `GET /api/v1/cpg/me`
 Typed clients built on a shared Axios base client (`client.ts`), including `admin.ts`, `auth.ts`, `dashboard.ts`, `scans.ts`, `policies.ts`, `attestations.ts`, `scout.ts`, `radar.ts`, `radar-v2.ts`, `simulate.ts`, `sources.ts`, `tenants.ts`, `diffs.ts`, `clause-map.ts`, `verify.ts` and `transparency-accuracy.ts`.
 
 `cpg.ts` is the governance client (`/api/v1/cpg`). Every response is parsed with the zod schemas in
-`cpg-schemas.ts` before a page uses it; a response that does not match shows as a load error naming
-the endpoint and field. The engine's `dashboard-api-contract.test.ts` parses real engine responses
-with the same schemas.
+`cpg-schemas.ts` and `cpg-quorum.ts` before a page uses it; a response that does not match shows as
+a load error naming the endpoint and field. The engine's `dashboard-api-contract.test.ts` and
+`routes/cpg/dashboard-registry-contract.test.ts` parse real engine responses with the same schemas.
+`cpg-quorum.ts` mirrors the engine's quorum schema (for parsing and form validation); a contract
+test runs both over the same accept and reject cases. The corporate rule schema is mirrored by
+structure only: the engine validates vocabularies, regex safety and globs.
 
 ### Routing
 

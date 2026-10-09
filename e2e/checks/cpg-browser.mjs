@@ -9,12 +9,17 @@
 // Invalid Date) or missing text the gate's data guarantees. A full-page
 // screenshot of every page is saved as cpg-<user>_<route>.png.
 //
-// It runs after cpg-rbac (area order) and reads what that area granted; to
-// debug it alone use --only=cpg-rbac,cpg-browser.
+// It runs after cpg-rbac and cpg-policy (area order) and reads what they
+// created; to debug it alone use --only=cpg-rbac,cpg-policy,cpg-browser.
 //
 // The Org Admin also drives the Access page's write workflows through the UI
 // (custom role, team, team- and repository-scoped grants), and the API then
 // confirms what the UI did.
+//
+// Phase 2b (design spec §16.2 check 11) adds the policy registry pages: the
+// policy log, a policy's detail and authoring (a rejected compile, a compiled
+// rule, a proposal its author cannot approve, an approval by the approver),
+// all through the UI, and the sidebar's governance role label.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -236,7 +241,125 @@ export async function cpgBrowserChecks(ctx) {
     gate.check('without org.api_keys.manage, /settings hides API-key management and makes no 403 call (permission restored afterwards)',
       cut.status === 200 && restore.status === 200 && devSettings.problems.length === 0,
       'no Generate button, no 4xx; role edits 200', [`cut ${cut.status}, restore ${restore.status}`, ...devSettings.problems].slice(0, 4));
+
+    // ── Phase 2b: the policy registry pages (design spec §16.2 check 11) ──
+    await policyRegistryChecks(ctx, browser);
   } finally {
     await browser.close();
   }
+}
+
+/** The text of the sidebar user card's role label. */
+async function sidebarRole(page) {
+  return (await page.textContent('[data-testid="sidebar-role"]').catch(() => null))?.trim() ?? null;
+}
+
+// Example code for the UI compile: it goes to the engine only, never to the LLM.
+const UI_MARKER = 'gate-ui-example-marker-6d1f';
+const UI_VIOLATING = `// ${UI_MARKER}\nexport const model = 'gpt-4-32k';\n`;
+const UI_COMPLIANT = `// ${UI_MARKER}\nexport const model = 'gpt-4o';\n`;
+
+/**
+ * CPG Phase 2b: the policy log, a policy's detail and authoring in the
+ * browser, against the gate-policy org as cpg-policy left it (three active
+ * policies, two boards, quorum v2; governance off). Authoring runs end to end
+ * through the UI: a rejected compile, a compiled rule, a proposal its author
+ * cannot approve (four-eyes), and the approver's approval.
+ */
+async function policyRegistryChecks(ctx, browser) {
+  const { gate } = ctx;
+  const { owner, users } = ctx.data.cpg;
+  const heads = (await owner.client.get('/api/v1/cpg/policies')).json?.items ?? [];
+  const openaiPolicy = heads.find((h) => h.policyKey === 'corp.no-direct-openai');
+
+  // ── Org Admin: list and detail ──────────────────────────────────────
+  const admin = await openAs(browser, ctx, owner.client);
+  const list = await visit(ctx, admin, 'owner', '/governance/policies', {
+    must: ['corp.no-direct-openai', 'corp.no-gpt-4-32k', 'corp.no-pii-to-ai', 'Prohibited', 'Grace period', 'AI Review Board', 'Governance is off'],
+  });
+  gate.check('Org Admin /governance/policies renders the policy log cleanly (state, tier, owning boards, version, grace period)', list.problems.length === 0,
+    'no 4xx, the three gate policies shown', list.problems.slice(0, 4));
+  gate.equal('sidebar user card names the governance role, Org Admin (+1 for Developer), instead of the legacy "Member" (brief §9)', await sidebarRole(admin.page), 'Org Admin +1');
+  const detail = await visit(ctx, admin, 'owner', `/governance/policies/${openaiPolicy?.policyId}`, {
+    must: ['corp.no-direct-openai', 'Signed', 'Activated and signed', 'Approved by Gate approver', 'Release gate approval', 'Enforced since', 'Compare versions'],
+  });
+  gate.check('Org Admin policy detail renders cleanly: versions, signature, approval vote, enforcement, history', !!openaiPolicy && detail.problems.length === 0,
+    'no 4xx, signed v1 with its vote', detail.problems.slice(0, 4));
+  await admin.context.close();
+
+  // ── Author: compile (rejected, then compiled), propose; four-eyes ───
+  const llmBefore = ctx.llm.calls.filter((c) => c.kind === 'cpg-compile').length;
+  const author = await openAs(browser, ctx, users.author.client);
+  const newPage = await visit(ctx, author, 'author', '/governance/policies/new', { must: ['Describe the policy', 'never becomes active until someone other than you approves it'] });
+  gate.check('Author /governance/policies/new renders cleanly and says nothing is active until someone else approves it', newPage.problems.length === 0, 'no 4xx', newPage.problems.slice(0, 4));
+  const a = author.page;
+  const rejectSteps = await uiStep(author, 'rejected compile', async () => {
+    await a.fill('#policy-text', 'Every AI integration must be well designed and show good taste.');
+    await a.fill('[aria-label="violating example 1 path"]', 'src/models.js');
+    await a.fill('[aria-label="violating example 1 code"]', UI_VIOLATING);
+    await a.click('button:has-text("Compile")');
+    await a.waitForSelector('text=Cannot be expressed as a deterministic rule', { timeout: 15_000 });
+  });
+  const rejectText = await pageText(a);
+  gate.check('a policy that cannot be decided deterministically is rejected in the UI with the reason shown verbatim, no 4xx',
+    rejectSteps.length === 0 && rejectText.includes('Requires a judgement about design quality, which a deterministic rule cannot make.') && !rejectText.includes('Propose for approval'),
+    'rejected_unexpressible reason shown, no proposal form', rejectSteps.slice(0, 4));
+
+  const proposeSteps = await uiStep(author, 'compile and propose', async () => {
+    await a.fill('#policy-text', 'No new code may reference the retired gpt-4-32k model (release gate UI).');
+    await a.locator('div.mt-4', { hasText: 'Compliant examples' }).locator('button:has-text("Add")').click();
+    await a.fill('[aria-label="compliant example 1 path"]', 'src/ok.js');
+    await a.fill('[aria-label="compliant example 1 code"]', UI_COMPLIANT);
+    await a.click('button:has-text("Compile again")');
+    await a.waitForSelector('[data-testid="generated-notice"]', { timeout: 15_000 });
+    await a.fill('#policy-key', 'corp.gate-ui-model');
+    await a.check('label:has-text("AI Review Board") input[type=checkbox]');
+    await a.click('button:has-text("Propose for approval")');
+    await a.waitForURL(/\/governance\/policies\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+    await a.waitForSelector('[data-testid="proposed-notice"]', { timeout: 10_000 });
+  });
+  const proposedText = await pageText(a);
+  const approveButtons = await a.locator('button:text-is("Approve")').count();
+  gate.check('Author compiles through the UI (labelled as generated), proposes corp.gate-ui-model, and is told it is not active',
+    proposeSteps.length === 0 && proposedText.includes('is not active') && proposedText.includes('corp.gate-ui-model'),
+    'proposed, not active', proposeSteps.slice(0, 4));
+  gate.check('four-eyes in the UI: the author (who also holds policy.approve) gets no Approve button and is told why',
+    approveButtons === 0 && proposedText.includes('You proposed this version, so you cannot approve or reject it.'),
+    'no Approve button, explanation shown', JSON.stringify({ approveButtons }));
+  const uiPrompts = ctx.llm.calls.filter((c) => c.kind === 'cpg-compile').slice(llmBefore);
+  gate.check('the UI compiles sent the policy text but none of the example code to the LLM',
+    uiPrompts.length === 2 && uiPrompts.every((c) => !c.requestBody.includes(UI_MARKER)) && uiPrompts.some((c) => c.requestBody.includes('release gate UI')),
+    '2 prompts, no example code', `${uiPrompts.length} prompts`);
+  gate.equal('Author sidebar role label: the most privileged role plus the others', await sidebarRole(a), 'Policy Approver +2');
+  const proposedId = new URL(a.url()).pathname.split('/').pop();
+  await author.context.close();
+
+  // ── Approver: approves through the UI ───────────────────────────────
+  const approver = await openAs(browser, ctx, users.approver.client);
+  const before = await visit(ctx, approver, 'approver', `/governance/policies/${proposedId}`, { must: ['corp.gate-ui-model', 'Version 1 awaits approval', '0 of 1 approval'] });
+  const approveSteps = await uiStep(approver, 'approve', async () => {
+    await approver.page.fill('#vote-comment', 'Release gate UI approval');
+    await approver.page.click('button:text-is("Approve")');
+    await approver.page.waitForSelector('text=Approved. Version 1 is now active and signed.', { timeout: 10_000 });
+  });
+  const afterText = await pageText(approver.page);
+  const apiPolicy = (await owner.client.get(`/api/v1/cpg/policies/${proposedId}`)).json;
+  gate.check("Approver approves through the policy page: active and signed; the API records the approver's vote",
+    before.problems.length === 0 && approveSteps.length === 0 && afterText.includes('Activated and signed') && apiPolicy?.policy?.state === 'active'
+      && apiPolicy?.votes?.length === 1 && apiPolicy.votes[0].voterUserId === users.approver.id && typeof apiPolicy?.versions?.[0]?.signature === 'string',
+    'no 4xx; active, 1 vote by approver, signed', [...before.problems, ...approveSteps, `${apiPolicy?.policy?.state} votes=${apiPolicy?.votes?.length}`].slice(0, 4));
+  await approver.context.close();
+
+  // ── Developer: read-only log and quorum, no authoring ───────────────
+  const dev = await openAs(browser, ctx, users.dev.client);
+  const devNew = await visit(ctx, dev, 'dev', '/governance/policies/new', { expectLanding: '/governance', must: ["You don't have access to New policy", 'policy.author'] });
+  gate.check('Developer /governance/policies/new redirects with an explanation (no policy.author), no 4xx', devNew.problems.length === 0, 'landed on /governance', devNew.problems.slice(0, 4));
+  const devList = await visit(ctx, dev, 'dev', '/governance/policies', { must: ['corp.no-direct-openai', 'corp.gate-ui-model'], mustNot: ['New policy'] });
+  gate.check('Developer reads the policy log without authoring controls, no 4xx', devList.problems.length === 0,
+    'no New policy', devList.problems.slice(0, 4));
+  // dev@ holds Developer plus the custom role this area granted per team and repository; system roles rank first.
+  const devRoleTitle = await dev.page.getAttribute('[data-testid="sidebar-role"]', 'title').catch(() => null);
+  gate.equal('Developer sidebar role label: Developer, +1 for the custom role granted above (full list on hover)',
+    [await sidebarRole(dev.page), devRoleTitle], ['Developer +1', 'Developer, Gate Repo Reviewer']);
+  await dev.context.close();
 }

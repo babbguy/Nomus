@@ -9,9 +9,10 @@ period, and what a corporate policy can and cannot express. Roles and permission
 [Roles and permissions](./roles-and-permissions.md); the endpoints are in the
 [policy registry API reference](../api-reference/policy-registry.md).
 
-> Phase note: this release builds the policy registry and the signed bundle. Showing corporate
-> findings in scans, the editor and CI, and review cases, arrive in the following releases. The
-> dashboard pages for policies, boards and the quorum arrive in the next update; until then use the API.
+> Phase note: this release builds the policy registry, the signed bundle and the dashboard's
+> policy pages (Governance > Policies). Dashboard pages for boards and the quorum follow in the next
+> update; until then use the API for them. Showing corporate findings in scans, the editor and CI,
+> and review cases, arrive in the following releases.
 
 ## How it fits together
 
@@ -121,6 +122,11 @@ A policy has at most one pending version at a time. The author can withdraw it.
 | `review-required` | Blocks CI until a reviewer approves the finding (later release) |
 | `prohibited` | Blocks CI; only snippet-level approvals by two boards (later release) |
 
+In the dashboard this is **Governance > Policies > New policy** (authors need `policy.author`):
+the page compiles, shows the rule in plain English and as JSON with every rejection reason and
+example result, labels everything the model produced as generated, and proposes the version. The
+user guide walks through it: [Writing and approving a policy](../user-guide/getting-started.md#writing-and-approving-a-policy).
+
 ## Approving a policy (four-eyes)
 
 Approvers need `policy.approve`. The person who proposed the version and the person who compiled
@@ -133,6 +139,12 @@ organization's bundle is rebuilt. Connected clients of the organization receive 
 
 Retiring a policy is also a proposal (`POST /cpg/policies/:id/retire`) with the same four-eyes
 approval, because it weakens enforcement. Once approved, the policy leaves the bundle.
+
+On a policy's page in the dashboard, Approve and Reject appear only for a Policy Approver who did
+not propose or compile the pending version and has not voted on it yet; everyone else sees the
+reason (the server enforces the same rules on every vote). The page shows the approvals so far
+against the number required, the votes with their comments, when the proposal lapses, and every
+version with its votes, activation signature and enforcement date.
 
 ## Grace period
 

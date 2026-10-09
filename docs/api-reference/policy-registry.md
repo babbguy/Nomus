@@ -192,7 +192,7 @@ These three answer `201` with the policy detail:
     "policyId": "…", "policyKey": "corp.no-direct-openai", "state": "active", "title": "…", "tier": "prohibited",
     "owningBoards": [{ "id": "…", "name": "AI Review Board" }], "activeVersion": 1,
     "enforceFrom": "2026-10-08T09:00:00.000Z", "inGracePeriod": false,
-    "pendingVersionId": null, "pendingVersion": null, "latestVersion": 1,
+    "pendingVersionId": null, "pendingVersion": null, "pendingVersionKind": null, "latestVersion": 1,
     "createdAt": "…", "createdBy": "user:…", "updatedAt": "…"
   },
   "versions": [{ "id": "…", "version": 1, "kind": "define", "status": "active", "title": "…", "plainText": "…", "tier": "prohibited",
@@ -207,7 +207,8 @@ These three answer `201` with the policy detail:
 ```
 
 Policy `state` is `draft` (no active version and nothing pending), `proposed`, `active` or
-`retired`. Version `status` is `pending`, `active`, `superseded`, `rejected`, `withdrawn`,
+`retired`. `pendingVersionKind` is `define` or `retire` for a pending version (a
+retirement proposal is a `retire` version), and `null` when nothing is pending. Version `status` is `pending`, `active`, `superseded`, `rejected`, `withdrawn`,
 `expired` (the proposal lapsed) or `retired`. Version events are `proposed`, `approved`,
 `activated`, `superseded`, `rejected`, `withdrawn`, `expired_proposal` and `retired`.
 

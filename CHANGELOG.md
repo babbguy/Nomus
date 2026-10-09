@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 2 (dashboard): the policy pages under **Governance**.
+  Policies (`/governance/policies`: the policy log with state, tier, owning boards,
+  active and pending versions, and the grace period or enforce-from date); New policy
+  (`/governance/policies/new`: write a policy in plain English with violating and compliant code
+  examples, compile it, read the rule both as plain English and as the exact JSON, see every
+  rejection reason and each example's result, then propose it with a key, title, tier, owning
+  boards and a grace period or enforce-from date, optionally editing the rule; compiled output is
+  labelled as generated and the page states that nothing is active until someone other than the
+  author approves it); a policy page (`/governance/policies/:id`: versions with their status,
+  approval votes, activation signatures and supersede history, a diff between any two versions,
+  the four-eyes status of a pending version with Approve and Reject only for eligible approvers and
+  the reason for everyone else, withdraw, new version and proposed retirement).
 - Corporate policy governance, phase 2 (scanner library): `@nomus/scanner/corporate`, the pure
   library the engine, the VS Code extension and the GitHub Action share for corporate policies: the
   rule schema and closed vocabularies, globs, regex safety, the deterministic matcher, the finding
@@ -53,6 +65,12 @@ All notable changes to this project are documented here. The format follows
 - Live events can now be private to one organization: corporate-policy events (`cpg.bundle.changed`)
   reach only that organization's stream clients. Existing events are unchanged.
 - `GET /api/v1/cpg/me` and `GET /api/v1/cpg/users` now list each user's review boards.
+- `GET /api/v1/cpg/me` now lists the caller's active roles (`roles`), and the sidebar's user card
+  shows the user's governance role (for example "Org Admin", or "Org Admin +1" with several roles)
+  instead of "Member". Platform administrators and users without governance roles keep the
+  previous label.
+- The policy log (`GET /api/v1/cpg/policies` and the policy detail) now says whether a pending
+  version defines the policy or retires it (`pendingVersionKind`).
 - On upgrade, each organization's earliest member becomes Org Admin and every member becomes
   Developer; platform administrators get no organization role. Developer keeps the v1.1.0 member
   abilities (`PATCH /org`, organization API keys) as grants an Org Admin can remove.

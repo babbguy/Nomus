@@ -92,6 +92,7 @@ function serializeHeadWith(policy: PolicyRow, head: HeadRow, versions: VersionRo
     inGracePeriod: head.state === 'active' && !!head.enforceFrom && Date.parse(head.enforceFrom) > now,
     pendingVersionId: head.pendingVersionId,
     pendingVersion: pending?.version ?? null,
+    pendingVersionKind: pending?.kind ?? null,
     latestVersion: versions[versions.length - 1].version,
     createdAt: policy.createdAt,
     createdBy: policy.createdBy,

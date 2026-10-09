@@ -42,8 +42,11 @@ describe('permission checks', () => {
   });
 
   it('lists only the pages the user can open', () => {
-    expect(visibleGovernancePages(me()).map((p) => p.to)).toEqual(['/governance', '/governance/access', '/governance/audit', '/governance/settings']);
-    expect(visibleGovernancePages(developer).map((p) => p.to)).toEqual(['/governance', '/governance/settings']);
+    expect(visibleGovernancePages(me()).map((p) => p.to)).toEqual([
+      '/governance', '/governance/policies', '/governance/access', '/governance/audit', '/governance/settings',
+    ]);
+    expect(visibleGovernancePages(developer).map((p) => p.to)).toEqual(['/governance', '/governance/policies', '/governance/settings']);
+    expect(visibleGovernancePages(me({ permissions: [] })).map((p) => p.to)).toEqual(['/governance']);
   });
 });
 
@@ -54,6 +57,8 @@ describe('display helpers', () => {
     expect(formatActor('user:1c7d2e3f-4051-4263-9b74-8c9d0e1f2031')).toBe('User 1c7d2e3f-4051-4263-9b74-8c9d0e1f2031');
     expect(formatActor('system:seed')).toBe('System (initial setup)');
     expect(formatActor('system:rbac-migration')).toBe('System (upgrade migration)');
+    expect(formatActor('system:quorum')).toBe('System (quorum reached)');
+    expect(formatActor('system:lapse')).toBe('System (proposal lapsed)');
     expect(formatActor('system:other')).toBe('System (other)');
     expect(formatActor('')).toBe('Unknown');
   });

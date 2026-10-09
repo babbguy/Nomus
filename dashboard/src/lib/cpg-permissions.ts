@@ -60,17 +60,25 @@ export const ACCESS_REQUIREMENT: PermissionRequirement = {
 };
 export const AUDIT_REQUIREMENT: PermissionRequirement = { all: ['audit.read'] };
 export const SETTINGS_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
+export const POLICIES_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
+export const POLICY_AUTHOR_REQUIREMENT: PermissionRequirement = { all: ['policy.read', 'policy.author'] };
 
 /** The governance pages, in sidebar order. */
 export const GOVERNANCE_PAGES: GovernancePage[] = [
   { to: '/governance', label: 'Overview', description: 'Your governance access and status', requires: {} },
+  { to: '/governance/policies', label: 'Policies', description: 'The corporate policy log: versions, approvals, grace periods', requires: POLICIES_REQUIREMENT },
   { to: '/governance/access', label: 'Access', description: 'Users, role grants, custom roles and teams', requires: ACCESS_REQUIREMENT },
   { to: '/governance/audit', label: 'Audit log', description: 'Every access and settings change, hash-chained', requires: AUDIT_REQUIREMENT },
   { to: '/governance/settings', label: 'Settings', description: 'Turn governance on, reviewer context', requires: SETTINGS_REQUIREMENT },
 ];
 
+/** Pages reached from another page rather than the sidebar (named in redirect explanations). */
+const SUB_PAGES: GovernancePage[] = [
+  { to: '/governance/policies/new', label: 'New policy', description: 'Write and compile a corporate policy', requires: POLICY_AUTHOR_REQUIREMENT },
+];
+
 export function pageByPath(pathname: string): GovernancePage | undefined {
-  return GOVERNANCE_PAGES.find((p) => p.to === pathname);
+  return GOVERNANCE_PAGES.find((p) => p.to === pathname) ?? SUB_PAGES.find((p) => p.to === pathname);
 }
 
 /**
@@ -89,6 +97,8 @@ export function visibleGovernancePages(me: CpgMe | null | undefined): Governance
 const SYSTEM_ACTORS: Record<string, string> = {
   'system:seed': 'System (initial setup)',
   'system:rbac-migration': 'System (upgrade migration)',
+  'system:quorum': 'System (quorum reached)',
+  'system:lapse': 'System (proposal lapsed)',
 };
 
 /**

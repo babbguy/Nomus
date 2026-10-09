@@ -647,6 +647,83 @@ describe('CPG API contracts', () => {
     expect(d.auditListSchema.safeParse(await next.json()).success).toBe(true);
   });
 
+  it('the dashboard registry schemas (cpg-schemas.ts, cpg-quorum.ts) parse the real Phase 2 responses', async () => {
+    const { pathToFileURL } = await import('node:url');
+    const { resolve } = await import('node:path');
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-schemas.ts')).href);
+    const q = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-quorum.ts')).href);
+    const board = await session('POST', '/api/v1/cpg/boards', { key: 'contract-board', name: 'Contract Board', kind: 'governance' });
+    expect(board.status).toBe(201);
+    const boardBody = await board.json();
+    expect(d.boardSchema.safeParse(boardBody).success).toBe(true);
+    const meRes = await (await session('GET', '/api/v1/cpg/me')).json();
+    const member = await session('POST', `/api/v1/cpg/boards/${boardBody.id}/members`, { userId: meRes.user.id });
+    expect(d.boardMemberSchema.safeParse(await member.json()).success).toBe(true);
+    const patched = await session('PATCH', `/api/v1/cpg/boards/${boardBody.id}`, { description: 'contract' });
+    expect(d.boardSchema.safeParse(await patched.json()).success).toBe(true);
+    const removed = await session('POST', `/api/v1/cpg/boards/${boardBody.id}/members/${meRes.user.id}/remove`, {});
+    expect(d.boardMemberSchema.safeParse(await removed.json()).success).toBe(true);
+    const current = await (await session('GET', '/api/v1/cpg/quorum')).json();
+    expect(q.quorumVersionSchema.safeParse(current).success).toBe(true);
+    const put = await session('PUT', '/api/v1/cpg/quorum', { config: { ...current.config, proposalLapseDays: 31 }, changeNote: 'contract' });
+    expect(put.status).toBe(201);
+    expect(q.quorumVersionSchema.safeParse(await put.json()).success).toBe(true);
+    const reads: Array<[string, { safeParse: (v: unknown) => { success: boolean; error?: unknown } }]> = [
+      ['/api/v1/cpg/boards', d.listOf(d.boardSchema)],
+      ['/api/v1/cpg/quorum/versions', d.listOf(q.quorumVersionSummarySchema)],
+      ['/api/v1/cpg/quorum/versions/1', q.quorumVersionSchema],
+      ['/api/v1/cpg/policies', d.listOf(d.policyHeadSchema)],
+      ['/api/v1/cpg/me', d.meSchema],
+    ];
+    for (const [path, schema] of reads) {
+      const res = await session('GET', path);
+      expect(res.status, path).toBe(200);
+      const parsed = schema.safeParse(await res.json());
+      expect(parsed.success, `${path}: ${JSON.stringify(parsed.error)}`).toBe(true);
+    }
+    const archived = await session('POST', `/api/v1/cpg/boards/${boardBody.id}/archive`, {});
+    expect(d.boardSchema.safeParse(await archived.json()).success).toBe(true);
+  });
+
+  it('the dashboard quorum schema (cpg-quorum.ts) accepts and refuses exactly what the engine schema does', async () => {
+    const { pathToFileURL } = await import('node:url');
+    const { resolve } = await import('node:path');
+    const q = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-quorum.ts')).href);
+    const { quorumConfigSchema, SEED_QUORUM_CONFIG } = await import('../cpg/quorum/schema.js');
+    const seed = SEED_QUORUM_CONFIG as unknown as Record<string, any>;
+    const edit = (fn: (c: any) => void) => { const c = JSON.parse(JSON.stringify(seed)); fn(c); return c; };
+    const corpus: unknown[] = [
+      seed,
+      edit((c) => { c.proposalLapseDays = 90; }),
+      edit((c) => { c.proposalLapseDays = 91; }),
+      edit((c) => { c.tiers.prohibited.bulk = { ...c.tiers['review-required'].bulk }; }),
+      edit((c) => { c.tiers['review-required'].bulk = { allowed: false }; }),
+      edit((c) => { c.tiers['review-required'].snippet.approvals = 0; }),
+      edit((c) => { c.tiers['review-required'].snippet.approvals = 11; }),
+      edit((c) => { c.tiers.prohibited.snippet.defaultExpiryDays = 91; }),
+      edit((c) => { c.tiers.prohibited.standing.maxExpiryDays = 120; }),
+      edit((c) => { c.standingExceptions.defaultExpiryDays = 91; }),
+      edit((c) => { c.standingExceptions.maxExpiryDays = 366; }),
+      edit((c) => { c.policyApproval.approvals = 0; }),
+      edit((c) => { c.policyApproval.approvals = 6; }),
+      edit((c) => { c.policyApproval.allowSelfApproval = true; }),
+      edit((c) => { c.tiers.advisory.blocking = true; }),
+      edit((c) => { c.gracePeriod.newPolicyDefaultDays = 0; c.gracePeriod.newVersionDefaultDays = 365; }),
+      edit((c) => { c.gracePeriod.newVersionDefaultDays = -1; }),
+      edit((c) => { c.tiers['review-required'].snippet.extraBoardIds = ['not-a-uuid']; }),
+      edit((c) => { c.tiers['review-required'].snippet.requiredPermission = 'case.review'; }),
+      edit((c) => { c.tiers['review-required'].snippet.boardCoverage = 'some_owning'; }),
+      edit((c) => { c.policyOverrides = { '00000000-0000-4000-8000-000000000000': { bulk: { allowed: false } } }; }),
+      edit((c) => { c.policyOverrides = { 'not-a-uuid': {} }; }),
+      edit((c) => { c.schemaVersion = 2; }),
+      edit((c) => { c.extra = true; }),
+      edit((c) => { delete c.gracePeriod; }),
+    ];
+    const verdicts = corpus.map((c) => [quorumConfigSchema.safeParse(c).success, q.quorumConfigSchema.safeParse(c).success]);
+    for (const [i, [engine, dashboard]] of verdicts.entries()) expect(dashboard, `corpus case ${i}`).toBe(engine);
+    expect(verdicts.filter(([e]) => e).length).toBe(5);
+  });
+
   it('write routes are registered and never 5xx on invalid input', async () => {
     const id = '00000000-0000-4000-8000-000000000000';
     for (const [method, path] of [

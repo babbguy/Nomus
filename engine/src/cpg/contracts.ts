@@ -121,6 +121,8 @@ export const meResponseSchema = z.object({
   isPlatformAdmin: z.boolean(),
   permissions: z.array(z.object({ key: z.string(), scope: scopeType, scopeId: z.string().nullable() }).strict()),
   boards: z.array(z.object({ id: uuid, name: z.string() }).strict()),
+  /** The active roles the user holds at any scope, sorted by key (the dashboard's user card names them). */
+  roles: z.array(z.object({ id: uuid, key: z.string(), name: z.string(), isSystem: z.boolean() }).strict()),
   identity: z.enum(['session', 'user_key', 'org_key']),
 }).strict();
 
@@ -374,6 +376,8 @@ export const policyHeadResponseSchema = z.object({
   inGracePeriod: z.boolean(),
   pendingVersionId: uuid.nullable(),
   pendingVersion: z.number().int().min(1).nullable(),
+  /** Whether the pending version defines the policy or retires it; null when nothing is pending. */
+  pendingVersionKind: z.enum(['define', 'retire']).nullable(),
   latestVersion: z.number().int().min(1),
   createdAt: isoDate,
   createdBy: z.string(),
