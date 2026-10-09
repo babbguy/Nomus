@@ -578,6 +578,65 @@ describe('CPG API contracts', () => {
     }
   });
 
+  it('the dashboard zod schemas (dashboard/src/api/cpg-schemas.ts) parse the real responses', async () => {
+    // Loaded by path at run time: the dashboard is another workspace, outside
+    // the engine's tsconfig rootDir. A drift between the two sides fails here.
+    const { pathToFileURL } = await import('node:url');
+    const { resolve } = await import('node:path');
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-schemas.ts')).href);
+    const reads: Array<[string, { safeParse: (v: unknown) => { success: boolean; error?: unknown } }]> = [
+      ['/api/v1/cpg/me', d.meSchema],
+      ['/api/v1/cpg/permissions', d.listOf(d.permissionSchema)],
+      ['/api/v1/cpg/roles', d.listOf(d.roleSchema)],
+      ['/api/v1/cpg/users', d.listOf(d.orgUserSchema)],
+      ['/api/v1/cpg/teams', d.listOf(d.teamSchema)],
+      ['/api/v1/cpg/settings', d.cpgSettingsSchema],
+      ['/api/v1/cpg/audit', d.auditListSchema],
+    ];
+    for (const [path, schema] of reads) {
+      const res = await session('GET', path);
+      expect(res.status, path).toBe(200);
+      const parsed = schema.safeParse(await res.json());
+      expect(parsed.success, `${path}: ${JSON.stringify(parsed.error)}`).toBe(true);
+    }
+
+    // Writes the governance pages make, parsed the same way.
+    const role = await session('POST', '/api/v1/cpg/roles', { key: 'contract_reader', name: 'Contract Reader', permissions: ['case.read'] });
+    expect(role.status).toBe(201);
+    const roleBody = await role.json();
+    expect(d.roleSchema.safeParse(roleBody).success).toBe(true);
+    const team = await session('POST', '/api/v1/cpg/teams', { key: 'contract', name: 'Contract', repoPatterns: ['example-org/*'] });
+    expect(team.status).toBe(201);
+    const teamBody = await team.json();
+    expect(d.teamSchema.safeParse(teamBody).success).toBe(true);
+    const invite = await session('POST', '/api/v1/cpg/users', { email: 'contract-user@example.org', name: 'Contract User' });
+    expect(invite.status).toBe(201);
+    const inviteBody = await invite.json();
+    expect(d.inviteResultSchema.safeParse(inviteBody).success).toBe(true);
+    const grant = await session('POST', `/api/v1/cpg/users/${inviteBody.user.id}/grants`, { roleId: roleBody.id, scopeType: 'team', scopeId: teamBody.id });
+    expect(grant.status).toBe(201);
+    const grantBody = await grant.json();
+    expect(d.grantSchema.safeParse(grantBody).success).toBe(true);
+    const revoked = await session('POST', `/api/v1/cpg/grants/${grantBody.id}/revoke`, { reason: 'contract test' });
+    expect(d.grantSchema.safeParse(await revoked.json()).success).toBe(true);
+    const user = await session('PATCH', `/api/v1/cpg/users/${inviteBody.user.id}`, { isActive: false });
+    expect(d.orgUserSchema.safeParse(await user.json()).success).toBe(true);
+    const patchedRole = await session('PATCH', `/api/v1/cpg/roles/${roleBody.id}`, { permissions: ['case.read', 'case.comment'] });
+    expect(d.roleSchema.safeParse(await patchedRole.json()).success).toBe(true);
+    const archived = await session('POST', `/api/v1/cpg/roles/${roleBody.id}/archive`, {});
+    expect(d.roleSchema.safeParse(await archived.json()).success).toBe(true);
+    const patchedTeam = await session('PATCH', `/api/v1/cpg/teams/${teamBody.id}`, { archived: true });
+    expect(d.teamSchema.safeParse(await patchedTeam.json()).success).toBe(true);
+    const settings = await session('PATCH', '/api/v1/cpg/settings', { reviewerContextLlm: false });
+    expect(d.cpgSettingsSchema.safeParse(await settings.json()).success).toBe(true);
+    const audit = await session('GET', '/api/v1/cpg/audit?limit=2');
+    const auditBody = await audit.json();
+    expect(d.auditListSchema.safeParse(auditBody).success).toBe(true);
+    expect(typeof auditBody.nextCursor).toBe('string');
+    const next = await session('GET', `/api/v1/cpg/audit?limit=2&cursor=${auditBody.nextCursor}`);
+    expect(d.auditListSchema.safeParse(await next.json()).success).toBe(true);
+  });
+
   it('write routes are registered and never 5xx on invalid input', async () => {
     const id = '00000000-0000-4000-8000-000000000000';
     for (const [method, path] of [
