@@ -89,11 +89,17 @@ are the usual per-organization limits (`NOMUS_RATE_LIMIT_RPM`).
     { "key": "case.review", "scope": "repo", "scopeId": "acme/payments-api" }
   ],
   "boards": [{ "id": "1a2b…", "name": "AI Review Board" }],
+  "roles": [
+    { "id": "3e9f…", "key": "developer", "name": "Developer", "isSystem": true },
+    { "id": "2d8e…", "key": "org_admin", "name": "Org Admin", "isSystem": true }
+  ],
   "identity": "session"
 }
 ```
 
-`boards` lists the active review boards the user is a member of.
+`boards` lists the active review boards the user is a member of. `roles` lists the roles behind
+the user's active grants at any scope (archived roles excluded), sorted by key; it is empty for a
+platform administrator.
 
 `identity` is `session` or `user_key`. A platform administrator gets `200` with
 `"isPlatformAdmin": true` and no permissions. A team- or repository-scoped grant lists only its
