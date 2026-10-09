@@ -219,7 +219,8 @@ export async function cpgApprovalsChecks(ctx) {
     gate.check('the merged PR closes the case as merged, and its signed closure record lists the CI run',
       merged.json?.closed === true && closure?.reason === 'merged' && closure.signatureValid === true && closure.record?.ciRunIds?.includes(v?.runId),
       'closed, merged, valid, run listed', `${merged.status} ${JSON.stringify(merged.json)} ${closure?.reason} ${closure?.signatureValid} ${JSON.stringify(closure?.record?.ciRunIds)}`);
-    // The cpg-action area runs the Action against these decisions.
+    // The cpg-action area runs the Action against these decisions; cpg-attestations attests with the closed case.
+    data.cpg.closedCaseId = closure?.signatureValid === true ? caseId : null;
     data.cpg.decisions = { piiStatus: rejected?.status, legacyStatus: (await status(legacy))?.status };
   } finally {
     const revoke = await owner.client.post(`/api/v1/cpg/grants/${devGrant.json?.id}/revoke`, { reason: 'Gate: self-approval check done' });

@@ -51,6 +51,7 @@ import { cpgBrowserChecks } from './checks/cpg-browser.mjs';
 import { cpgApprovalsChecks } from './checks/cpg-approvals.mjs';
 import { cpgActionChecks } from './checks/cpg-action.mjs';
 import { cpgIntegrationsChecks } from './checks/cpg-integrations.mjs';
+import { cpgAttestationsChecks } from './checks/cpg-attestations.mjs';
 
 const gateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -177,6 +178,8 @@ async function main() {
       ['cpg-approvals', cpgApprovalsChecks],
       // The Action as the enforcement gate, against the decisions cpg-approvals made.
       ['cpg-action', cpgActionChecks],
+      // Corporate policy records in attestations, from the case cpg-approvals closed (before integrations, so no delivery is queued).
+      ['cpg-attestations', cpgAttestationsChecks],
       // Email, Jira and webhook deliveries to local fakes; sets the Resend key, so it runs last.
       ['cpg-integrations', cpgIntegrationsChecks],
     ];
