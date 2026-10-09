@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 8 (attestations): `POST /evaluate` accepts an optional
+  `governance` extra (`repo`, `branch`, closed `caseId`) and signs a separate manifest of the
+  approvals, standing exceptions, case closure record and CI runs in force at the attestation
+  instant. Its evidence export is `bundleVersion: 2` with a `corporateGovernance` section that
+  verifies offline with the published key; the Attestations page shows a governance badge and the
+  public verify page shows the counts. Receipts and attestations without governance are
+  unchanged, byte for byte.
 - Corporate policy governance, phase 7 (integrations, dashboard): the new Governance > Integrations
   page (`integrations.manage`) creates and edits email, Jira and webhook integrations, shows
   secrets only by their last four characters, shows a new webhook signing secret once after create
