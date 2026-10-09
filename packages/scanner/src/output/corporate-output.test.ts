@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { CorporateFinding } from '../match/rule-matcher.js';
 import type { CorporateScanSummary } from '../scan-corporate.js';
-import { formatCorporateSarifRun, CORPORATE_SARIF_CATEGORY, policyPageUrl } from './sarif-corporate.js';
+import { formatCorporateSarif, formatCorporateSarifRun, CORPORATE_SARIF_CATEGORY, policyPageUrl } from './sarif-corporate.js';
 import { corporateStatusText, formatCorporateConsoleReport, formatCorporateJson } from './reporter.js';
 
 const SNIPPET = "  const reply = await client.chat.completions.create({\n    model: 'gpt-4o',\n  });";
@@ -42,13 +42,6 @@ async function validateSarif(log: unknown): Promise<string[]> {
   return mod.validateSarif(log);
 }
 
-/** A SARIF 2.1.0 log holding only the corporate run, as the CLI appends it after the regulatory run. */
-const formatCorporateSarif = (...args: Parameters<typeof formatCorporateSarifRun>) => ({
-  $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/Schemata/sarif-schema-2.1.0.json',
-  version: '2.1.0' as const,
-  runs: [formatCorporateSarifRun(...args)],
-});
-
 describe('corporate SARIF (spec §11.4)', () => {
   it('is a valid SARIF 2.1.0 run with the nomus-corporate/ category and one result per finding', async () => {
     const log = formatCorporateSarif([finding(), grace], { dashboardUrl: 'https://nomus.example.org/' });
@@ -78,6 +71,19 @@ describe('corporate SARIF (spec §11.4)', () => {
     expect(formatCorporateSarifRun([finding()]).tool.driver.rules[0].helpUri).toBeUndefined();
     expect(policyPageUrl(undefined, 'x')).toBeUndefined();
     expect(await validateSarif(formatCorporateSarif([]))).toEqual([]);
+  });
+
+  it('with the server resolutions (CI gate): the status, level and a suppression for an approved finding, and the case link', async () => {
+    const decisionId = '7e6d5c4b-3a29-4180-9f7e-6d5c4b3a2918';
+    const resolution = { fingerprint: finding().fingerprint, status: 'approved' as const, blocking: false, tier: 'prohibited' as const, enforceFrom: finding().enforceFrom, decisionId, exceptionDecisionId: null, expiresAt: '2026-11-08T00:00:00.000Z' };
+    const log = formatCorporateSarif([finding(), grace], { resolutionOf: (f) => (f.filePath === 'src/chat.ts' ? resolution : undefined), caseUrl: 'https://gate.example.org/governance/cases/x' });
+    expect(await validateSarif(log)).toEqual([]);
+    const [approved, local] = log.runs[0].results;
+    expect([approved.level, approved.properties.status, approved.properties.blocking]).toEqual(['note', 'approved', false]);
+    expect(approved.suppressions).toEqual([{ kind: 'external', status: 'accepted', justification: `Approved by Nomus decision ${decisionId} until 2026-11-08T00:00:00.000Z` }]);
+    expect(approved.message.text).toMatch(/Status: approved\. Review case: https:\/\/gate\.example\.org\/governance\/cases\/x$/);
+    expect(local.suppressions).toBeUndefined();
+    expect(JSON.stringify(log)).not.toContain('chat.completions.create');
   });
 });
 
