@@ -301,7 +301,7 @@ again to restore it. Affected findings return to review and their cases are re-e
 
 A daily sweep at 03:30 UTC records an audit event when an approval or exception is 7 days and 1
 day from expiry and when it has expired, once each, and moves any case whose approvals expired out
-of `decided`. Email and webhook notices for these events come with integrations.
+of `decided`. Integrations subscribed to `exception.expiring` and `exception.expired` are notified.
 
 ## Enforcing in CI
 
@@ -334,6 +334,45 @@ Before relying on it:
 
 3. **Run it on every pull request event**, including `closed`, so a merged pull request closes its
    review case: `on: pull_request: types: [opened, synchronize, reopened, closed]`.
+
+## Integrations: email, Jira and webhooks
+
+Nomus can tell people and other systems when a case needs them. An Org Admin (or anyone with
+`integrations.manage`) configures integrations with `POST /api/v1/cpg/integrations`; the
+dashboard page arrives in a later release. Each integration chooses its events and, optionally, the
+boards it serves (`boardIds`; empty means every board). A case whose findings belong to several
+boards is split: each board gets its own email, webhook call and Jira issue.
+
+**Notifications never contain code.** They carry the case reference, repository, branch, pull
+request, board, finding counts and the policies involved, plus a link to the case in Nomus. Code,
+snippets, justifications, comments and file paths stay in Nomus, behind sign-in and permissions.
+
+1. **Email** goes through the instance's Resend account: a platform admin sets the Resend API key
+   on the Notifications settings page first. By default a review request emails the active members
+   of each board involved, and a change request emails the developer who opened the case and the
+   authors of its justifications (`includeBoardMembers`, `notifyDevelopers`); `extraRecipients`
+   receive every subscribed event.
+2. **Jira Cloud**: give the site URL, the account email and an API token of a bot account that can
+   create issues in the project (`projectKey`). Nomus creates one issue per case and board and
+   comments on it for later events. It never moves the issue through your workflow.
+3. **Webhook**: give an HTTPS URL. Nomus returns the signing secret once, when you create the
+   webhook or rotate its secret; store it in your receiver. Each call is a JSON POST signed with
+   `X-Nomus-Signature: sha256=…` over the timestamp and body. Verify it as shown in the
+   [API reference](../api-reference/integrations.md#webhook), reject timestamps older than five
+   minutes, and deduplicate on `X-Nomus-Delivery-Id`. Use the webhook for Slack, Teams, Trello,
+   Linear or any other tool through a small bridge.
+
+Use `POST /api/v1/cpg/integrations/:id/test` to send a test notification. Secrets are stored
+encrypted with the instance key (`NOMUS_SIGNING_KEY_SECRET`), shown only by their last four
+characters, and never written to logs or the audit log. Jira and webhook targets must be public
+HTTPS addresses; `NOMUS_CPG_ALLOW_PRIVATE_TARGETS=true` allows private addresses for test setups
+only and logs a warning in production.
+
+Deliveries are queued with the change that caused them and sent in the background, so a slow or
+broken receiver never delays a reviewer. Failed sends are retried for about 21 hours (the schedule
+survives restarts). A delivery that fails for good, or at once on a response such as `401` or
+`404` that retrying cannot fix, is logged at error level and audited as `delivery.failed`. Check
+`GET /api/v1/cpg/deliveries?status=failed`, fix the integration, then retry the delivery.
 
 ## Audit and export
 
