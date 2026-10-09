@@ -47,6 +47,7 @@ import { cpgScannerChecks } from './checks/cpg-scanner.mjs';
 import { cpgVscodeChecks } from './checks/cpg-vscode.mjs';
 import { cpgCasesChecks } from './checks/cpg-cases.mjs';
 import { cpgBrowserChecks } from './checks/cpg-browser.mjs';
+import { cpgApprovalsChecks } from './checks/cpg-approvals.mjs';
 
 const gateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -156,6 +157,8 @@ async function main() {
       ['cpg-vscode', cpgVscodeChecks],
       ['cpg-cases', cpgCasesChecks],
       ['cpg-browser', cpgBrowserChecks],
+      // Last: decisions bind (repo, fingerprint), so they would change what later areas see.
+      ['cpg-approvals', cpgApprovalsChecks],
     ];
     for (const [area, fn] of areas) {
       if (!wants(area)) continue;

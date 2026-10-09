@@ -24,7 +24,7 @@ const JUSTIFICATION = 'Needed for the support chat until the gateway client supp
 const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
 
 /** Findings in the request-review shape, each with its snippet cut from the file on disk. */
-function uploads(repoDir, findings) {
+export function uploads(repoDir, findings) {
   return findings.map((f) => ({
     fingerprint: f.fingerprint, policyKey: f.policyKey, policyVersion: f.policyVersion, filePath: f.file,
     startLine: f.startLine, endLine: f.endLine, language: f.language ?? 'other',
