@@ -6,7 +6,7 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import Shell from './components/layout/Shell';
 import PermissionRoute from './components/layout/PermissionRoute';
 import {
-  ACCESS_REQUIREMENT, AUDIT_REQUIREMENT, BOARDS_REQUIREMENT, POLICIES_REQUIREMENT, POLICY_AUTHOR_REQUIREMENT, QUORUM_REQUIREMENT,
+  ACCESS_REQUIREMENT, AUDIT_REQUIREMENT, BOARDS_REQUIREMENT, POLICIES_REQUIREMENT, POLICY_AUTHOR_REQUIREMENT, QUORUM_REQUIREMENT, CASES_REQUIREMENT,
   SETTINGS_REQUIREMENT,
 } from './lib/cpg-permissions';
 import Login from './pages/Login';
@@ -56,6 +56,8 @@ const PolicyNew = lazy(() => import('./pages/governance/PolicyNew'));
 const PolicyDetail = lazy(() => import('./pages/governance/PolicyDetail'));
 const GovernanceBoards = lazy(() => import('./pages/governance/GovernanceBoards'));
 const GovernanceQuorum = lazy(() => import('./pages/governance/GovernanceQuorum'));
+const GovernanceCases = lazy(() => import('./pages/governance/GovernanceCases'));
+const CaseDetail = lazy(() => import('./pages/governance/CaseDetail'));
 const ScanAdmin = lazy(() => import('./pages/admin/ScanAdmin'));
 const ScoutFeeds = lazy(() => import('./pages/admin/ScoutFeeds'));
 const ScoutReview = lazy(() => import('./pages/admin/ScoutReview'));
@@ -168,6 +170,8 @@ export default function App() {
         <Route path="governance/policies/:id" element={<PermissionRoute {...POLICIES_REQUIREMENT}><PolicyDetail /></PermissionRoute>} />
         <Route path="governance/boards" element={<PermissionRoute {...BOARDS_REQUIREMENT}><GovernanceBoards /></PermissionRoute>} />
         <Route path="governance/quorum" element={<PermissionRoute {...QUORUM_REQUIREMENT}><GovernanceQuorum /></PermissionRoute>} />
+        <Route path="governance/cases" element={<PermissionRoute {...CASES_REQUIREMENT}><GovernanceCases /></PermissionRoute>} />
+        <Route path="governance/cases/:id" element={<PermissionRoute {...CASES_REQUIREMENT}><CaseDetail /></PermissionRoute>} />
       </Route>
 
       {/* 404 */}

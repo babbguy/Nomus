@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 4 (review case pages): **Governance > Cases** lists the review
+  cases of the repositories you can read, filtered by state and board and paged (a page shortened
+  by repository access says so), and each case shows its people, lanes, revisions, findings
+  (policy, tier, status, location, snippet and justification), reviewer context on request (always
+  labelled as generated, with disabled, failed and retry states), and change requests and comments
+  with replies. Lane members request changes, commenters comment and reply, and the opener or a
+  user with `case.close` closes the case; a closed case is read-only and shows its signed,
+  verified closure record. The case API adds the opener and lanes to list items, and the opener,
+  the closure record, the caller's permitted actions and each finding's policy to the case detail.
 - Corporate policy governance, phase 4 (review cases in VS Code): **Nomus: Request Policy Review**
   scans the workspace, lists the branch's blocking findings that still need review, asks for a
   justification for each (or one for all) and opens or updates the branch's review case; drafts are

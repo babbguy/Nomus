@@ -1,16 +1,19 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { caseStatusSchema, parseFingerprint, type CaseStatus, type FindingResolution } from '@nomus/scanner/corporate';
-import { cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions, cpgSnippets } from '../../db/schema-cpg.js';
+import { cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions, cpgSnippets } from '../../db/schema-cpg.js';
 import { listBoards } from '../boards/service.js';
+import { can, type CpgActor } from '../rbac/can.js';
+import { cpgVerify } from '../policies/signing.js';
 import {
   caseDetailResponseSchema, revisionDetailResponseSchema, reviewerContextResponseSchema,
   type CaseSummaryResponse, type CommentResponse, type JustificationResponse, type ReviewerContextResponse,
 } from '../contracts.js';
 import { CpgError, notFound } from '../errors.js';
-import { userNames } from '../policies/service.js';
+import { boardIdsOf, userNames } from '../policies/service.js';
+import { closurePayload, closureSignedText } from './close.js';
 import { listComments, type CommentRow } from './comments.js';
-import type { ReviewerContextRow } from './context.js';
+import { latestAttempt, type ReviewerContextRow } from './context.js';
 import { currentJustifications, type JustificationRow } from './justifications.js';
 import { caseLanes } from './lanes.js';
 import { isBlocking, latestFindings, openChangeRequests, type CaseFindingRow, type CaseRow, type RevisionRow } from './service.js';
@@ -22,11 +25,24 @@ type PolicyHead = typeof cpgPolicyHeads.$inferSelect;
 
 export const caseUrl = (origin: string, caseId: string) => `${origin}/governance/cases/${caseId}`;
 
-export function caseSummary(c: CaseRow): CaseSummaryResponse {
-  return {
+const boardNames = (db: Db, orgId: string) => new Map(listBoards(db, orgId).map((b) => [b.id, b.name]));
+const userIdOf = (actor: string | null) => (actor?.startsWith('user:') ? actor.slice('user:'.length) : null);
+const actorRef = (actor: string, names: Map<string, string>) => ({ actor, name: names.get(userIdOf(actor) ?? '') ?? null });
+const actorNames = (db: Db, actors: Array<string | null>) => userNames(db, actors.map(userIdOf).filter((id): id is string => id !== null));
+
+function lanesOf(db: Db, c: CaseRow, boardName: Map<string, string>): CaseStatus['lanes'] {
+  return caseLanes(db, c.orgId, c.id).map((l) => ({ boardId: l.boardId, boardName: boardName.get(l.boardId) ?? '', state: l.state, blocking: l.blocking, decided: l.decided }));
+}
+
+/** List rows (E41): the case, who opened it and its lanes. */
+export function caseSummaries(db: Db, orgId: string, rows: CaseRow[]): CaseSummaryResponse[] {
+  const boardName = boardNames(db, orgId);
+  const names = actorNames(db, rows.map((c) => c.openedBy));
+  return rows.map((c) => ({
     id: c.id, ref: c.ref, repo: c.repo, branch: c.branch, prNumber: c.prNumber, state: c.state, closeReason: c.closeReason,
     latestRevision: c.latestRevision, openedAt: c.openedAt, updatedAt: c.updatedAt, closedAt: c.closedAt,
-  };
+    openedBy: actorRef(c.openedBy, names), lanes: lanesOf(db, c, boardName),
+  }));
 }
 
 export function justificationOf(j: JustificationRow, names: Map<string, string>): JustificationResponse {
@@ -118,13 +134,13 @@ export function findingsStatus(db: Db, orgId: string, branch: { repo: string; br
 
 /** The CaseStatus contract (§9.3), shared with the extension and the action. */
 export function caseStatus(db: Db, c: CaseRow, origin: string): CaseStatus {
-  const boardName = new Map(listBoards(db, c.orgId).map((b) => [b.id, b.name]));
+  const boardName = boardNames(db, c.orgId);
   const requests = unresolvedRequests(db, c.id);
   const names = userNames(db, requests.map((m) => m.authorUserId));
   return caseStatusSchema.parse({
     id: c.id, ref: c.ref, repo: c.repo, branch: c.branch, prNumber: c.prNumber, state: c.state, closeReason: c.closeReason,
     latestRevision: c.latestRevision, url: caseUrl(origin, c.id),
-    lanes: caseLanes(db, c.orgId, c.id).map((l) => ({ boardId: l.boardId, boardName: boardName.get(l.boardId) ?? '', state: l.state, blocking: l.blocking, decided: l.decided })),
+    lanes: lanesOf(db, c, boardName),
     openChangeRequests: requests.map((m) => ({
       commentId: m.id, boardName: boardName.get(m.boardId!) ?? '', authorName: names.get(m.authorUserId) ?? '', body: m.body,
       fingerprints: JSON.parse(m.fingerprints) as string[], createdAt: m.createdAt,
@@ -139,13 +155,36 @@ const revisionOf = (r: RevisionRow) => ({
   addedCount: r.addedCount, carriedCount: r.carriedCount, resolvedCount: r.resolvedCount, createdAt: r.createdAt,
 });
 
-export function caseDetail(db: Db, c: CaseRow, origin: string) {
+/** The signed closure record of a closed case, verified against the rows it was built from. */
+function closureOf(db: Db, c: CaseRow, names: Map<string, string>) {
+  if (!c.closedAt || !c.closedBy || !c.closeReason || !c.closureSignature) return null;
+  const event = db.select({ details: cpgCaseEvents.details }).from(cpgCaseEvents)
+    .where(and(eq(cpgCaseEvents.caseId, c.id), eq(cpgCaseEvents.event, 'closed'))).get();
+  const note = event ? (JSON.parse(event.details) as { note?: unknown }).note : undefined;
+  return {
+    reason: c.closeReason, note: typeof note === 'string' ? note : null, closedAt: c.closedAt, closedBy: actorRef(c.closedBy, names),
+    record: closurePayload(db, c), signature: c.closureSignature, signatureValid: cpgVerify(closureSignedText(db, c), c.closureSignature),
+  };
+}
+
+/** E43: the case, its people and history, and what `actor` may do on it. */
+export function caseDetail(db: Db, c: CaseRow, origin: string, actor: CpgActor) {
   const revisions = db.select().from(cpgCaseRevisions).where(eq(cpgCaseRevisions.caseId, c.id)).orderBy(asc(cpgCaseRevisions.revision)).all();
   const justifications = [...currentJustifications(db, c.id).values()];
   const comments = listComments(db, c.id);
   const names = userNames(db, [...justifications, ...comments].map((r) => r.authorUserId));
+  for (const [id, name] of actorNames(db, [c.openedBy, c.closedBy])) names.set(id, name);
+  const repo = { repo: c.repo };
+  const close = can(actor, 'case.close', repo);
   return caseDetailResponseSchema.parse({
     case: caseStatus(db, c, origin),
+    openedAt: c.openedAt,
+    openedBy: actorRef(c.openedBy, names),
+    closure: closureOf(db, c, names),
+    viewer: {
+      comment: can(actor, 'case.comment', repo), review: can(actor, 'case.review', repo),
+      close, withdraw: close || c.openedBy === `user:${actor.userId}`,
+    },
     revisions: revisions.map(revisionOf),
     justifications: justifications.map((j) => justificationOf(j, names)),
     comments: comments.map((m) => commentOf(m, names)),
@@ -156,19 +195,21 @@ export function caseDetail(db: Db, c: CaseRow, origin: string) {
 export function revisionDetail(db: Db, c: CaseRow, revision: number) {
   const r = db.select().from(cpgCaseRevisions).where(and(eq(cpgCaseRevisions.caseId, c.id), eq(cpgCaseRevisions.revision, revision))).get();
   if (!r) throw notFound('Revision');
-  const rows = db.select({ f: cpgCaseFindings, snippet: cpgSnippets.normalizedText }).from(cpgCaseFindings)
+  const rows = db.select({ f: cpgCaseFindings, snippet: cpgSnippets.normalizedText, policyTitle: cpgPolicyVersions.title, owningBoardIds: cpgPolicyVersions.owningBoardIds }).from(cpgCaseFindings)
     .innerJoin(cpgSnippets, and(eq(cpgSnippets.orgId, cpgCaseFindings.orgId), eq(cpgSnippets.snippetHash, cpgCaseFindings.snippetHash)))
+    .innerJoin(cpgPolicyVersions, eq(cpgPolicyVersions.id, cpgCaseFindings.policyVersionId))
     .where(eq(cpgCaseFindings.revisionId, r.id)).orderBy(asc(cpgCaseFindings.filePath), asc(cpgCaseFindings.startLine), asc(cpgCaseFindings.fingerprint)).all();
   const justifications = currentJustifications(db, c.id);
   const names = userNames(db, [...justifications.values()].map((j) => j.authorUserId));
   return revisionDetailResponseSchema.parse({
     revision: revisionOf(r),
-    findings: rows.map(({ f, snippet }) => {
+    findings: rows.map(({ f, snippet, policyTitle, owningBoardIds }) => {
       const j = justifications.get(f.fingerprint);
       return {
-        id: f.id, fingerprint: f.fingerprint, policyKey: f.policyKey, policyVersion: f.policyVersion, tier: f.tier, blocking: isBlocking(f),
+        id: f.id, fingerprint: f.fingerprint, policyId: f.policyId, policyKey: f.policyKey, policyTitle, policyVersion: f.policyVersion,
+        tier: f.tier, blocking: isBlocking(f), owningBoardIds: boardIdsOf({ owningBoardIds }),
         statusAtRevision: f.statusAtRevision, filePath: f.filePath, startLine: f.startLine, endLine: f.endLine, language: f.language,
-        snippet, justification: j ? justificationOf(j, names) : null,
+        snippet, justification: j ? justificationOf(j, names) : null, contextStatus: latestAttempt(db, f)?.status ?? 'none',
       };
     }),
   });

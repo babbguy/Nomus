@@ -17,10 +17,10 @@ export interface GovernanceDeniedState {
  *   <PermissionRoute all={['audit.read']}>...</PermissionRoute>
  *   <PermissionRoute all={['org.members.read']} any={['rbac.users.manage', 'rbac.roles.manage']}>...</PermissionRoute>
  */
-export default function PermissionRoute({ all, any, children }: PermissionRequirement & { children: React.ReactNode }) {
+export default function PermissionRoute({ all, any, scoped, children }: PermissionRequirement & { children: React.ReactNode }) {
   const location = useLocation();
   const { me, status, error, reload } = useCpgMe();
-  const decision = guardDecision({ status, me }, { all, any });
+  const decision = guardDecision({ status, me }, { all, any, scoped });
 
   if (decision === 'loading') {
     return <div className="flex justify-center py-20"><Spinner /></div>;
@@ -29,7 +29,7 @@ export default function PermissionRoute({ all, any, children }: PermissionRequir
     return <ErrorState message={error ?? 'Could not load your governance permissions'} onRetry={reload} />;
   }
   if (decision === 'deny') {
-    const state: GovernanceDeniedState = { denied: { from: location.pathname, missing: missingPermissions(me, { all, any }) } };
+    const state: GovernanceDeniedState = { denied: { from: location.pathname, missing: missingPermissions(me, { all, any, scoped }) } };
     return <Navigate to="/governance" replace state={state} />;
   }
   return <>{children}</>;

@@ -540,10 +540,16 @@ export function serializeTeam(db: Db, team: { id: string; key: string; name: str
 const fingerprintSchema = z.string().regex(FINGERPRINT_RE);
 const caseStateSchema = z.enum(['open', 'in_review', 'changes_requested', 'decided', 'closed']);
 
+const caseLaneSchema = caseStatusSchema.shape.lanes.element;
+
+/** Who did something: the actor (`user:<id>`, `system:<what>`) and, for a user, their name. */
+const actorRefSchema = z.object({ actor: z.string(), name: z.string().nullable() }).strict();
+
 export const caseSummaryResponseSchema = z.object({
   id: uuid, ref: z.string(), repo: z.string(), branch: z.string(), prNumber: z.number().int().nullable(),
   state: caseStateSchema, closeReason: z.string().nullable(), latestRevision: z.number().int(),
   openedAt: isoDate, updatedAt: isoDate, closedAt: isoDate.nullable(),
+  openedBy: actorRefSchema, lanes: z.array(caseLaneSchema),
 }).strict();
 
 export const caseListResponseSchema = z.object({ items: z.array(caseSummaryResponseSchema), nextCursor: z.string().nullable() }).strict();
@@ -562,17 +568,31 @@ export const revisionSummaryResponseSchema = z.object({
   findingsDigest: sha256Hex, addedCount: z.number().int(), carriedCount: z.number().int(), resolvedCount: z.number().int(), createdAt: isoDate,
 }).strict();
 
+/** The signed closure record of a closed case (§13.3), with the result of verifying its signature now. */
+export const caseClosureResponseSchema = z.object({
+  reason: z.string(), note: z.string().nullable(), closedAt: isoDate, closedBy: actorRefSchema,
+  record: z.record(z.unknown()), signature: z.string(), signatureValid: z.boolean(),
+}).strict();
+
 export const caseDetailResponseSchema = z.object({
   case: caseStatusSchema,
+  openedAt: isoDate,
+  openedBy: actorRefSchema,
+  closure: caseClosureResponseSchema.nullable(),
+  /** What the caller may do on this case's repository (the server re-checks every write). */
+  viewer: z.object({ comment: z.boolean(), review: z.boolean(), close: z.boolean(), withdraw: z.boolean() }).strict(),
   revisions: z.array(revisionSummaryResponseSchema),
   justifications: z.array(justificationResponseSchema),
   comments: z.array(commentResponseSchema),
 }).strict();
 
 export const caseFindingResponseSchema = z.object({
-  id: uuid, fingerprint: fingerprintSchema, policyKey: z.string(), policyVersion: z.number().int(), tier: z.enum(TIERS), blocking: z.boolean(),
+  id: uuid, fingerprint: fingerprintSchema, policyId: uuid, policyKey: z.string(), policyTitle: z.string(), policyVersion: z.number().int(),
+  tier: z.enum(TIERS), blocking: z.boolean(), owningBoardIds: z.array(uuid),
   statusAtRevision: z.enum(['new', 'carried']), filePath: z.string(), startLine: z.number().int(), endLine: z.number().int(),
   language: z.string().nullable(), snippet: z.string(), justification: justificationResponseSchema.nullable(),
+  /** The stored reviewer context of the snippet, if any (E51 generates one on first request). */
+  contextStatus: z.enum(['none', 'generated', 'failed']),
 }).strict();
 
 export const revisionDetailResponseSchema = z.object({

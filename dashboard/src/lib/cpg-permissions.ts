@@ -10,6 +10,8 @@ import type { CpgMe, Grant, Team } from '../api/cpg-schemas';
 export interface PermissionRequirement {
   all?: string[];
   any?: string[];
+  /** Scopable permissions, held through a grant of any scope (organization, team or repository). */
+  scoped?: string[];
 }
 
 /**
@@ -22,9 +24,14 @@ export function hasOrgPermission(me: CpgMe | null | undefined, key: string): boo
   return !!me && me.permissions.some((p) => p.key === key && p.scope === 'org');
 }
 
+/** Whether the user holds a scopable permission in any scope (the server then checks each repository). */
+export function holdsPermission(me: CpgMe | null | undefined, key: string): boolean {
+  return !!me && me.permissions.some((p) => p.key === key);
+}
+
 /** The permissions a requirement still lacks; empty when it is met. */
 export function missingPermissions(me: CpgMe | null | undefined, req: PermissionRequirement): string[] {
-  const missing = (req.all ?? []).filter((k) => !hasOrgPermission(me, k));
+  const missing = [...(req.all ?? []).filter((k) => !hasOrgPermission(me, k)), ...(req.scoped ?? []).filter((k) => !holdsPermission(me, k))];
   if (req.any && req.any.length > 0 && !req.any.some((k) => hasOrgPermission(me, k))) {
     missing.push(req.any.join(' or '));
   }
@@ -64,11 +71,13 @@ export const POLICIES_REQUIREMENT: PermissionRequirement = { all: ['policy.read'
 export const POLICY_AUTHOR_REQUIREMENT: PermissionRequirement = { all: ['policy.read', 'policy.author'] };
 export const BOARDS_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
 export const QUORUM_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
+export const CASES_REQUIREMENT: PermissionRequirement = { scoped: ['case.read'] };
 
 /** The governance pages, in sidebar order. */
 export const GOVERNANCE_PAGES: GovernancePage[] = [
   { to: '/governance', label: 'Overview', description: 'Your governance access and status', requires: {} },
   { to: '/governance/policies', label: 'Policies', description: 'The corporate policy log: versions, approvals, grace periods', requires: POLICIES_REQUIREMENT },
+  { to: '/governance/cases', label: 'Cases', description: 'One case per branch: findings, justifications and board review', requires: CASES_REQUIREMENT },
   { to: '/governance/boards', label: 'Boards', description: 'Review boards, their members and the policies they own', requires: BOARDS_REQUIREMENT },
   { to: '/governance/quorum', label: 'Quorum', description: 'Who must approve what, versioned and signed', requires: QUORUM_REQUIREMENT },
   { to: '/governance/access', label: 'Access', description: 'Users, role grants, custom roles and teams', requires: ACCESS_REQUIREMENT },

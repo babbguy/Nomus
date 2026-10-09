@@ -13,13 +13,19 @@ import {
   type QuorumConfig, type QuorumVersion, type QuorumVersionSummary,
 } from './cpg-quorum';
 
+import {
+  caseCommentSchema, caseDetailSchema, caseListSchema, caseStatusSchema, reviewerContextSchema, revisionDetailSchema,
+  type CaseComment, type CaseDetail, type CaseList, type CaseState, type ReviewerContext, type RevisionDetail,
+} from './cpg-case-schemas';
+
 export * from './cpg-schemas';
 export * from './cpg-quorum';
+export * from './cpg-case-schemas';
 
 /**
  * Typed client for the Corporate Policy Governance API (/api/v1/cpg):
  * RBAC, settings and the audit log (E1 to E17); boards, quorum, compile and
- * the policy log (E19 to E37). Every response is parsed with its zod
+ * the policy log (E19 to E37); review cases (E41 to E52). Every response is parsed with its zod
  * contract (cpg-schemas.ts, cpg-quorum.ts); a response that does not match
  * throws CpgContractError, which pages show as a load failure.
  */
@@ -321,4 +327,56 @@ export async function voteOnVersion(versionId: string, vote: 'approve' | 'reject
 export async function withdrawVersion(versionId: string): Promise<PolicyDetail> {
   const { data } = await api.post(`/cpg/policy-versions/${id(versionId)}/withdraw`, {});
   return parseResponse(policyDetailSchema, data, 'POST /cpg/policy-versions/:id/withdraw');
+}
+
+// ─── E41–E52 review cases ──────────────────────────────────────────────
+
+export interface CaseQuery {
+  state?: CaseState;
+  boardId?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export async function listCases(q: CaseQuery = {}): Promise<CaseList> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') params.set(k, String(v));
+  const qs = params.toString();
+  const { data } = await api.get(`/cpg/cases${qs ? `?${qs}` : ''}`);
+  return parseResponse(caseListSchema, data, 'GET /cpg/cases');
+}
+
+export async function getCase(caseId: string): Promise<CaseDetail> {
+  const { data } = await api.get(`/cpg/cases/${id(caseId)}`);
+  return parseResponse(caseDetailSchema, data, 'GET /cpg/cases/:id');
+}
+
+export async function getCaseRevision(caseId: string, revision: number): Promise<RevisionDetail> {
+  const { data } = await api.get(`/cpg/cases/${id(caseId)}/revisions/${id(String(revision))}`);
+  return parseResponse(revisionDetailSchema, data, 'GET /cpg/cases/:id/revisions/:revision');
+}
+
+/** E51 (generated on the first request when the org allows it) or, with `retry`, E52 after a failure. */
+export async function getReviewerContext(caseId: string, findingId: string, retry = false): Promise<ReviewerContext> {
+  const path = `/cpg/cases/${id(caseId)}/findings/${id(findingId)}/context`;
+  const { data } = retry ? await api.post(`${path}/retry`, {}) : await api.get(path);
+  return parseResponse(reviewerContextSchema, data, retry ? 'POST /cpg/cases/:id/findings/:findingId/context/retry' : 'GET /cpg/cases/:id/findings/:findingId/context');
+}
+
+/** A comment, or with `threadId` a reply to that thread. */
+export async function addCaseComment(caseId: string, body: string, threadId?: string): Promise<CaseComment> {
+  const input = threadId ? { kind: 'reply', threadId, body } : { kind: 'comment', body };
+  const { data } = await api.post(`/cpg/cases/${id(caseId)}/comments`, input);
+  return parseResponse(caseCommentSchema, data, 'POST /cpg/cases/:id/comments');
+}
+
+export async function requestCaseChanges(caseId: string, input: { boardId: string; body: string; fingerprints: string[] }): Promise<CaseComment> {
+  const { data } = await api.post(`/cpg/cases/${id(caseId)}/request-changes`, input);
+  return parseResponse(caseCommentSchema, data, 'POST /cpg/cases/:id/request-changes');
+}
+
+/** E49 withdraw (the opener, or case.close) or E50 close (case.close). */
+export async function endCase(caseId: string, how: 'withdraw' | 'close', reason: string) {
+  const { data } = await api.post(`/cpg/cases/${id(caseId)}/${how}`, { reason });
+  return parseResponse(caseStatusSchema, data, `POST /cpg/cases/:id/${how}`);
 }

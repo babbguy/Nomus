@@ -7,6 +7,8 @@
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   fingerprintOf, caseStatusSchema, requestReviewResponseSchema, caseByBranchResponseSchema, findingsStatusResponseSchema,
 } from '@nomus/scanner/corporate';
@@ -164,6 +166,20 @@ describe('isolation and listing', () => {
     const next = caseListResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases?limit=2&cursor=${first.nextCursor}`, { cookie: dev.cookie })).json);
     expect(next.items.some((i) => first.items.some((f) => f.id === i.id))).toBe(false);
   });
+
+  it('list rows name the opener and carry the lanes; the detail adds the people and what the caller may do', async () => {
+    const kase = await openCase('feat/people');
+    const row = caseListResponseSchema.parse((await call(app, 'GET', '/api/v1/cpg/cases?limit=1', { cookie: dev.cookie })).json).items[0];
+    expect(row).toMatchObject({ id: kase.id, openedBy: { actor: `user:${dev.id}`, name: `User ${dev.id.slice(0, 4)}` } });
+    expect(row.lanes).toEqual(kase.lanes);
+    const detail = async (user: TestUser) => caseDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}`, { cookie: user.cookie })).json);
+    const asDev = await detail(dev);
+    expect(asDev).toMatchObject({ openedAt: row.openedAt, openedBy: row.openedBy, closure: null });
+    expect(asDev.viewer).toEqual({ comment: true, review: false, close: false, withdraw: true });
+    expect((await detail(reviewer)).viewer).toEqual({ comment: true, review: true, close: true, withdraw: true });
+    const findings = revisionDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}/revisions/1`, { cookie: dev.cookie })).json).findings;
+    expect(findings.map((f) => [f.policyKey, f.policyTitle.length > 0, f.policyId.length])).toEqual([['corp.no-openai', true, 36], ['corp.no-pii', true, 36]]);
+  });
 });
 
 describe('E46–E48 request changes, reply, resubmit', () => {
@@ -259,12 +275,37 @@ describe('E49–E50 close, closure record, PR attach', () => {
     const text = closureSignedText(getDb(), row);
     expect(cpgVerify(text, row.closureSignature!)).toBe(true);
     expect(JSON.parse(text)).toMatchObject({ kind: 'nomus.cpg-case-closure.v1', caseId: kase.id, closeReason: 'closed_by_reviewer', revisions: [{ revision: 1 }] });
+    const detail = caseDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}`, { cookie: dev.cookie })).json);
+    expect(detail.closure).toMatchObject({
+      reason: 'closed_by_reviewer', note: 'Superseded by another branch.', closedBy: { actor: `user:${reviewer.id}`, name: `User ${reviewer.id.slice(0, 4)}` },
+      record: JSON.parse(text), signature: row.closureSignature, signatureValid: true,
+    });
 
     const write = await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/comments`, { cookie: dev.cookie, body: { kind: 'comment', body: 'late' } });
     expect([write.status, write.json.code]).toEqual([409, 'case_closed']);
     expect((await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/withdraw`, { cookie: dev.cookie, body: { reason: 'x' } })).json.code).toBe('case_closed');
     const reopened = requestReviewResponseSchema.parse((await requestReview(dev, reviewBody('feat/close'))).json);
     expect([reopened.created, reopened.case.id === kase.id]).toEqual([true, false]);
+  });
+
+  it('a closed case shows stored reviewer context but never generates or retries it (409 case_closed, no LLM call)', async () => {
+    const kase = await openCase('feat/closed-context');
+    await call(app, 'PATCH', '/api/v1/cpg/settings', { cookie: owner.cookie, body: { reviewerContextLlm: true } });
+    expect((await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/close`, { cookie: reviewer.cookie, body: { reason: 'Done.' } })).status).toBe(200);
+    const rev = revisionDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}/revisions/1`, { cookie: reviewer.cookie })).json);
+    // The E51 test above stored context for the chat.ts snippet; nothing is stored for log.ts.
+    const [stored, none] = ['src/chat.ts', 'src/log.ts'].map((p) => rev.findings.find((f) => f.filePath === p)!);
+    expect([stored.contextStatus, none.contextStatus]).toEqual(['generated', 'none']);
+    const calls = llmCalls.length;
+    const contexts = () => rawSqlite(getDb()).prepare('SELECT count(*) AS n FROM cpg_reviewer_contexts').get() as { n: number };
+    const rows = contexts().n;
+    const path = (f: { id: string }) => `/api/v1/cpg/cases/${kase.id}/findings/${f.id}/context`;
+    expect(reviewerContextResponseSchema.parse((await call(app, 'GET', path(stored), { cookie: reviewer.cookie })).json)).toMatchObject({ status: 'generated' });
+    const refused = await call(app, 'GET', path(none), { cookie: reviewer.cookie });
+    expect([refused.status, refused.json.code]).toEqual([409, 'case_closed']);
+    const retry = await call(app, 'POST', `${path(stored)}/retry`, { cookie: reviewer.cookie, body: {} });
+    expect([retry.status, retry.json.code]).toEqual([409, 'case_closed']);
+    expect([llmCalls.length, contexts().n]).toEqual([calls, rows]);
   });
 
   it('the opener may withdraw without case.close', async () => {
@@ -342,5 +383,28 @@ describe('GitHub App pull_request hook', () => {
     expect(getCase(db, orgId, kase.id)).toMatchObject({ state: 'closed', closeReason: 'merged', closedBy: 'github_app:41001' });
     expect(applyCpgPullRequest(db, 41_001, event('closed'))).toBe('ignored'); // no open case left
     expect(() => applyCpgPullRequest(db, 41_001, { action: 'opened', repository: { full_name: 'gate-org/app' } })).toThrow(/no repository, head branch or PR number/);
+  });
+});
+
+// Runs last: the reviewer context it reads was stored by the E51 test above, so it makes no new LLM call.
+describe('dashboard contracts', () => {
+  it("the dashboard's case contracts (dashboard/src/api/cpg-case-schemas.ts) parse every case response the pages read", async () => {
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../../../dashboard/src/api/cpg-case-schemas.ts')).href);
+    const kase = await openCase('feat/dashboard-contract');
+    const asked = await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/request-changes`, {
+      cookie: reviewer.cookie, body: { boardId: aiBoard, body: 'Use the gateway.', fingerprints: [kase.resolutions.find((r) => r.tier === 'prohibited')!.fingerprint] },
+    });
+    const reply = await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/comments`, { cookie: dev.cookie, body: { kind: 'reply', threadId: asked.json.id, body: 'On it.' } });
+    const parse = (schema: { parse: (v: unknown) => unknown }, body: unknown) => expect(() => schema.parse(body)).not.toThrow();
+    parse(d.caseListSchema, (await call(app, 'GET', '/api/v1/cpg/cases?limit=5', { cookie: reviewer.cookie })).json);
+    parse(d.caseDetailSchema, (await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}`, { cookie: reviewer.cookie })).json);
+    const revision = (await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}/revisions/1`, { cookie: reviewer.cookie })).json;
+    parse(d.revisionDetailSchema, revision);
+    parse(d.reviewerContextSchema, (await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}/findings/${revision.findings[0].id}/context`, { cookie: reviewer.cookie })).json);
+    parse(d.caseCommentSchema, asked.json);
+    parse(d.caseCommentSchema, reply.json);
+    const closed = await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/close`, { cookie: reviewer.cookie, body: { reason: 'Contract check.' } });
+    parse(d.caseStatusSchema, closed.json);
+    parse(d.caseDetailSchema, (await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}`, { cookie: dev.cookie })).json);
   });
 });

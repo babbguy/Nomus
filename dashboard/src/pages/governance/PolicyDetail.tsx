@@ -22,7 +22,7 @@ import {
 } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
 import CompileResult from './policies/CompileResult';
-import { Mono, RuleView, StateBadge, TierBadge, VersionStatusBadge } from './policies/parts';
+import { Field, Mono, RuleView, StateBadge, TierBadge, VersionStatusBadge } from './policies/parts';
 
 type Names = ReadonlyMap<string, { name: string; email: string }>;
 
@@ -195,15 +195,6 @@ export function PolicyDetailView({ detail, me, names, namesError, lapseDays, jus
           onDone={(text) => { setRetiring(false); onNotice({ type: 'ok', text }); onChanged(); }}
         />
       )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-text-muted mb-1">{label}</p>
-      <div className="text-text-primary">{children}</div>
     </div>
   );
 }
