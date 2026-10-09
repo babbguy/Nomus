@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 6 (CI gate, engine): `POST /api/v1/cpg/ci/evaluate` gives the
+  server's pass or fail verdict on a CI scan, taken with an organization key with the `evaluate`
+  scope. Findings must name a policy version of the current bundle and blocking findings must carry
+  their snippet; stale bundles, unknown fingerprints, mismatched snippets and suspicious empty scans
+  are refused. A failing scan opens or updates the branch's review case from CI and attaches the
+  pull request; a scan whose blocking findings were fixed posts a new revision, so the case moves
+  on. Each run is stored with a verdict signed by the instance key (`verifyCiVerdict()` in
+  `@nomus/scanner/corporate` verifies it offline) and listed by `GET /api/v1/cpg/ci/runs`; a case's
+  closure record now lists its CI runs. `POST /api/v1/cpg/ci/pr-closed` closes the case as merged
+  or closed unmerged.
 - Corporate policy governance, phase 5 (decisions and exceptions, dashboard): the case page shows
   each blocking finding's decision (the signed decision with its verified signature and expiry, a
   covering standing exception, or the pending proposal with the boards still needed), the case's

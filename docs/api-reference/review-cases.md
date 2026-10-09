@@ -116,13 +116,14 @@ organization does not have is `422 unknown_policy`.
 When the GitHub App is installed for an organization with corporate policies enabled, opening a
 pull request attaches its number to the open case of the PR's head branch, and closing the pull
 request closes that case as `merged` or `pr_closed_unmerged`. Organizations with corporate policies
-switched off, and branches without an open case, are not touched.
+switched off, and branches without an open case, are not touched. The [CI gate](./ci-gate.md) attaches the pull
+request on every evaluation and closes the case through `POST /api/v1/cpg/ci/pr-closed`.
 
 ## Closing
 
 `close` and `withdraw` take `{ "reason": "..." }`. Closing appends the final case event and signs a
 closure record (`kind: "nomus.cpg-case-closure.v1"`: case, repository, branch, pull request,
-reason, times, every revision's findings digest, the ids of the case's decisions, and a digest of
+reason, times, every revision's findings digest, the ids of the case's decisions and CI runs, and a digest of
 the full case history) with the
 instance key. The record is rebuilt from the stored rows, so it can be verified at any time. A
 closed case accepts no further writes (`409 case_closed`); new activity on the branch opens a new
