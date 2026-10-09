@@ -107,6 +107,15 @@ describe('repo-scoped grants', () => {
         .toThrow(expect.objectContaining({ code: 'invalid_repo' }));
     }
   });
+
+  it('createGrant stores a github.com repo id in its canonical form, so both forms are one grant', () => {
+    const u = makeUser(orgId);
+    const role = customRole(orgId, 'repo_reader_gh', ['case.read']);
+    const long = createGrant(db(), { orgId, userId: u.id, roleId: role.id, scopeType: 'repo', scopeId: 'github.com/acme/api', actor: 'test' });
+    expect([long.created, long.grant.scopeId]).toEqual([true, 'acme/api']);
+    const short = createGrant(db(), { orgId, userId: u.id, roleId: role.id, scopeType: 'repo', scopeId: 'acme/api', actor: 'test' });
+    expect([short.created, short.grant.id]).toEqual([false, long.grant.id]);
+  });
 });
 
 describe('team-scoped grants', () => {

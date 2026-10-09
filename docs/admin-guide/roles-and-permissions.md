@@ -110,7 +110,9 @@ grants count; team- and repository-scoped holders see results filtered to their 
 
 ### Team repository patterns
 
-Patterns are lowercase globs matched against the canonical repository id:
+Patterns are lowercase globs matched against the canonical repository id. A leading `github.com/`
+host is dropped (`github.com/acme/*` is stored as `acme/*`), because github.com repositories are
+identified as `owner/name`:
 
 - `*` matches any characters except `/`; `?` matches exactly one character except `/`.
 - `**` is a whole path segment and matches zero or more segments, for example `ghe.example.com/**`.

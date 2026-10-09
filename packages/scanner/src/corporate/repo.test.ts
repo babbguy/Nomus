@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canonicalRepo, isCanonicalRepo } from './repo.js';
+import { canonicalRepo, canonicalRepoPattern, isCanonicalRepo } from './repo.js';
 
 // Design spec §10.5: the editor, CI and the server name a repository the same way.
 describe('canonicalRepo', () => {
@@ -24,5 +24,22 @@ describe('canonicalRepo', () => {
     ['../acme/payments'], ['acme/../payments'], ['a/b/c/d'], ['file:///home/me/repo'],
   ])('rejects %s', (input) => {
     expect(canonicalRepo(input)).toBeNull();
+  });
+});
+
+describe('canonicalRepoPattern', () => {
+  it.each([
+    ['github.com/acme/payments', 'acme/payments'],
+    ['github.com/acme/*', 'acme/*'],
+    ['github.com/{acme,beta}/api-*', '{acme,beta}/api-*'],
+    ['acme/*', 'acme/*'],
+    ['gitlab.example.org/team/**', 'gitlab.example.org/team/**'],
+    ['**', '**'],
+    ['github.com/*', null],
+    ['github.com/**', null],
+    ['github.com/acme/**', null],
+    ['github.com/acme/payments/extra', null],
+  ])('%s → %s', (input, want) => {
+    expect(canonicalRepoPattern(input)).toBe(want);
   });
 });

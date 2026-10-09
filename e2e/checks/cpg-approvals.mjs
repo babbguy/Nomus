@@ -203,6 +203,17 @@ export async function cpgApprovalsChecks(ctx) {
     gate.check('CI evaluate on the branch (org key): 200 fail on the review case, the rejected PII finding among the reasons, and the signed verdict verifies offline',
       evaluated.status === 200 && v?.verdict === 'fail' && v.caseId === caseId && v.reasons.includes(`corp.no-pii-to-ai @ app/summarize.py:${blocking.find((f) => f.fingerprint === pii).startLine}: rejected`) && verdictOffline === null,
       '200 fail, same case, rejected PII, verifies', `${evaluated.status} ${v?.verdict} ${v?.caseId === caseId} ${JSON.stringify(v?.reasons ?? v)} ${verdictOffline}`);
+
+    // ── One repository, one identity: the github.com long form sees the case and decisions made under owner/name ──
+    const LONG_REPO = `github.com/${REPO}`;
+    const statuses = async (r) => (await dev.post('/api/v1/cpg/findings/status', { repo: r, branch: BRANCH, fingerprints: [pii, legacy] })).json?.items;
+    const [longItems, shortItems] = [await statuses(LONG_REPO), await statuses(REPO)];
+    const longCase = (await dev.get(`/api/v1/cpg/cases/by-branch?repo=${encodeURIComponent(LONG_REPO)}&branch=${encodeURIComponent(BRANCH)}`)).json?.case;
+    gate.check(`findings status and by-branch with the long form ${LONG_REPO}: the same case and the same decisions as ${REPO} (the PII finding rejected by its decision)`,
+      longCase?.id === caseId && longCase.repo === REPO && longItems?.[0]?.status === 'rejected' && longItems[0].decisionId === rejected?.decisionId
+        && JSON.stringify(longItems) === JSON.stringify(shortItems),
+      'same case, canonical repo, rejected, identical statuses',
+      `${longCase?.id === caseId} ${longCase?.repo} ${longItems?.[0]?.status} ${JSON.stringify(longItems)} vs ${JSON.stringify(shortItems)}`);
     const merged = await ci.post('/api/v1/cpg/ci/pr-closed', { repo: REPO, branch: BRANCH, prNumber: 1, merged: true });
     const closure = (await dev.get(`/api/v1/cpg/cases/${caseId}`)).json?.closure;
     gate.check('the merged PR closes the case as merged, and its signed closure record lists the CI run',

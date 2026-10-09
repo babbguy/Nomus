@@ -55,3 +55,18 @@ export function canonicalRepo(input: string): string | null {
 export function isCanonicalRepo(repo: string): boolean {
   return canonicalRepo(repo) === repo;
 }
+
+/**
+ * Canonicalise a repository pattern (a glob over canonical ids; a literal id
+ * is a pattern without wildcards): a leading `github.com/` host is dropped,
+ * as canonicalRepo() drops it, so `github.com/acme/*` and `acme/*` are one
+ * pattern. Returns null when `github.com/` is not followed by exactly an owner
+ * and a name segment (`github.com/*`, `github.com/**`): github.com ids have
+ * no host segment, so no canonical id could match such a pattern. Case is
+ * kept; callers refuse uppercase patterns.
+ */
+export function canonicalRepoPattern(pattern: string): string | null {
+  if (!pattern.startsWith('github.com/')) return pattern;
+  const rest = pattern.slice('github.com/'.length);
+  return rest.split('/').length === 2 && !rest.includes('**') ? rest : null;
+}

@@ -259884,7 +259884,7 @@ class ParseStatus {
         const arrayValue = [];
         for (const s of results) {
             if (s.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (s.status === "dirty")
                 status.dirty();
             arrayValue.push(s.value);
@@ -259908,9 +259908,9 @@ class ParseStatus {
         for (const pair of pairs) {
             const { key, value } = pair;
             if (key.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (value.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (key.status === "dirty")
                 status.dirty();
             if (value.status === "dirty")
@@ -259922,7 +259922,7 @@ class ParseStatus {
         return { status: status.value, value: finalObject };
     }
 }
-const parseUtil_INVALID = Object.freeze({
+const INVALID = Object.freeze({
     status: "aborted",
 });
 const DIRTY = (value) => ({ status: "dirty", value });
@@ -260422,7 +260422,7 @@ class ZodString extends ZodType {
                 expected: ZodParsedType.string,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const status = new ParseStatus();
         let ctx = undefined;
@@ -261014,7 +261014,7 @@ class ZodNumber extends ZodType {
                 expected: ZodParsedType.number,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         let ctx = undefined;
         const status = new ParseStatus();
@@ -261308,7 +261308,7 @@ class ZodBigInt extends ZodType {
             expected: ZodParsedType.bigint,
             received: ctx.parsedType,
         });
-        return parseUtil_INVALID;
+        return INVALID;
     }
     gte(value, message) {
         return this.setLimit("min", value, true, errorUtil.toString(message));
@@ -261423,7 +261423,7 @@ class ZodBoolean extends ZodType {
                 expected: ZodParsedType.boolean,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261448,14 +261448,14 @@ class ZodDate extends ZodType {
                 expected: ZodParsedType.date,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (Number.isNaN(input.data.getTime())) {
             const ctx = this._getOrReturnCtx(input);
             addIssueToContext(ctx, {
                 code: ZodIssueCode.invalid_date,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const status = new ParseStatus();
         let ctx = undefined;
@@ -261556,7 +261556,7 @@ class ZodSymbol extends ZodType {
                 expected: ZodParsedType.symbol,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261577,7 +261577,7 @@ class ZodUndefined extends ZodType {
                 expected: ZodParsedType.undefined,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261598,7 +261598,7 @@ class ZodNull extends ZodType {
                 expected: ZodParsedType.null,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261649,7 +261649,7 @@ class ZodNever extends ZodType {
             expected: ZodParsedType.never,
             received: ctx.parsedType,
         });
-        return parseUtil_INVALID;
+        return INVALID;
     }
 }
 ZodNever.create = (params) => {
@@ -261668,7 +261668,7 @@ class ZodVoid extends ZodType {
                 expected: ZodParsedType.void,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261689,7 +261689,7 @@ class ZodArray extends ZodType {
                 expected: ZodParsedType.array,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (def.exactLength !== null) {
             const tooBig = ctx.data.length > def.exactLength.value;
@@ -261875,7 +261875,7 @@ class ZodObject extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const { status, ctx } = this._processInputParams(input);
         const { shape, keys: shapeKeys } = this._getCached();
@@ -262223,7 +262223,7 @@ class ZodUnion extends ZodType {
                 code: ZodIssueCode.invalid_union,
                 unionErrors,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (ctx.common.async) {
             return Promise.all(options.map(async (option) => {
@@ -262281,7 +262281,7 @@ class ZodUnion extends ZodType {
                 code: ZodIssueCode.invalid_union,
                 unionErrors,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
     }
     get options() {
@@ -262356,7 +262356,7 @@ class ZodDiscriminatedUnion extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const discriminator = this.discriminator;
         const discriminatorValue = ctx.data[discriminator];
@@ -262367,7 +262367,7 @@ class ZodDiscriminatedUnion extends ZodType {
                 options: Array.from(this.optionsMap.keys()),
                 path: [discriminator],
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (ctx.common.async) {
             return option._parseAsync({
@@ -262473,14 +262473,14 @@ class ZodIntersection extends ZodType {
         const { status, ctx } = this._processInputParams(input);
         const handleParsed = (parsedLeft, parsedRight) => {
             if (isAborted(parsedLeft) || isAborted(parsedRight)) {
-                return parseUtil_INVALID;
+                return INVALID;
             }
             const merged = mergeValues(parsedLeft.value, parsedRight.value);
             if (!merged.valid) {
                 addIssueToContext(ctx, {
                     code: ZodIssueCode.invalid_intersection_types,
                 });
-                return parseUtil_INVALID;
+                return INVALID;
             }
             if (isDirty(parsedLeft) || isDirty(parsedRight)) {
                 status.dirty();
@@ -262532,7 +262532,7 @@ class ZodTuple extends ZodType {
                 expected: ZodParsedType.array,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (ctx.data.length < this._def.items.length) {
             addIssueToContext(ctx, {
@@ -262542,7 +262542,7 @@ class ZodTuple extends ZodType {
                 exact: false,
                 type: "array",
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const rest = this._def.rest;
         if (!rest && ctx.data.length > this._def.items.length) {
@@ -262608,7 +262608,7 @@ class ZodRecord extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const pairs = [];
         const keyType = this._def.keyType;
@@ -262662,7 +262662,7 @@ class ZodMap extends ZodType {
                 expected: ZodParsedType.map,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const keyType = this._def.keyType;
         const valueType = this._def.valueType;
@@ -262679,7 +262679,7 @@ class ZodMap extends ZodType {
                     const key = await pair.key;
                     const value = await pair.value;
                     if (key.status === "aborted" || value.status === "aborted") {
-                        return parseUtil_INVALID;
+                        return INVALID;
                     }
                     if (key.status === "dirty" || value.status === "dirty") {
                         status.dirty();
@@ -262695,7 +262695,7 @@ class ZodMap extends ZodType {
                 const key = pair.key;
                 const value = pair.value;
                 if (key.status === "aborted" || value.status === "aborted") {
-                    return parseUtil_INVALID;
+                    return INVALID;
                 }
                 if (key.status === "dirty" || value.status === "dirty") {
                     status.dirty();
@@ -262723,7 +262723,7 @@ class ZodSet extends ZodType {
                 expected: ZodParsedType.set,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const def = this._def;
         if (def.minSize !== null) {
@@ -262757,7 +262757,7 @@ class ZodSet extends ZodType {
             const parsedSet = new Set();
             for (const element of elements) {
                 if (element.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (element.status === "dirty")
                     status.dirty();
                 parsedSet.add(element.value);
@@ -262813,7 +262813,7 @@ class ZodFunction extends ZodType {
                 expected: ZodParsedType.function,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         function makeArgsIssue(args, error) {
             return makeIssue({
@@ -262940,7 +262940,7 @@ class ZodLiteral extends ZodType {
                 code: ZodIssueCode.invalid_literal,
                 expected: this._def.value,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return { status: "valid", value: input.data };
     }
@@ -262972,7 +262972,7 @@ class ZodEnum extends ZodType {
                 received: ctx.parsedType,
                 code: ZodIssueCode.invalid_type,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (!this._cache) {
             this._cache = new Set(this._def.values);
@@ -262985,7 +262985,7 @@ class ZodEnum extends ZodType {
                 code: ZodIssueCode.invalid_enum_value,
                 options: expectedValues,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -263038,7 +263038,7 @@ class ZodNativeEnum extends ZodType {
                 received: ctx.parsedType,
                 code: ZodIssueCode.invalid_type,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (!this._cache) {
             this._cache = new Set(util.getValidEnumValues(this._def.values));
@@ -263050,7 +263050,7 @@ class ZodNativeEnum extends ZodType {
                 code: ZodIssueCode.invalid_enum_value,
                 options: expectedValues,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -263077,7 +263077,7 @@ class ZodPromise extends ZodType {
                 expected: ZodParsedType.promise,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const promisified = ctx.parsedType === ZodParsedType.promise ? ctx.data : Promise.resolve(ctx.data);
         return OK(promisified.then((data) => {
@@ -263127,14 +263127,14 @@ class ZodEffects extends ZodType {
             if (ctx.common.async) {
                 return Promise.resolve(processed).then(async (processed) => {
                     if (status.value === "aborted")
-                        return parseUtil_INVALID;
+                        return INVALID;
                     const result = await this._def.schema._parseAsync({
                         data: processed,
                         path: ctx.path,
                         parent: ctx,
                     });
                     if (result.status === "aborted")
-                        return parseUtil_INVALID;
+                        return INVALID;
                     if (result.status === "dirty")
                         return DIRTY(result.value);
                     if (status.value === "dirty")
@@ -263144,14 +263144,14 @@ class ZodEffects extends ZodType {
             }
             else {
                 if (status.value === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 const result = this._def.schema._parseSync({
                     data: processed,
                     path: ctx.path,
                     parent: ctx,
                 });
                 if (result.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (result.status === "dirty")
                     return DIRTY(result.value);
                 if (status.value === "dirty")
@@ -263177,7 +263177,7 @@ class ZodEffects extends ZodType {
                     parent: ctx,
                 });
                 if (inner.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (inner.status === "dirty")
                     status.dirty();
                 // return value is ignored
@@ -263187,7 +263187,7 @@ class ZodEffects extends ZodType {
             else {
                 return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
                     if (inner.status === "aborted")
-                        return parseUtil_INVALID;
+                        return INVALID;
                     if (inner.status === "dirty")
                         status.dirty();
                     return executeRefinement(inner.value).then(() => {
@@ -263204,7 +263204,7 @@ class ZodEffects extends ZodType {
                     parent: ctx,
                 });
                 if (!isValid(base))
-                    return parseUtil_INVALID;
+                    return INVALID;
                 const result = effect.transform(base.value, checkCtx);
                 if (result instanceof Promise) {
                     throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
@@ -263214,7 +263214,7 @@ class ZodEffects extends ZodType {
             else {
                 return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
                     if (!isValid(base))
-                        return parseUtil_INVALID;
+                        return INVALID;
                     return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
                         status: status.value,
                         value: result,
@@ -263374,7 +263374,7 @@ class ZodNaN extends ZodType {
                 expected: ZodParsedType.nan,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return { status: "valid", value: input.data };
     }
@@ -263411,7 +263411,7 @@ class ZodPipeline extends ZodType {
                     parent: ctx,
                 });
                 if (inResult.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (inResult.status === "dirty") {
                     status.dirty();
                     return DIRTY(inResult.value);
@@ -263433,7 +263433,7 @@ class ZodPipeline extends ZodType {
                 parent: ctx,
             });
             if (inResult.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (inResult.status === "dirty") {
                 status.dirty();
                 return {
@@ -263625,7 +263625,7 @@ const coerce = {
     date: ((arg) => ZodDate.create({ ...arg, coerce: true })),
 };
 
-const NEVER = (/* unused pure expression or super */ null && (INVALID));
+const NEVER = INVALID;
 
 ;// CONCATENATED MODULE: ../scanner/dist/config/schema.js
 
@@ -274438,6 +274438,21 @@ function canonicalRepo(input) {
 function isCanonicalRepo(repo) {
     return canonicalRepo(repo) === repo;
 }
+/**
+ * Canonicalise a repository pattern (a glob over canonical ids; a literal id
+ * is a pattern without wildcards): a leading `github.com/` host is dropped,
+ * as canonicalRepo() drops it, so `github.com/acme/*` and `acme/*` are one
+ * pattern. Returns null when `github.com/` is not followed by exactly an owner
+ * and a name segment (`github.com/*`, `github.com/**`): github.com ids have
+ * no host segment, so no canonical id could match such a pattern. Case is
+ * kept; callers refuse uppercase patterns.
+ */
+function canonicalRepoPattern(pattern) {
+    if (!pattern.startsWith('github.com/'))
+        return pattern;
+    const rest = pattern.slice('github.com/'.length);
+    return rest.split('/').length === 2 && !rest.includes('**') ? rest : null;
+}
 //# sourceMappingURL=repo.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/contracts.js
 
@@ -274508,6 +274523,25 @@ function bundleSignedText(b) {
 }
 // ─── Review cases (§9.3): request review, case status, finding resolutions ──
 const repo = stringType().regex(CANONICAL_REPO_RE);
+/**
+ * A repository named in a request: any reference canonicalRepo() accepts
+ * (`owner/name`, `github.com/owner/name`, a remote URL, any case), replaced by
+ * its canonical id. The engine stores and compares only that id, so one
+ * repository has one identity for its cases, decisions, exceptions and CI runs.
+ */
+const repoInputSchema = stringType().transform((s, ctx) => {
+    const id = canonicalRepo(s);
+    if (id === null)
+        ctx.addIssue({ code: ZodIssueCode.custom, message: 'not a repository: expected owner/name, host/owner/name or a git remote URL' });
+    return id ?? NEVER;
+});
+/** A repository pattern in a request, canonicalised by canonicalRepoPattern() (a leading `github.com/` host is dropped). */
+const repoPatternInputSchema = stringType().min(1).max(200).transform((s, ctx) => {
+    const pattern = canonicalRepoPattern(s);
+    if (pattern === null)
+        ctx.addIssue({ code: ZodIssueCode.custom, message: 'a github.com pattern names owner/name after the host, e.g. github.com/owner/*' });
+    return pattern ?? NEVER;
+});
 const branch = stringType().min(1).max(255).refine((b) => !b.startsWith('refs/') && !/[\u0000-\u001f]/.test(b), 'a branch name without refs/ or control characters');
 const fingerprint = stringType().regex(FINGERPRINT_RE);
 const relPath = stringType().min(1).max(500).refine((p) => !p.startsWith('/') && !p.includes('..') && !p.includes('\\'), 'a repo-relative path');
@@ -274524,7 +274558,7 @@ const findingUploadSchema = objectType({
 }).strict().refine((f) => f.endLine >= f.startLine, 'endLine must be >= startLine');
 const justificationInputSchema = objectType({ fingerprint, body: stringType().trim().min(20).max(4000) }).strict();
 const requestReviewRequestSchema = objectType({
-    repo,
+    repo: repoInputSchema,
     branch,
     headSha: stringType().regex(/^[0-9a-f]{40}$/).nullable(),
     bundleHash: sha256,
@@ -274576,13 +274610,13 @@ const requestReviewResponseSchema = objectType({
     case: caseStatusSchema,
 }).strict();
 const caseByBranchResponseSchema = objectType({ case: caseStatusSchema.nullable() }).strict();
-const findingsStatusRequestSchema = objectType({ repo, branch, fingerprints: arrayType(fingerprint).min(1).max(1000) }).strict();
+const findingsStatusRequestSchema = objectType({ repo: repoInputSchema, branch, fingerprints: arrayType(fingerprint).min(1).max(1000) }).strict();
 const findingsStatusResponseSchema = objectType({ items: arrayType(findingResolutionSchema), evaluatedAt: isoDate }).strict();
 // ─── CI gate (§9.3, §11.2): evaluate a CI scan, close a case with its PR ──
 const sha = stringType().regex(/^[0-9a-f]{40}$/);
 const prNumber = numberType().int().positive();
 const ciEvaluateRequestSchema = objectType({
-    repo,
+    repo: repoInputSchema,
     branch,
     prNumber: prNumber.nullable(),
     headSha: sha,
@@ -274631,7 +274665,7 @@ const ciEvaluateResponseSchema = objectType({
     signedPayload: stringType(),
     signature: stringType(),
 }).strict();
-const prClosedRequestSchema = objectType({ repo, branch, prNumber, merged: booleanType(), mergeSha: sha.optional() }).strict();
+const prClosedRequestSchema = objectType({ repo: repoInputSchema, branch, prNumber, merged: booleanType(), mergeSha: sha.optional() }).strict();
 const prClosedResponseSchema = objectType({ caseId: stringType().uuid().nullable(), closed: booleanType() }).strict();
 /** The activation payload of a bundle policy, as the server signed it (§8.5). */
 function policyActivationPayload(orgId, p) {

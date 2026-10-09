@@ -14,6 +14,13 @@ policies enabled (`403 cpg_disabled` otherwise); with them disabled, the list is
 `findings/status` also accept an organization API key with the `read:policies` scope, for CI.
 Every write is recorded in the case history and the audit log.
 
+**Repository identity.** Every `repo` a request names (in a body or a query) is canonicalised
+before it is stored or compared: `owner/name`, `github.com/owner/name`, `host/owner/name`, an
+`https://`, `ssh://` or `git@host:` remote URL (with or without `.git`) and any casing all name
+the same repository, so they reach the same case, decisions, standing exceptions and CI runs.
+Responses always carry the canonical id: lowercase `owner/name` for github.com, lowercase
+`host/owner/name` for any other host. A value that is not a repository answers `400 invalid_input`.
+
 ## Endpoints
 
 | Method and path | Credential | Permission | Purpose |
@@ -37,7 +44,7 @@ Every write is recorded in the case history and the audit log.
 
 ```json
 {
-  "repo": "github.com/gate-org/policy-repo",
+  "repo": "gate-org/policy-repo",
   "branch": "feat/payments",
   "headSha": null,
   "bundleHash": "<64 hex>",

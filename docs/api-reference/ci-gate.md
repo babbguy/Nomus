@@ -9,7 +9,9 @@ conventions are the same as on the [Governance](./governance.md) page.
 
 `evaluate` and `pr-closed` take an organization API key with the `evaluate` scope, never a session
 or a user-bound key (`403 forbidden`, `details.reason: "org_key_required"`), and need corporate
-policies enabled (`403 cpg_disabled`). Every evaluation is recorded in the audit log.
+policies enabled (`403 cpg_disabled`). Every evaluation is recorded in the audit log. A `repo` in any
+form names one repository and is stored canonical (see
+[Repository identity](./review-cases.md)); the signed verdict carries the canonical id.
 
 ## Endpoints
 
@@ -23,7 +25,7 @@ policies enabled (`403 cpg_disabled`). Every evaluation is recorded in the audit
 
 ```json
 {
-  "repo": "github.com/gate-org/policy-repo",
+  "repo": "gate-org/policy-repo",
   "branch": "feature/chat",
   "prNumber": 42,
   "headSha": "<40 hex>",
