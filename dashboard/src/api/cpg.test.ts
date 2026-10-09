@@ -9,7 +9,7 @@ vi.mock('./client', () => {
     calls.push({ method, url, body });
     return Promise.resolve({ data: reply });
   };
-  return { default: { get: respond('GET'), post: respond('POST'), patch: respond('PATCH') } };
+  return { default: { get: respond('GET'), post: respond('POST'), patch: respond('PATCH'), put: respond('PUT') } };
 });
 
 const cpg = await import('./cpg');
@@ -120,5 +120,97 @@ describe('cpg API client: response contracts', () => {
     expect(() => cpg.listOf(cpg.orgUserSchema).parse({ items: fx.users })).not.toThrow();
     expect(() => cpg.listOf(cpg.roleSchema).parse({ items: fx.roles })).not.toThrow();
     expect(() => cpg.auditListSchema.parse({ items: fx.auditEvents, nextCursor: null, chainValid: false })).not.toThrow();
+  });
+});
+
+describe('cpg API client: boards, quorum, compile and the policy log (E19–E37)', () => {
+  it('board reads and writes use the documented methods, paths and bodies', async () => {
+    reply = { items: fx.boards };
+    expect(await cpg.listBoards()).toEqual(fx.boards);
+    reply = fx.boards[1];
+    await cpg.createBoard({ key: 'legal', name: 'Legal Board', kind: 'legal' });
+    await cpg.updateBoard(fx.BOARD_LEGAL_ID, { description: 'Contracts and privacy' });
+    await cpg.archiveBoard(fx.BOARD_LEGAL_ID);
+    reply = fx.boards[0].members[0];
+    await cpg.addBoardMember(fx.BOARD_AI_ID, fx.APPROVER_ID);
+    await cpg.removeBoardMember(fx.BOARD_AI_ID, fx.APPROVER_ID);
+    expect(calls.map((c) => `${c.method} ${c.url} ${JSON.stringify(c.body)}`)).toEqual([
+      'GET /cpg/boards undefined',
+      'POST /cpg/boards {"key":"legal","name":"Legal Board","kind":"legal"}',
+      `PATCH /cpg/boards/${fx.BOARD_LEGAL_ID} {"description":"Contracts and privacy"}`,
+      `POST /cpg/boards/${fx.BOARD_LEGAL_ID}/archive {}`,
+      `POST /cpg/boards/${fx.BOARD_AI_ID}/members {"userId":"${fx.APPROVER_ID}"}`,
+      `POST /cpg/boards/${fx.BOARD_AI_ID}/members/${fx.APPROVER_ID}/remove {}`,
+    ]);
+  });
+
+  it('quorum: read, history, one version, and a new version with its change note', async () => {
+    reply = fx.quorumVersion;
+    expect((await cpg.getQuorum()).version).toBe(2);
+    await cpg.putQuorum(fx.quorumConfig, 'Longer proposal window');
+    await cpg.getQuorumVersion(1);
+    reply = { items: [{ version: 1, configHash: 'f'.repeat(64), changeNote: '', createdAt: '2026-10-08T12:00:00.000Z', createdBy: 'system:seed' }] };
+    expect((await cpg.listQuorumVersions())[0].createdBy).toBe('system:seed');
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(['GET /cpg/quorum', 'PUT /cpg/quorum', 'GET /cpg/quorum/versions/1', 'GET /cpg/quorum/versions']);
+    expect(calls[1].body).toEqual({ config: fx.quorumConfig, changeNote: 'Longer proposal window' });
+  });
+
+  it('compile sends policyId only for a new version; examples go to the engine as given', async () => {
+    reply = fx.compiledRecord;
+    const examples = { violating: [{ path: 'src/a.ts', code: 'x' }], compliant: [] };
+    await cpg.compilePolicy({ plainText: 'No new code may reference gpt-4-32k anywhere.', examples });
+    await cpg.compilePolicy({ plainText: 'No new code may reference gpt-4-32k anywhere.', policyId: fx.POLICY_ID, examples });
+    await cpg.getCompileRecord(fx.COMPILE_V2_ID);
+    expect(calls[0].body).toEqual({ plainText: 'No new code may reference gpt-4-32k anywhere.', examples });
+    expect(calls[1].body).toEqual({ plainText: 'No new code may reference gpt-4-32k anywhere.', policyId: fx.POLICY_ID, examples });
+    expect(calls[2].url).toBe(`/cpg/compile/${fx.COMPILE_V2_ID}`);
+  });
+
+  it('propose sends graceDays or enforceFrom (never both), an edited rule only when given, and the key only for a new policy', async () => {
+    reply = fx.policyDetail;
+    const base = { compileRecordId: fx.COMPILE_V2_ID, title: 'Do not use gpt-4-32k', tier: 'prohibited' as const, owningBoardIds: [fx.BOARD_AI_ID] };
+    await cpg.proposePolicy({ ...base, policyKey: 'corp.no-gpt-4-32k', graceDays: 0, enforceFrom: '2026-12-01T00:00:00.000Z' });
+    await cpg.proposePolicyVersion(fx.POLICY_ID, { ...base, enforceFrom: '2026-12-01T00:00:00.000Z', rule: fx.sdkRule });
+    await cpg.proposeRetirement(fx.POLICY_ID, 'Model fully removed');
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(['POST /cpg/policies', `POST /cpg/policies/${fx.POLICY_ID}/versions`, `POST /cpg/policies/${fx.POLICY_ID}/retire`]);
+    expect(calls[0].body).toEqual({ ...base, graceDays: 0, policyKey: 'corp.no-gpt-4-32k' });
+    expect(calls[1].body).toEqual({ ...base, rule: fx.sdkRule, enforceFrom: '2026-12-01T00:00:00.000Z' });
+    expect(calls[2].body).toEqual({ reason: 'Model fully removed' });
+  });
+
+  it('votes, withdrawals and the policy log', async () => {
+    reply = { vote: { ...fx.policyDetail.votes[0], versionId: fx.V2_ID }, versionState: 'active' };
+    expect((await cpg.voteOnVersion(fx.V2_ID, 'approve', '  ok  ')).versionState).toBe('active');
+    await cpg.voteOnVersion(fx.V2_ID, 'reject', '   ');
+    reply = fx.policyDetail;
+    await cpg.withdrawVersion(fx.V2_ID);
+    await cpg.getPolicy(fx.POLICY_ID);
+    reply = { items: [fx.policyHead] };
+    await cpg.listPolicies();
+    await cpg.listPolicies('proposed');
+    expect(calls.map((c) => `${c.method} ${c.url} ${JSON.stringify(c.body)}`)).toEqual([
+      `POST /cpg/policy-versions/${fx.V2_ID}/votes {"vote":"approve","comment":"ok"}`,
+      `POST /cpg/policy-versions/${fx.V2_ID}/votes {"vote":"reject"}`,
+      `POST /cpg/policy-versions/${fx.V2_ID}/withdraw {}`,
+      `GET /cpg/policies/${fx.POLICY_ID} undefined`,
+      'GET /cpg/policies undefined',
+      'GET /cpg/policies?state=proposed undefined',
+    ]);
+  });
+
+  it('accepts the Phase 2 fixtures and refuses drift', async () => {
+    expect(() => cpg.listOf(cpg.boardSchema).parse({ items: fx.boards })).not.toThrow();
+    expect(() => cpg.compileRecordSchema.parse(fx.compiledRecord)).not.toThrow();
+    expect(() => cpg.compileRecordSchema.parse(fx.unexpressibleRecord)).not.toThrow();
+    expect(() => cpg.compileRecordSchema.parse(fx.examplesRecord)).not.toThrow();
+    expect(() => cpg.policyDetailSchema.parse(fx.policyDetail)).not.toThrow();
+    expect(() => cpg.quorumVersionSchema.parse(fx.quorumVersion)).not.toThrow();
+    reply = { ...fx.policyHead, inGracePeriod: 'yes' };
+    reply = { items: [reply] };
+    await expect(cpg.listPolicies()).rejects.toThrow(/GET \/cpg\/policies \(items\.0\.inGracePeriod/);
+    reply = { ...fx.quorumVersion, config: { ...fx.quorumConfig, tiers: { ...fx.quorumConfig.tiers, prohibited: { ...fx.quorumConfig.tiers.prohibited, bulk: fx.quorumConfig.tiers['review-required'].bulk } } } };
+    await expect(cpg.getQuorum()).rejects.toBeInstanceOf(cpg.CpgContractError);
+    reply = { ...fx.compiledRecord, status: 'maybe' };
+    await expect(cpg.getCompileRecord(fx.COMPILE_V2_ID)).rejects.toThrow(/status/);
   });
 });

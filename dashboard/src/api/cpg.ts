@@ -1,19 +1,27 @@
 import type { z } from 'zod';
 import api from './client';
 import {
-  auditListSchema, cpgSettingsSchema, grantSchema, inviteResultSchema, listOf, meSchema, orgUserSchema,
-  permissionSchema, roleSchema, teamSchema,
-  type AuditList, type CpgMe, type CpgSettings, type Grant, type InviteResult, type OrgUser, type Permission,
-  type Role, type ScopeType, type Team,
+  auditListSchema, boardMemberSchema, boardSchema, compileRecordSchema, cpgSettingsSchema, grantSchema, inviteResultSchema,
+  listOf, meSchema, orgUserSchema, permissionSchema, policyDetailSchema, policyHeadSchema, roleSchema, teamSchema,
+  voteResultSchema,
+  type AuditList, type Board, type BoardKind, type BoardMember, type CompileRecord, type CpgMe, type CpgSettings, type Grant,
+  type InviteResult, type OrgUser, type Permission, type PolicyDetail, type PolicyHead, type PolicyState, type Role,
+  type ScopeType, type Team, type Tier, type VoteResult,
 } from './cpg-schemas';
+import {
+  quorumVersionSchema, quorumVersionSummarySchema,
+  type QuorumConfig, type QuorumVersion, type QuorumVersionSummary,
+} from './cpg-quorum';
 
 export * from './cpg-schemas';
+export * from './cpg-quorum';
 
 /**
- * Typed client for the Corporate Policy Governance API (/api/v1/cpg),
- * Phase 1: RBAC, settings and the audit log (E1 to E17). Every response is
- * parsed with its zod contract (cpg-schemas.ts); a response that does not
- * match throws CpgContractError, which pages show as a load failure.
+ * Typed client for the Corporate Policy Governance API (/api/v1/cpg):
+ * RBAC, settings and the audit log (E1 to E17); boards, quorum, compile and
+ * the policy log (E19 to E37). Every response is parsed with its zod
+ * contract (cpg-schemas.ts, cpg-quorum.ts); a response that does not match
+ * throws CpgContractError, which pages show as a load failure.
  */
 
 /** A response that does not match the documented contract. */
@@ -170,4 +178,147 @@ export function auditQueryString(q: AuditQuery): string {
 export async function listAuditEvents(q: AuditQuery = {}): Promise<AuditList> {
   const { data } = await api.get(`/cpg/audit${auditQueryString(q)}`);
   return parseResponse(auditListSchema, data, 'GET /cpg/audit');
+}
+
+// ─── E19–E24 boards ────────────────────────────────────────────────────
+
+const id = (v: string) => encodeURIComponent(v);
+
+export async function listBoards(): Promise<Board[]> {
+  const { data } = await api.get('/cpg/boards');
+  return parseResponse(listOf(boardSchema), data, 'GET /cpg/boards').items;
+}
+
+export async function createBoard(input: { key: string; name: string; kind: BoardKind; description?: string }): Promise<Board> {
+  const { data } = await api.post('/cpg/boards', input);
+  return parseResponse(boardSchema, data, 'POST /cpg/boards');
+}
+
+export async function updateBoard(boardId: string, input: { name?: string; description?: string }): Promise<Board> {
+  const { data } = await api.patch(`/cpg/boards/${id(boardId)}`, input);
+  return parseResponse(boardSchema, data, 'PATCH /cpg/boards/:id');
+}
+
+export async function archiveBoard(boardId: string): Promise<Board> {
+  const { data } = await api.post(`/cpg/boards/${id(boardId)}/archive`, {});
+  return parseResponse(boardSchema, data, 'POST /cpg/boards/:id/archive');
+}
+
+export async function addBoardMember(boardId: string, userId: string): Promise<BoardMember> {
+  const { data } = await api.post(`/cpg/boards/${id(boardId)}/members`, { userId });
+  return parseResponse(boardMemberSchema, data, 'POST /cpg/boards/:id/members');
+}
+
+export async function removeBoardMember(boardId: string, userId: string): Promise<BoardMember> {
+  const { data } = await api.post(`/cpg/boards/${id(boardId)}/members/${id(userId)}/remove`, {});
+  return parseResponse(boardMemberSchema, data, 'POST /cpg/boards/:id/members/:userId/remove');
+}
+
+// ─── E25–E28 quorum ────────────────────────────────────────────────────
+
+export async function getQuorum(): Promise<QuorumVersion> {
+  const { data } = await api.get('/cpg/quorum');
+  return parseResponse(quorumVersionSchema, data, 'GET /cpg/quorum');
+}
+
+export async function putQuorum(config: QuorumConfig, changeNote: string): Promise<QuorumVersion> {
+  const { data } = await api.put('/cpg/quorum', { config, changeNote });
+  return parseResponse(quorumVersionSchema, data, 'PUT /cpg/quorum');
+}
+
+export async function listQuorumVersions(): Promise<QuorumVersionSummary[]> {
+  const { data } = await api.get('/cpg/quorum/versions');
+  return parseResponse(listOf(quorumVersionSummarySchema), data, 'GET /cpg/quorum/versions').items;
+}
+
+export async function getQuorumVersion(version: number): Promise<QuorumVersion> {
+  const { data } = await api.get(`/cpg/quorum/versions/${id(String(version))}`);
+  return parseResponse(quorumVersionSchema, data, 'GET /cpg/quorum/versions/:version');
+}
+
+// ─── E29–E30 compile ───────────────────────────────────────────────────
+
+export interface CodeExample {
+  path: string;
+  code: string;
+}
+
+export interface CompileInput {
+  plainText: string;
+  /** Set when compiling a new version of an existing policy. */
+  policyId?: string;
+  examples: { violating: CodeExample[]; compliant: CodeExample[] };
+}
+
+export async function compilePolicy(input: CompileInput): Promise<CompileRecord> {
+  const body = input.policyId
+    ? { plainText: input.plainText, policyId: input.policyId, examples: input.examples }
+    : { plainText: input.plainText, examples: input.examples };
+  const { data } = await api.post('/cpg/compile', body);
+  return parseResponse(compileRecordSchema, data, 'POST /cpg/compile');
+}
+
+export async function getCompileRecord(recordId: string): Promise<CompileRecord> {
+  const { data } = await api.get(`/cpg/compile/${id(recordId)}`);
+  return parseResponse(compileRecordSchema, data, 'GET /cpg/compile/:id');
+}
+
+// ─── E31–E37 the policy log ────────────────────────────────────────────
+
+export async function listPolicies(state?: PolicyState): Promise<PolicyHead[]> {
+  const { data } = await api.get(state ? `/cpg/policies?state=${id(state)}` : '/cpg/policies');
+  return parseResponse(listOf(policyHeadSchema), data, 'GET /cpg/policies').items;
+}
+
+export async function getPolicy(policyId: string): Promise<PolicyDetail> {
+  const { data } = await api.get(`/cpg/policies/${id(policyId)}`);
+  return parseResponse(policyDetailSchema, data, 'GET /cpg/policies/:id');
+}
+
+export interface ProposeInput {
+  compileRecordId: string;
+  title: string;
+  tier: Tier;
+  owningBoardIds: string[];
+  /** An edited rule (the server revalidates it and re-runs the compile record's examples). */
+  rule?: unknown;
+  /** Give graceDays or enforceFrom (ISO-8601 UTC), not both; neither uses the quorum defaults. */
+  graceDays?: number;
+  enforceFrom?: string;
+}
+
+function proposeBody(input: ProposeInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    compileRecordId: input.compileRecordId, title: input.title, tier: input.tier, owningBoardIds: input.owningBoardIds,
+  };
+  if (input.rule !== undefined) body.rule = input.rule;
+  if (input.graceDays !== undefined) body.graceDays = input.graceDays;
+  else if (input.enforceFrom !== undefined) body.enforceFrom = input.enforceFrom;
+  return body;
+}
+
+export async function proposePolicy(input: ProposeInput & { policyKey: string }): Promise<PolicyDetail> {
+  const { data } = await api.post('/cpg/policies', { ...proposeBody(input), policyKey: input.policyKey });
+  return parseResponse(policyDetailSchema, data, 'POST /cpg/policies');
+}
+
+export async function proposePolicyVersion(policyId: string, input: ProposeInput): Promise<PolicyDetail> {
+  const { data } = await api.post(`/cpg/policies/${id(policyId)}/versions`, proposeBody(input));
+  return parseResponse(policyDetailSchema, data, 'POST /cpg/policies/:id/versions');
+}
+
+export async function proposeRetirement(policyId: string, reason: string): Promise<PolicyDetail> {
+  const { data } = await api.post(`/cpg/policies/${id(policyId)}/retire`, { reason });
+  return parseResponse(policyDetailSchema, data, 'POST /cpg/policies/:id/retire');
+}
+
+export async function voteOnVersion(versionId: string, vote: 'approve' | 'reject', comment?: string): Promise<VoteResult> {
+  const body = comment && comment.trim() ? { vote, comment: comment.trim() } : { vote };
+  const { data } = await api.post(`/cpg/policy-versions/${id(versionId)}/votes`, body);
+  return parseResponse(voteResultSchema, data, 'POST /cpg/policy-versions/:id/votes');
+}
+
+export async function withdrawVersion(versionId: string): Promise<PolicyDetail> {
+  const { data } = await api.post(`/cpg/policy-versions/${id(versionId)}/withdraw`, {});
+  return parseResponse(policyDetailSchema, data, 'POST /cpg/policy-versions/:id/withdraw');
 }
