@@ -8,6 +8,7 @@ import { getDb } from '../../db/client.js';
 import { githubAppInstallations, webhookEvents, scanFindings } from '../../db/schema.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../logger.js';
+import { invalidateComplianceScore } from '../../core/compliance-score-cache.js';
 import { clearInstallationToken } from '../../github/token-manager.js';
 import { fetchRepoSourceFiles } from '../../github/scanner-runner.js';
 import { createCheckRun, postPrSummary } from '../../github/result-poster.js';
@@ -207,7 +208,7 @@ function mapFindingsToSummaries(findings: Finding[]) {
  * org is linked yet, findings are dropped (logged) — a future installation
  * association job can backfill.
  */
-async function persistScanFindings(
+export async function persistScanFindings(
   installationId: number,
   repoFullName: string,
   prNumber: number | null,
@@ -231,6 +232,9 @@ async function persistScanFindings(
   }
 
   const now = new Date().toISOString();
+  // Rows are inserted one at a time (not in a transaction), so a failure part
+  // way through still leaves committed findings: invalidate whatever happens.
+  try {
   for (const f of findings) {
     db.insert(scanFindings).values({
       id: randomUUID(),
@@ -252,6 +256,9 @@ async function persistScanFindings(
       status: 'open',
       scannedAt: now,
     }).run();
+  }
+  } finally {
+    invalidateComplianceScore(installation.orgId);
   }
 
   logger.info(
