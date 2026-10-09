@@ -217,6 +217,128 @@ export const cpgPolicyHeads = sqliteTable('cpg_policy_heads', {
   updatedAt: text('updated_at').notNull(),
 });
 
+export const CASE_STATES = ['open', 'in_review', 'changes_requested', 'decided', 'closed'] as const;
+const CLOSE_REASONS = ['merged', 'withdrawn', 'closed_by_reviewer', 'pr_closed_unmerged', 'abandoned'] as const;
+const TIERS = ['advisory', 'review-required', 'prohibited'] as const;
+
+export const cpgCases = sqliteTable('cpg_cases', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  ref: text('ref').notNull(),
+  repo: text('repo').notNull(),
+  branch: text('branch').notNull(),
+  prNumber: integer('pr_number'),
+  state: text('state', { enum: CASE_STATES }).notNull(),
+  closeReason: text('close_reason', { enum: CLOSE_REASONS }),
+  latestRevision: integer('latest_revision').notNull().default(0),
+  openedBy: text('opened_by').notNull(),
+  openedAt: text('opened_at').notNull(),
+  closedAt: text('closed_at'),
+  closedBy: text('closed_by'),
+  closureSignature: text('closure_signature'),
+  updatedAt: text('updated_at').notNull(),
+});
+
+export const cpgCaseEvents = sqliteTable('cpg_case_events', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull(),
+  orgId: text('org_id').notNull(),
+  seq: integer('seq').notNull(),
+  event: text('event', {
+    enum: ['opened', 'revision_added', 'submitted', 'pr_attached', 'pr_changed', 'commit_linked', 'ci_result', 'state_changed',
+      'changes_requested', 'justification_added', 'comment_added', 'proposal_created', 'decision_recorded',
+      'policy_proposed_from_case', 'integration_linked', 'closed'],
+  }).notNull(),
+  actor: text('actor').notNull(),
+  details: text('details').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgCaseRevisions = sqliteTable('cpg_case_revisions', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull(),
+  orgId: text('org_id').notNull(),
+  revision: integer('revision').notNull(),
+  source: text('source', { enum: ['vscode', 'ci', 'dashboard'] }).notNull(),
+  headSha: text('head_sha'),
+  bundleHash: text('bundle_hash').notNull(),
+  findingsDigest: text('findings_digest').notNull(),
+  addedCount: integer('added_count').notNull(),
+  carriedCount: integer('carried_count').notNull(),
+  resolvedCount: integer('resolved_count').notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgSnippets = sqliteTable('cpg_snippets', {
+  orgId: text('org_id').notNull(),
+  snippetHash: text('snippet_hash').notNull(),
+  normalizedText: text('normalized_text').notNull(),
+  lineCount: integer('line_count').notNull(),
+  createdAt: text('created_at').notNull(),
+}, (t) => [primaryKey({ columns: [t.orgId, t.snippetHash] })]);
+
+export const cpgCaseFindings = sqliteTable('cpg_case_findings', {
+  id: text('id').primaryKey(),
+  revisionId: text('revision_id').notNull(),
+  caseId: text('case_id').notNull(),
+  orgId: text('org_id').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  snippetHash: text('snippet_hash').notNull(),
+  policyId: text('policy_id').notNull(),
+  policyVersionId: text('policy_version_id').notNull(),
+  policyKey: text('policy_key').notNull(),
+  policyVersion: integer('policy_version').notNull(),
+  tier: text('tier', { enum: TIERS }).notNull(),
+  enforced: integer('enforced', { mode: 'boolean' }).notNull(),
+  filePath: text('file_path').notNull(),
+  startLine: integer('start_line').notNull(),
+  endLine: integer('end_line').notNull(),
+  language: text('language'),
+  statusAtRevision: text('status_at_revision', { enum: ['new', 'carried'] }).notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgReviewerContexts = sqliteTable('cpg_reviewer_contexts', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  snippetHash: text('snippet_hash').notNull(),
+  policyVersionId: text('policy_version_id').notNull(),
+  status: text('status', { enum: ['generated', 'failed', 'disabled'] }).notNull(),
+  whatItDoes: text('what_it_does'),
+  whyFlagged: text('why_flagged'),
+  provider: text('provider'),
+  model: text('model'),
+  promptVersion: integer('prompt_version').notNull(),
+  attempt: integer('attempt').notNull().default(1),
+  error: text('error'),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgJustifications = sqliteTable('cpg_justifications', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull(),
+  orgId: text('org_id').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  authorUserId: text('author_user_id').notNull(),
+  body: text('body').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgComments = sqliteTable('cpg_comments', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull(),
+  orgId: text('org_id').notNull(),
+  threadId: text('thread_id').notNull(),
+  parentId: text('parent_id'),
+  kind: text('kind', { enum: ['comment', 'change_request', 'reply'] }).notNull(),
+  boardId: text('board_id'),
+  fingerprints: text('fingerprints').notNull(),
+  authorUserId: text('author_user_id').notNull(),
+  body: text('body').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
 /** Every CPG table declared above, for the column-parity test. */
 export const CPG_DRIZZLE_TABLES = [
   schemaMigrations,
@@ -237,4 +359,12 @@ export const CPG_DRIZZLE_TABLES = [
   cpgPolicyVersionEvents,
   cpgPolicyApprovals,
   cpgPolicyHeads,
+  cpgCases,
+  cpgCaseEvents,
+  cpgCaseRevisions,
+  cpgSnippets,
+  cpgCaseFindings,
+  cpgReviewerContexts,
+  cpgJustifications,
+  cpgComments,
 ] as const;

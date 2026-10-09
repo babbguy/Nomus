@@ -80,6 +80,27 @@ function seedRegistry(): void {
   run("INSERT INTO cpg_policy_heads (policy_id, org_id, state, pending_version_id, updated_at) VALUES (?, ?, 'proposed', ?, ?)", registry.policyId, orgId, registry.versionId, NOW);
 }
 
+/** One row in every Phase 4 table (cpg_0003), written with raw SQL. */
+function seedCase(): void {
+  const caseId = randomUUID();
+  const revisionId = randomUUID();
+  const fingerprint = `${H}:corp.no-direct-openai:1`;
+  run(`INSERT INTO cpg_cases (id, org_id, ref, repo, branch, state, opened_by, opened_at, updated_at)
+       VALUES (?, ?, ?, 'acme/app', 'main', 'open', 'test', ?, ?)`, caseId, orgId, `CPG-${caseId.slice(0, 8).toUpperCase()}`, NOW, NOW);
+  run("INSERT INTO cpg_case_events (id, case_id, org_id, seq, event, actor, details, created_at) VALUES (?, ?, ?, 1, 'opened', 'test', '{}', ?)", randomUUID(), caseId, orgId, NOW);
+  run(`INSERT INTO cpg_case_revisions (id, case_id, org_id, revision, source, bundle_hash, findings_digest, added_count, carried_count, resolved_count, created_by, created_at)
+       VALUES (?, ?, ?, 1, 'ci', ?, ?, 1, 0, 0, 'test', ?)`, revisionId, caseId, orgId, H, H, NOW);
+  run("INSERT INTO cpg_snippets (org_id, snippet_hash, normalized_text, line_count, created_at) VALUES (?, ?, 'x', 1, ?)", orgId, H, NOW);
+  run(`INSERT INTO cpg_case_findings (id, revision_id, case_id, org_id, fingerprint, snippet_hash, policy_id, policy_version_id, policy_key, policy_version,
+       tier, enforced, file_path, start_line, end_line, status_at_revision, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'corp.no-direct-openai', 1, 'prohibited', 1, 'src/a.ts', 1, 1, 'new', ?)`,
+  randomUUID(), revisionId, caseId, orgId, fingerprint, H, registry.policyId, registry.versionId, NOW);
+  run("INSERT INTO cpg_reviewer_contexts (id, org_id, snippet_hash, policy_version_id, status, prompt_version, created_at) VALUES (?, ?, ?, ?, 'disabled', 1, ?)", randomUUID(), orgId, H, registry.versionId, NOW);
+  run("INSERT INTO cpg_justifications (id, case_id, org_id, fingerprint, author_user_id, body, created_at) VALUES (?, ?, ?, ?, ?, 'Needed for the gateway migration.', ?)", randomUUID(), caseId, orgId, fingerprint, registry.authorId, NOW);
+  const commentId = randomUUID();
+  run("INSERT INTO cpg_comments (id, case_id, org_id, thread_id, kind, fingerprints, author_user_id, body, created_at) VALUES (?, ?, ?, ?, 'comment', '[]', ?, 'ok', ?)", commentId, caseId, orgId, commentId, registry.approverId, NOW);
+}
+
 beforeAll(() => {
   runMigrations(db);
   orgId = insertOrg();
@@ -89,24 +110,13 @@ beforeAll(() => {
   runMigrations(db);
   appendAuditEvent(db, { orgId, actor: 'test', action: 'test.event', targetType: 'test', targetId: null, payload: { a: 1 } });
   seedRegistry();
+  seedCase();
 });
 
 describe('strictly append-only tables refuse UPDATE and DELETE', () => {
-  const firstRowSql: Record<string, string> = {
-    schema_migrations: 'SELECT rowid FROM schema_migrations LIMIT 1',
-    cpg_permissions: 'SELECT rowid FROM cpg_permissions LIMIT 1',
-    cpg_audit_events: 'SELECT rowid FROM cpg_audit_events LIMIT 1',
-    cpg_quorum_config_versions: 'SELECT rowid FROM cpg_quorum_config_versions LIMIT 1',
-    cpg_policies: 'SELECT rowid FROM cpg_policies LIMIT 1',
-    cpg_compile_records: 'SELECT rowid FROM cpg_compile_records LIMIT 1',
-    cpg_policy_versions: 'SELECT rowid FROM cpg_policy_versions LIMIT 1',
-    cpg_policy_version_events: 'SELECT rowid FROM cpg_policy_version_events LIMIT 1',
-    cpg_policy_approvals: 'SELECT rowid FROM cpg_policy_approvals LIMIT 1',
-  };
-
   for (const { table } of APPEND_ONLY_TABLES) {
     it(`${table}: UPDATE and DELETE abort with SQLITE_CONSTRAINT_TRIGGER`, () => {
-      const row = sqlite.prepare(firstRowSql[table]).get() as { rowid: number } | undefined;
+      const row = sqlite.prepare(`SELECT rowid FROM ${table} LIMIT 1`).get() as { rowid: number } | undefined;
       expect(row, `${table} needs a row for this test`).toBeDefined();
       const firstCol = (sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>)[1].name;
       expect(triggerError(() => run(`UPDATE ${table} SET ${firstCol} = ${firstCol} WHERE rowid = ?`, row!.rowid))).toBe('SQLITE_CONSTRAINT_TRIGGER');
@@ -243,7 +253,7 @@ describe('projection guards', () => {
   });
 
   it('is listed as projections', () => {
-    expect(PROJECTION_TABLES.map((t) => t.table).sort()).toEqual(['cpg_boards', 'cpg_org_settings', 'cpg_policy_heads', 'cpg_roles', 'cpg_teams']);
+    expect(PROJECTION_TABLES.map((t) => t.table).sort()).toEqual(['cpg_boards', 'cpg_cases', 'cpg_org_settings', 'cpg_policy_heads', 'cpg_roles', 'cpg_teams']);
   });
 
   it('cpg_boards: name and description change; identity and kind do not; archiving is final; no delete', () => {

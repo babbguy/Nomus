@@ -17,6 +17,13 @@ export const APPEND_ONLY_TABLES = [
   { table: 'cpg_policy_versions', drizzleName: 'cpgPolicyVersions' },
   { table: 'cpg_policy_version_events', drizzleName: 'cpgPolicyVersionEvents' },
   { table: 'cpg_policy_approvals', drizzleName: 'cpgPolicyApprovals' },
+  { table: 'cpg_case_events', drizzleName: 'cpgCaseEvents' },
+  { table: 'cpg_case_revisions', drizzleName: 'cpgCaseRevisions' },
+  { table: 'cpg_snippets', drizzleName: 'cpgSnippets' },
+  { table: 'cpg_case_findings', drizzleName: 'cpgCaseFindings' },
+  { table: 'cpg_reviewer_contexts', drizzleName: 'cpgReviewerContexts' },
+  { table: 'cpg_justifications', drizzleName: 'cpgJustifications' },
+  { table: 'cpg_comments', drizzleName: 'cpgComments' },
 ] as const;
 
 /**
@@ -38,4 +45,5 @@ export const PROJECTION_TABLES = [
   { table: 'cpg_org_settings', drizzleName: 'cpgOrgSettings' },
   { table: 'cpg_boards', drizzleName: 'cpgBoards' },
   { table: 'cpg_policy_heads', drizzleName: 'cpgPolicyHeads' },
+  { table: 'cpg_cases', drizzleName: 'cpgCases' },
 ] as const;
