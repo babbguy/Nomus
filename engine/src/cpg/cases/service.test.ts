@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { fingerprintOf } from '@nomus/scanner/corporate';
 import { runMigrations } from '../../db/migrate.js';
+import { caseFixtures } from '../__fixtures__/case-fixtures.js';
 import { CpgError } from '../errors.js';
 import { addRevision, findOrCreateCase, findingsDigest, getCase, type RevisionFinding } from './service.js';
 import { caseLanes, splitIntoLanes } from './lanes.js';
@@ -35,32 +36,7 @@ function insertUser(org: string): string {
   return id;
 }
 
-function insertBoard(org: string, key: string): string {
-  const id = randomUUID();
-  run("INSERT INTO cpg_boards (id, org_id, key, name, kind, created_by, created_at) VALUES (?, ?, ?, ?, 'custom', 'test', ?)", id, org, key, key, NOW);
-  return id;
-}
-
-/** A policy whose version 1 has head state `state`, enforced from `enforceFrom`. */
-function insertPolicy(org: string, key: string, tier: string, boards: string[], opts: { state?: 'active' | 'proposed'; enforceFrom?: string } = {}): string {
-  const policyId = randomUUID();
-  const compileId = randomUUID();
-  const versionId = randomUUID();
-  const author = `user:${randomUUID()}`;
-  const h = 'c'.repeat(64);
-  run('INSERT INTO cpg_policies (id, org_id, policy_key, created_by, created_at) VALUES (?, ?, ?, ?, ?)', policyId, org, key, author, NOW);
-  run(`INSERT INTO cpg_compile_records (id, org_id, requested_by, input_text, input_hash, examples, prompt_version, status, compiled_rule, compiled_rule_hash, created_at)
-       VALUES (?, ?, ?, 'A policy text that is long enough.', ?, '{}', 1, 'compiled', '{}', ?, ?)`, compileId, org, author, h, h, NOW);
-  run(`INSERT INTO cpg_policy_versions (id, policy_id, org_id, version, kind, title, plain_text, tier, owning_board_ids, rule, rule_hash, compile_record_id, edited_from_compile, created_by, created_at)
-       VALUES (?, ?, ?, 1, 'define', ?, 'text', ?, ?, '{}', ?, ?, 0, ?, ?)`, versionId, policyId, org, `Policy ${key}`, tier, JSON.stringify(boards), h, compileId, author, NOW);
-  if (opts.state === 'proposed') {
-    run("INSERT INTO cpg_policy_heads (policy_id, org_id, state, pending_version_id, updated_at) VALUES (?, ?, 'proposed', ?, ?)", policyId, org, versionId, NOW);
-  } else {
-    run(`INSERT INTO cpg_policy_heads (policy_id, org_id, state, active_version_id, active_version, enforce_from, activation_signature, updated_at)
-         VALUES (?, ?, 'active', ?, 1, ?, 'sig', ?)`, policyId, org, versionId, opts.enforceFrom ?? NOW, NOW);
-  }
-  return versionId;
-}
+const { insertBoard, insertPolicy } = caseFixtures(sqlite);
 
 function finding(code: string, policyKey: string, filePath = 'src/app.ts', startLine = 1): RevisionFinding {
   return { fingerprint: fingerprintOf(code, policyKey, 1), filePath, startLine, endLine: startLine, language: 'typescript', snippet: code };

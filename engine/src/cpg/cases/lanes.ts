@@ -1,8 +1,8 @@
 import { inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { cpgPolicyVersions } from '../../db/schema-cpg.js';
+import { cpgComments, cpgPolicyVersions } from '../../db/schema-cpg.js';
 import { boardIdsOf } from '../policies/service.js';
-import { getCase, isBlocking, latestFindings } from './service.js';
+import { getCase, isBlocking, latestFindings, openChangeRequests } from './service.js';
 
 /**
  * Review lanes (design spec §5.6): a case has one lane per owning board, and
@@ -53,8 +53,9 @@ export function splitIntoLanes(findings: readonly LaneFinding[], changeRequestBo
 }
 
 /**
- * The lanes of a case's latest revision. Decisions (Phase 5) and change
- * requests (4a.2) have no writer yet, so every blocking finding is undecided.
+ * The lanes of a case's latest revision. Decisions (Phase 5) have no writer
+ * yet, so every blocking finding is undecided. A lane with a change request
+ * that no revision or resubmit has cleared is in changes_requested.
  */
 export function caseLanes(db: Db, orgId: string, caseId: string): Lane[] {
   getCase(db, orgId, caseId);
@@ -64,7 +65,10 @@ export function caseLanes(db: Db, orgId: string, caseId: string): Lane[] {
   const owners = new Map(db.select({ id: cpgPolicyVersions.id, owningBoardIds: cpgPolicyVersions.owningBoardIds })
     .from(cpgPolicyVersions).where(inArray(cpgPolicyVersions.id, versionIds)).all()
     .map((v) => [v.id, boardIdsOf(v)]));
+  const open = [...openChangeRequests(db, caseId).keys()];
+  const changeRequestBoards = new Set(open.length === 0 ? [] : db.select({ boardId: cpgComments.boardId }).from(cpgComments)
+    .where(inArray(cpgComments.id, open)).all().map((r) => r.boardId!));
   return splitIntoLanes(findings.map((f) => ({
     fingerprint: f.fingerprint, owningBoardIds: owners.get(f.policyVersionId)!, blocking: isBlocking(f), decided: false,
-  })));
+  })), changeRequestBoards);
 }
