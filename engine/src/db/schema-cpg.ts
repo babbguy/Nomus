@@ -420,6 +420,31 @@ export const cpgRevocations = sqliteTable('cpg_revocations', {
   signature: text('signature').notNull(),
 });
 
+export const cpgCiRuns = sqliteTable('cpg_ci_runs', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  apiKeyId: text('api_key_id').notNull(),
+  repo: text('repo').notNull(),
+  branch: text('branch').notNull(),
+  prNumber: integer('pr_number'),
+  headSha: text('head_sha').notNull(),
+  eventName: text('event_name').notNull(),
+  bundleHash: text('bundle_hash').notNull(),
+  scannedFileCount: integer('scanned_file_count').notNull(),
+  verdict: text('verdict', { enum: ['pass', 'fail'] }).notNull(),
+  blockingCount: integer('blocking_count').notNull(),
+  pendingCount: integer('pending_count').notNull(),
+  rejectedCount: integer('rejected_count').notNull(),
+  approvedCount: integer('approved_count').notNull(),
+  exceptedCount: integer('excepted_count').notNull(),
+  advisoryCount: integer('advisory_count').notNull(),
+  caseId: text('case_id'),
+  findings: text('findings').notNull(),
+  evaluatedAt: text('evaluated_at').notNull(),
+  signedPayload: text('signed_payload').notNull(),
+  signature: text('signature').notNull(),
+});
+
 /** Every CPG table declared above, for the column-parity test. */
 export const CPG_DRIZZLE_TABLES = [
   schemaMigrations,
@@ -453,4 +478,5 @@ export const CPG_DRIZZLE_TABLES = [
   cpgProposalEvents,
   cpgDecisions,
   cpgRevocations,
+  cpgCiRuns,
 ] as const;

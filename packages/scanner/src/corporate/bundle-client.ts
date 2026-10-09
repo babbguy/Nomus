@@ -1,7 +1,8 @@
 import { createPublicKey, verify } from 'node:crypto';
 import { NomusApiError } from '../errors.js';
 import {
-  bundleHashOf, bundleSignedText, corporateBundleSchema, policyActivationPayload, ruleHashOf, type CorporateBundle,
+  bundleHashOf, bundleSignedText, ciEvaluateResponseSchema, ciRunPayloadSchema, corporateBundleSchema, policyActivationPayload, ruleHashOf,
+  type CiEvaluateResponse, type CiRunPayload, type CorporateBundle,
 } from './contracts.js';
 import { canonicalJson } from './canonical.js';
 
@@ -133,6 +134,34 @@ export function verifyCorporateBundle(raw: unknown, spkiB64: string): CorporateB
     }
   }
   return bundle;
+}
+
+/**
+ * Verify a CI verdict (E61) offline against the instance public key: the
+ * contract, the signature over `signedPayload`, and that the signed payload
+ * is canonical and states this response's run, verdict and counts for the
+ * scan that was sent (`expected`), so a verdict for another org, repository,
+ * commit or bundle is never accepted. Throws NomusApiError on any mismatch.
+ */
+export function verifyCiVerdict(
+  raw: unknown, spkiB64: string, expected: Pick<CiRunPayload, 'orgId' | 'repo' | 'branch' | 'prNumber' | 'headSha' | 'bundleHash'>,
+): CiEvaluateResponse {
+  const parsed = ciEvaluateResponseSchema.safeParse(raw);
+  if (!parsed.success) throw invalid('The CI verdict does not match the contract', parsed.error.issues);
+  const res = parsed.data;
+  if (!verifyEd25519(res.signedPayload, res.signature, spkiB64)) throw invalid('The CI verdict signature does not verify');
+  let payload: CiRunPayload;
+  try {
+    payload = ciRunPayloadSchema.parse(JSON.parse(res.signedPayload));
+  } catch {
+    throw invalid('The signed CI verdict payload does not match the contract');
+  }
+  const stated = { ...expected, runId: res.runId, verdict: res.verdict, evaluatedAt: res.evaluatedAt, counts: res.counts };
+  const mismatch = Object.entries(stated).find(([k, v]) => canonicalJson(payload[k as keyof CiRunPayload]) !== canonicalJson(v));
+  if (canonicalJson(payload) !== res.signedPayload || mismatch || (res.verdict === 'fail') !== (res.counts.blocking > 0)) {
+    throw invalid(`The signed CI verdict does not match the response${mismatch ? ` (${mismatch[0]})` : ''}`);
+  }
+  return res;
 }
 
 /** Fetch `/api/v1/cpg/bundle` and verify it (see the module comment for the fail-closed rules). */

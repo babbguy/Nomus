@@ -29,6 +29,7 @@ export const APPEND_ONLY_TABLES = [
   { table: 'cpg_proposal_events', drizzleName: 'cpgProposalEvents' },
   { table: 'cpg_decisions', drizzleName: 'cpgDecisions' },
   { table: 'cpg_revocations', drizzleName: 'cpgRevocations' },
+  { table: 'cpg_ci_runs', drizzleName: 'cpgCiRuns' },
 ] as const;
 
 /**

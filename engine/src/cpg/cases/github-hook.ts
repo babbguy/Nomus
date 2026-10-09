@@ -1,11 +1,10 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { canonicalRepo } from '@nomus/scanner/corporate';
 import { githubAppInstallations } from '../../db/schema.js';
-import { cpgCases } from '../../db/schema-cpg.js';
 import { getOrgSettings } from '../rbac/seed.js';
-import { closeCase } from './close.js';
-import { attachPullRequest } from './service.js';
+import { closeForPullRequest } from '../ci/pr-closed.js';
+import { attachPullRequest, findOpenCase } from './service.js';
 
 /**
  * The GitHub App's part in review cases (design spec §1.15, §5.3 rows 8 and
@@ -37,19 +36,13 @@ export function applyCpgPullRequest(db: Db, installationId: number, payload: Pul
   if (!repo || !branch || !Number.isInteger(prNumber) || prNumber! < 1) {
     throw new Error(`pull_request.${payload.action}: the payload has no repository, head branch or PR number`);
   }
-  const kase = db.select().from(cpgCases)
-    .where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, repo), eq(cpgCases.branch, branch), isNull(cpgCases.closedAt))).get();
-  if (!kase) return 'ignored';
-
   const actor = `github_app:${installationId}`;
-  if (payload.action === 'opened') {
-    attachPullRequest(db, orgId, kase.id, prNumber!, actor);
-    return 'attached';
+  if (payload.action === 'closed') {
+    const { closed } = closeForPullRequest(db, orgId, { repo, branch, prNumber: prNumber!, merged: payload.pull_request?.merged === true }, actor);
+    return closed ? 'closed' : 'ignored';
   }
-  closeCase(db, {
-    orgId, caseId: kase.id, actor,
-    reason: payload.pull_request?.merged === true ? 'merged' : 'pr_closed_unmerged',
-    note: `Pull request #${prNumber} was ${payload.pull_request?.merged === true ? 'merged' : 'closed without merging'}`,
-  });
-  return 'closed';
+  const kase = findOpenCase(db, { orgId, repo, branch });
+  if (!kase) return 'ignored';
+  attachPullRequest(db, orgId, kase.id, prNumber!, actor);
+  return 'attached';
 }

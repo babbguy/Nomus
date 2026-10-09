@@ -1,6 +1,8 @@
 // CPG Phase 5a: approvals, standing exceptions and revocation, design spec
 // §16.5 release-gate checks 1 to 10, over HTTP against the built engine, and
-// check 11 (the decision pages in a browser, via cpg-browser.mjs).
+// check 11 (the decision pages in a browser, via cpg-browser.mjs). Then the
+// Phase 6 engine: CI evaluate on the same branch, then pr-closed (the
+// action's own rows come with the action).
 //
 // dev@ requests review on a new branch for the corporate findings the real
 // CLI reports on the policy-repo fixture. ai-reviewer@ (AI Review Board) and
@@ -31,17 +33,18 @@ function sortDeep(v) {
   if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortDeep(v[k])]));
   return v;
 }
-function verifyDecisionOffline(spki, d) {
-  const payload = parse(d?.signedPayload ?? '');
-  if (!payload || JSON.stringify(sortDeep(payload)) !== d.signedPayload) return 'signedPayload is not canonical JSON';
-  if (payload.kind !== 'nomus.cpg-decision.v1' || payload.id !== d.id) return 'not this decision';
+function verifyOffline(spki, signedPayload, signature, isThisRecord) {
+  const payload = parse(signedPayload ?? '');
+  if (!payload || JSON.stringify(sortDeep(payload)) !== signedPayload) return 'signedPayload is not canonical JSON';
+  if (!isThisRecord(payload)) return 'not this record';
   try {
     const key = crypto.createPublicKey({ key: Buffer.from(spki, 'base64'), format: 'der', type: 'spki' });
-    return crypto.verify(null, Buffer.from(d.signedPayload, 'utf8'), key, Buffer.from(d.signature, 'base64')) ? null : 'signature does not verify';
+    return crypto.verify(null, Buffer.from(signedPayload, 'utf8'), key, Buffer.from(signature, 'base64')) ? null : 'signature does not verify';
   } catch (err) {
     return String(err);
   }
 }
+const verifyDecisionOffline = (spki, d) => verifyOffline(spki, d?.signedPayload, d?.signature, (p) => p.kind === 'nomus.cpg-decision.v1' && p.id === d.id);
 
 export async function cpgApprovalsChecks(ctx) {
   const { gate, repoRoot, outDir, data } = ctx;
@@ -189,6 +192,21 @@ export async function cpgApprovalsChecks(ctx) {
       pending.status === 201 && pending.json?.status === 'pending', '201 pending', `${pending.status} ${pending.json?.status}`)) {
       await approvalPageChecks(ctx, { caseId, pendingId: pending.json.id, status: () => status(legacy) });
     }
+
+    // ── Phase 6 (engine): the CI verdict on this branch, then the merged PR closes the case ──
+    const ci = ctx.data.api.withKey(keyRes.json.key);
+    const scanned = { repo: REPO, branch: BRANCH, prNumber: 1, headSha: 'e'.repeat(40), eventName: 'pull_request', bundleHash: scan.corporate.bundleHash };
+    const evaluated = await ci.post('/api/v1/cpg/ci/evaluate', { ...scanned, scannedFileCount: scan.corporate.scannedFileCount, findings: uploads(repo, findings) });
+    const v = evaluated.json;
+    const verdictOffline = verifyOffline(spki, v?.signedPayload, v?.signature, (p) => p.kind === 'nomus.cpg-ci-run.v1' && p.runId === v.runId && p.verdict === v.verdict && p.headSha === scanned.headSha);
+    gate.check('CI evaluate on the branch (org key): 200 fail on the review case, the rejected PII finding among the reasons, and the signed verdict verifies offline',
+      evaluated.status === 200 && v?.verdict === 'fail' && v.caseId === caseId && v.reasons.includes(`corp.no-pii-to-ai @ app/summarize.py:${blocking.find((f) => f.fingerprint === pii).startLine}: rejected`) && verdictOffline === null,
+      '200 fail, same case, rejected PII, verifies', `${evaluated.status} ${v?.verdict} ${v?.caseId === caseId} ${JSON.stringify(v?.reasons ?? v)} ${verdictOffline}`);
+    const merged = await ci.post('/api/v1/cpg/ci/pr-closed', { repo: REPO, branch: BRANCH, prNumber: 1, merged: true });
+    const closure = (await dev.get(`/api/v1/cpg/cases/${caseId}`)).json?.closure;
+    gate.check('the merged PR closes the case as merged, and its signed closure record lists the CI run',
+      merged.json?.closed === true && closure?.reason === 'merged' && closure.signatureValid === true && closure.record?.ciRunIds?.includes(v?.runId),
+      'closed, merged, valid, run listed', `${merged.status} ${JSON.stringify(merged.json)} ${closure?.reason} ${closure?.signatureValid} ${JSON.stringify(closure?.record?.ciRunIds)}`);
   } finally {
     const revoke = await owner.client.post(`/api/v1/cpg/grants/${devGrant.json?.id}/revoke`, { reason: 'Gate: self-approval check done' });
     if (legalGrant) {

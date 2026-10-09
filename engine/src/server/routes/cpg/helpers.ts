@@ -1,8 +1,9 @@
 import type { Context, Handler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { z } from 'zod';
 import type { AppEnv } from '../../app.js';
 import { safeJson } from '../../utils.js';
-import { CpgError, cpgErrorResponse, invalidInput } from '../../../cpg/errors.js';
+import { CpgError, cpgError, cpgErrorResponse, invalidInput } from '../../../cpg/errors.js';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { can, type CpgActor } from '../../../cpg/rbac/can.js';
 import type { PermissionKey } from '../../../cpg/rbac/catalog.js';
@@ -64,3 +65,10 @@ export function requirePermission(actor: CpgActor, permission: PermissionKey, re
 export function requireEnabled(db: BetterSQLite3Database<any>, orgId: string): void {
   if (!getOrgSettings(db, orgId)?.enabled) throw new CpgError(403, 'cpg_disabled', 'Corporate policies are not enabled for this organization');
 }
+
+/** §9.1: request-review and CI bodies over 4 MiB are refused before they are read. */
+const MAX_UPLOAD_BODY = 4 * 1024 * 1024;
+export const uploadBodyLimit = bodyLimit({
+  maxSize: MAX_UPLOAD_BODY,
+  onError: (c) => cpgError(c, 413, 'payload_too_large', 'The request body is over 4 MiB', { maxBytes: MAX_UPLOAD_BODY }),
+});

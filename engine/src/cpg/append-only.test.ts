@@ -122,6 +122,16 @@ function seedApprovals({ caseId, fingerprint }: { caseId: string; fingerprint: s
     randomUUID(), orgId, decisionId, registry.approverId, NOW);
 }
 
+/** One CI run (cpg_0005) on the seeded case, written with raw SQL. */
+function seedCiRun(caseId: string): void {
+  const keyId = randomUUID();
+  run("INSERT INTO api_keys (id, org_id, key_hash, key_prefix, label, scopes, created_at) VALUES (?, ?, ?, 'nk_live_test', 'ci', '[\"evaluate\"]', ?)", keyId, orgId, H, NOW);
+  run(`INSERT INTO cpg_ci_runs (id, org_id, api_key_id, repo, branch, head_sha, event_name, bundle_hash, scanned_file_count, verdict,
+       blocking_count, pending_count, rejected_count, approved_count, excepted_count, advisory_count, case_id, findings, evaluated_at, signed_payload, signature)
+       VALUES (?, ?, ?, 'acme/app', 'main', ?, 'pull_request', ?, 3, 'pass', 0, 0, 0, 0, 0, 0, ?, '[]', ?, '{}', 'sig')`,
+  randomUUID(), orgId, keyId, 'a'.repeat(40), H, caseId, NOW);
+}
+
 beforeAll(() => {
   runMigrations(db);
   orgId = insertOrg();
@@ -131,7 +141,9 @@ beforeAll(() => {
   runMigrations(db);
   appendAuditEvent(db, { orgId, actor: 'test', action: 'test.event', targetType: 'test', targetId: null, payload: { a: 1 } });
   seedRegistry();
-  seedApprovals(seedCase());
+  const seeded = seedCase();
+  seedApprovals(seeded);
+  seedCiRun(seeded.caseId);
 });
 
 describe('strictly append-only tables refuse UPDATE and DELETE', () => {

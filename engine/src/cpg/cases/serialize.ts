@@ -11,6 +11,7 @@ import {
 } from '../contracts.js';
 import { coverFindings, settled, type Cover } from '../decisions/resolve.js';
 import { pendingFingerprints } from '../decisions/status.js';
+import type { LocatedFinding } from '../decisions/standing.js';
 import { isSelfApproval } from '../decisions/votes.js';
 import { CpgError, notFound } from '../errors.js';
 import { boardIdsOf, userNames } from '../policies/service.js';
@@ -123,11 +124,15 @@ function resolutions(db: Db, c: CaseRow, findings: CaseFindingRow[], changeReque
 /**
  * E53: the resolution of fingerprints a scanner found on a branch, before or
  * after review was requested. Each must name a version of one of the org's
- * policies (422 unknown_policy otherwise). Change requests, and the file
- * locations a standing exception is matched against, come from the branch's
- * open case: a fingerprint it does not hold is never excepted.
+ * policies (422 unknown_policy otherwise). Change requests come from the
+ * branch's open case, and so do the file locations a standing exception is
+ * matched against unless the caller has them (`located`, a CI scan): a
+ * fingerprint with no location is never excepted.
  */
-export function findingsStatus(db: Db, orgId: string, branch: { repo: string; branch: string }, fingerprints: readonly string[], now: string): FindingResolution[] {
+export function findingsStatus(
+  db: Db, orgId: string, branch: { repo: string; branch: string }, fingerprints: readonly string[], now: string,
+  located?: ReadonlyArray<LocatedFinding & { fingerprint: string }>,
+): FindingResolution[] {
   const parsed = [...new Set(fingerprints)].map((fingerprint) => ({ fingerprint, ...parseFingerprint(fingerprint)! }));
   const keys = [...new Set(parsed.map((p) => p.policyKey))];
   const versions = new Map(db.select({
@@ -143,7 +148,7 @@ export function findingsStatus(db: Db, orgId: string, branch: { repo: string; br
   const kase = db.select().from(cpgCases)
     .where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, branch.repo), eq(cpgCases.branch, branch.branch), isNull(cpgCases.closedAt))).get();
   const ctx: ResolutionContext = {
-    cover: coverFindings(db, orgId, parsed.map((p) => p.fingerprint), (kase ? latestFindings(db, kase.id) : []).map((f) => ({ ...f, ...branch })), branch.repo, now),
+    cover: coverFindings(db, orgId, parsed.map((p) => p.fingerprint), located ?? (kase ? latestFindings(db, kase.id) : []).map((f) => ({ ...f, ...branch })), branch.repo, now),
     pending: kase ? pendingFingerprints(db, kase.id, now) : new Set(),
     changeRequested: kase ? requestedFingerprints(unresolvedRequests(db, kase.id)) : new Set(),
     now,

@@ -273719,7 +273719,7 @@ var external_node_crypto_ = __nccwpck_require__(7598);
  * (engine/src/core/policy-compiler.ts); an engine test pins the parity, so a
  * hash or signature the server computes verifies in the client.
  */
-function canonicalJson(value) {
+function canonical_canonicalJson(value) {
     return JSON.stringify(sortKeysDeep(value));
 }
 function sortKeysDeep(value) {
@@ -274449,7 +274449,7 @@ function isCanonicalRepo(repo) {
 /**
  * Client contracts shared by the engine, the VS Code extension and the
  * GitHub Action (design spec §8.6, §9.3): the bundle (Phase 2) and the
- * review-case contracts (Phase 4); the CI contracts arrive with Phase 6.
+ * review-case contracts (Phase 4) and the CI gate contracts (Phase 6).
  *
  * The signed payload builders live here too, so the server that signs and
  * the client that verifies build byte-identical canonical JSON.
@@ -274488,7 +274488,7 @@ const BUNDLE_KIND = 'nomus.cpg-bundle.v1';
 const POLICY_ACTIVATION_KIND = 'nomus.cpg-policy.v1';
 /** sha256 of a rule's canonical JSON (the `ruleHash` of a version). */
 function ruleHashOf(rule) {
-    return sha256Hex(canonicalJson(rule));
+    return sha256Hex(canonical_canonicalJson(rule));
 }
 function byKey(a, b) {
     return a.policyKey < b.policyKey ? -1 : a.policyKey > b.policyKey ? 1 : 0;
@@ -274500,11 +274500,11 @@ function sortBundlePolicies(policies) {
 /** The bundle hash: over the sorted policies without their activation signatures. */
 function bundleHashOf(policies) {
     const content = sortBundlePolicies(policies).map(({ activationSignature: _sig, ...rest }) => rest);
-    return sha256Hex(canonicalJson({ policies: content }));
+    return sha256Hex(canonical_canonicalJson({ policies: content }));
 }
 /** The canonical text the bundle signature covers. */
 function bundleSignedText(b) {
-    return canonicalJson({ kind: BUNDLE_KIND, orgId: b.orgId, enabled: b.enabled, bundleHash: b.bundleHash, generatedAt: b.generatedAt });
+    return canonical_canonicalJson({ kind: BUNDLE_KIND, orgId: b.orgId, enabled: b.enabled, bundleHash: b.bundleHash, generatedAt: b.generatedAt });
 }
 // ─── Review cases (§9.3): request review, case status, finding resolutions ──
 const repo = stringType().regex(CANONICAL_REPO_RE);
@@ -274578,6 +274578,61 @@ const requestReviewResponseSchema = objectType({
 const caseByBranchResponseSchema = objectType({ case: caseStatusSchema.nullable() }).strict();
 const findingsStatusRequestSchema = objectType({ repo, branch, fingerprints: arrayType(fingerprint).min(1).max(1000) }).strict();
 const findingsStatusResponseSchema = objectType({ items: arrayType(findingResolutionSchema), evaluatedAt: isoDate }).strict();
+// ─── CI gate (§9.3, §11.2): evaluate a CI scan, close a case with its PR ──
+const sha = stringType().regex(/^[0-9a-f]{40}$/);
+const prNumber = numberType().int().positive();
+const ciEvaluateRequestSchema = objectType({
+    repo,
+    branch,
+    prNumber: prNumber.nullable(),
+    headSha: sha,
+    eventName: stringType().max(50),
+    bundleHash: sha256,
+    scannedFileCount: numberType().int().min(0),
+    /** Send every finding's snippet: blocking tiers must (422 snippet_required), and a case revision stores them all. */
+    findings: arrayType(findingUploadSchema).max(2000),
+}).strict();
+const ciCountsSchema = objectType({
+    blocking: numberType().int().min(0),
+    pending: numberType().int().min(0),
+    rejected: numberType().int().min(0),
+    approved: numberType().int().min(0),
+    excepted: numberType().int().min(0),
+    /** Advisory and grace-period findings. */
+    advisory: numberType().int().min(0),
+}).strict();
+const CI_RUN_KIND = 'nomus.cpg-ci-run.v1';
+/** What the CI verdict signature covers: `signedPayload` is the canonical JSON of this object. */
+const contracts_ciRunPayloadSchema = objectType({
+    kind: literalType(CI_RUN_KIND),
+    runId: stringType().uuid(),
+    orgId: stringType().uuid(),
+    repo,
+    branch,
+    prNumber: prNumber.nullable(),
+    headSha: sha,
+    bundleHash: sha256,
+    verdict: enumType(['pass', 'fail']),
+    counts: ciCountsSchema,
+    /** sha256 of the sorted uploaded fingerprints joined with newlines (§5.4). */
+    findingsDigest: sha256,
+    evaluatedAt: isoDate,
+}).strict();
+const contracts_ciEvaluateResponseSchema = objectType({
+    runId: stringType().uuid(),
+    verdict: enumType(['pass', 'fail']),
+    /** One line per blocking finding: `corp.x @ path:line: status`. */
+    reasons: arrayType(stringType()),
+    caseId: stringType().uuid().nullable(),
+    caseUrl: stringType().url().nullable(),
+    findings: arrayType(findingResolutionSchema.extend({ filePath: relPath, startLine: numberType().int(), endLine: numberType().int() }).strict()),
+    counts: ciCountsSchema,
+    evaluatedAt: isoDate,
+    signedPayload: stringType(),
+    signature: stringType(),
+}).strict();
+const prClosedRequestSchema = objectType({ repo, branch, prNumber, merged: booleanType(), mergeSha: sha.optional() }).strict();
+const prClosedResponseSchema = objectType({ caseId: stringType().uuid().nullable(), closed: booleanType() }).strict();
 /** The activation payload of a bundle policy, as the server signed it (§8.5). */
 function policyActivationPayload(orgId, p) {
     return {
@@ -274680,12 +274735,40 @@ function verifyCorporateBundle(raw, spkiB64) {
         keys.add(p.policyKey);
         if (ruleHashOf(p.rule) !== p.ruleHash)
             throw invalid(`The rule of ${p.policyKey} v${p.version} does not match its hash`);
-        const payload = canonicalJson(policyActivationPayload(bundle.orgId, p));
+        const payload = canonical_canonicalJson(policyActivationPayload(bundle.orgId, p));
         if (!verifyEd25519(payload, p.activationSignature, spkiB64)) {
             throw invalid(`The activation signature of ${p.policyKey} v${p.version} does not verify`);
         }
     }
     return bundle;
+}
+/**
+ * Verify a CI verdict (E61) offline against the instance public key: the
+ * contract, the signature over `signedPayload`, and that the signed payload
+ * is canonical and states this response's run, verdict and counts for the
+ * scan that was sent (`expected`), so a verdict for another org, repository,
+ * commit or bundle is never accepted. Throws NomusApiError on any mismatch.
+ */
+function verifyCiVerdict(raw, spkiB64, expected) {
+    const parsed = ciEvaluateResponseSchema.safeParse(raw);
+    if (!parsed.success)
+        throw invalid('The CI verdict does not match the contract', parsed.error.issues);
+    const res = parsed.data;
+    if (!verifyEd25519(res.signedPayload, res.signature, spkiB64))
+        throw invalid('The CI verdict signature does not verify');
+    let payload;
+    try {
+        payload = ciRunPayloadSchema.parse(JSON.parse(res.signedPayload));
+    }
+    catch {
+        throw invalid('The signed CI verdict payload does not match the contract');
+    }
+    const stated = { ...expected, runId: res.runId, verdict: res.verdict, evaluatedAt: res.evaluatedAt, counts: res.counts };
+    const mismatch = Object.entries(stated).find(([k, v]) => canonicalJson(payload[k]) !== canonicalJson(v));
+    if (canonicalJson(payload) !== res.signedPayload || mismatch || (res.verdict === 'fail') !== (res.counts.blocking > 0)) {
+        throw invalid(`The signed CI verdict does not match the response${mismatch ? ` (${mismatch[0]})` : ''}`);
+    }
+    return res;
 }
 /** Fetch `/api/v1/cpg/bundle` and verify it (see the module comment for the fail-closed rules). */
 async function fetchCorporateBundle(opts) {
