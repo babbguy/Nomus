@@ -1,6 +1,7 @@
-// CPG Phase 4a.2: review cases over HTTP, design spec §16.4, release-gate
-// checks 2 to 9 (check 1 and the extension half of check 6 drive the VS Code
-// extension and arrive with it in 4a.3).
+// CPG Phase 4a: review cases, design spec §16.4: release-gate checks 2 to 9
+// over HTTP, then check 1 and the extension half of check 6 through the real
+// VS Code extension bundle in the gate's stub host (request review, the case
+// in the Corporate Policies view, a change request, reply and resubmit).
 //
 // dev@ requests review for the corporate findings the cpg-scanner area got
 // from the real CLI on the policy-repo fixture; the snippets are cut from the
@@ -10,9 +11,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { run } from '../lib/procs.mjs';
+import { Client, waitFor } from '../lib/http.mjs';
 import { lineRange, normalize } from '../lib/fingerprint.mjs';
+import { createHost, loadExtension, renderTree } from '../lib/vscode-host.mjs';
 import { preparePolicyRepo } from './cpg-scanner.mjs';
+import { writeGitDir } from './cpg-vscode.mjs';
 
 const REPO = 'github.com/gate-org/policy-repo';
 const JUSTIFICATION = 'Needed for the support chat until the gateway client supports streaming responses.';
@@ -25,6 +30,90 @@ function uploads(repoDir, findings) {
     startLine: f.startLine, endLine: f.endLine, language: f.language ?? 'other',
     snippet: normalize(lineRange(fs.readFileSync(path.join(repoDir, f.file), 'utf8'), f.startLine, f.endLine)),
   }));
+}
+
+/**
+ * §16.4 check 1 and the extension half of check 6: dev@ requests review from
+ * VS Code (the real dist/extension.js), with the QuickPick and InputBox
+ * answers queued; the case appears in the view; ai-reviewer@ requests
+ * changes and the extension shows the request and a warning; dev@ replies
+ * (resolving it) and resubmits from the extension.
+ */
+async function extensionChecks(ctx, work, expectedBlocking) {
+  const { gate, repoRoot, webUrl } = ctx;
+  const { users } = ctx.data.cpg;
+  const SENTINEL = 'gate-sentinel-4a3';
+  const JUSTIFY = `Kept until the gateway client supports streaming; tracked as ${SENTINEL}.`;
+  const workspace = preparePolicyRepo(ctx, path.join(work, 'vscode-workspace'));
+  writeGitDir(workspace, 'feat/policy-demo', 'https://github.com/gate-org/policy-repo.git');
+  const host = createHost({ settings: { 'nomus.apiUrl': webUrl, 'nomus.scanOnSave': false, 'nomus.scanOnOpen': false }, workspaceRoot: workspace });
+  const { state, vscode } = host;
+  const extensionJs = path.join(repoRoot, 'packages', 'vscode-extension', 'dist', 'extension.js');
+  delete createRequire(import.meta.url).cache[extensionJs];
+  loadExtension(extensionJs, vscode).activate(host.context);
+
+  // Sign in as dev@ with the device flow the extension starts (HTTP; dev@'s session approves it).
+  await waitFor(() => state.webviewHandlers.length > 0, { timeout: 5000 });
+  state.webviewHandlers[0]({ command: 'signIn' });
+  const authorize = new URL(await waitFor(() => state.opened.find((u) => u.includes('/api/v1/auth/device/authorize')), { timeout: 5000 }));
+  await new Client(webUrl).get(authorize.pathname + authorize.search, { redirect: 'manual' });
+  const callback = await users.dev.client.get(`/api/v1/auth/device/callback?device_state=${authorize.searchParams.get('state')}`, { redirect: 'manual' });
+  await state.uriHandler.handleUri(vscode.Uri.parse(callback.headers.get('location') ?? ''));
+  const viewText = async () => (await renderTree(state.trees.get('nomus.corporate'))).map((r) => `${'  '.repeat(r.depth)}${r.label}${r.description ? ` — ${r.description}` : ''}`);
+  const since = (n) => state.messages.slice(n).map((m) => `${m.level}: ${m.text}`);
+  const byBranch = async () => (await users.dev.client.get('/api/v1/cpg/cases/by-branch?repo=gate-org/policy-repo&branch=feat/policy-demo')).json?.case;
+
+  // ── 1. request review from VS Code: all preselected, the same justification for all ──
+  let n = state.messages.length;
+  state.quickPick.push((items) => items, (items) => items.find((i) => /^Use this justification for the remaining \d+ findings?$/.test(i)));
+  state.inputBox.push(JUSTIFY);
+  await vscode.commands.executeCommand('nomus.cpg.requestReview');
+  const opened = state.messages.slice(n).find((m) => m.level === 'info' && /Review case CPG-/.test(m.text));
+  gate.check('VS Code (dev@, branch feat/policy-demo): "Nomus: Request Policy Review" shows "Review case CPG-… opened (revision 1). Sent to: AI Review Board, Legal Board."',
+    /^Nomus: Review case CPG-[0-9A-F]{8} opened \(revision 1\)\. Sent to: AI Review Board, Legal Board\.$/.test(opened?.text ?? '') && state.quickPick.length === 0 && state.inputBox.length === 0,
+    'Review case CPG-… opened (revision 1)', since(n));
+  const kase = await byBranch();
+  const detail = kase ? (await users.dev.client.get(`/api/v1/cpg/cases/${kase.id}`)).json : null;
+  gate.check('the server has the case in_review: every blocking finding justified with the one queued text, revision 1 from vscode',
+    kase?.state === 'in_review' && !!opened?.text.includes(kase.ref) && detail?.revisions?.[0]?.source === 'vscode'
+      && detail.justifications?.length === expectedBlocking && detail.justifications.every((j) => j.body === JUSTIFY),
+    `in_review, ${expectedBlocking} × the sentinel justification, source vscode`, `${kase?.state} ${detail?.revisions?.[0]?.source} ${detail?.justifications?.map((j) => j.body.includes(SENTINEL)).join(',')}`);
+  const tree = await viewText();
+  const laneRows = (kase?.lanes ?? []).map((l) => `  ${l.boardName}: needs review (${l.blocking} blocking)`);
+  gate.check('the Corporate Policies view shows the case, one row per lane with the blocking count from the server, and "Open in dashboard"',
+    tree[0] === `Case ${kase?.ref} · in review (revision 1)` && laneRows.length === 2 && JSON.stringify(tree.slice(1, 4)) === JSON.stringify([...laneRows, '  Open in dashboard']),
+    ['Case … · in review (revision 1)', ...laneRows, '  Open in dashboard'], tree.slice(0, 6));
+
+  // ── 6 (extension half). a change request reaches the tree and warns ──
+  const asked = await users['ai-reviewer'].client.post(`/api/v1/cpg/cases/${kase?.id}/request-changes`, {
+    boardId: kase?.lanes?.find((l) => l.boardName === 'AI Review Board')?.boardId, body: 'Route this call through the approved gateway client.',
+    fingerprints: kase?.resolutions?.filter((r) => r.tier === 'prohibited').map((r) => r.fingerprint),
+  });
+  n = state.messages.length;
+  await vscode.commands.executeCommand('nomus.cpg.refresh');
+  const changed = await viewText();
+  const row = changed.find((l) => /^ {2}Changes requested by .+ \(AI Review Board\): "Route this call through the approved gateway client\."/.test(l));
+  const warnings = state.messages.slice(n).filter((m) => m.level === 'warning');
+  gate.check('after ai-reviewer@ requests changes, Refresh shows the request in the tree and one warning notification with Reply / Open case',
+    asked.status === 201 && changed[0] === `Case ${kase?.ref} · changes requested (revision 1)` && !!row && warnings.length === 1
+      && /^Nomus: CPG-[0-9A-F]{8}: Changes requested by .+ \(AI Review Board\): "Route this call through the approved gateway client\."$/.test(warnings[0].text)
+      && JSON.stringify(warnings[0].items) === '["Reply","Open case"]',
+    'tree row + 1 warning [Reply, Open case]', { tree: changed.slice(0, 5), messages: since(n) });
+
+  // dev@ replies from the extension (resolving the request) and resubmits.
+  n = state.messages.length;
+  state.inputBox.push('Moved the call behind the gateway client.');
+  state.quickPick.push((items) => items.find((i) => i === 'This resolves the request'));
+  await vscode.commands.executeCommand('nomus.cpg.replyToChangeRequest', asked.json?.id);
+  const answered = await viewText();
+  await vscode.commands.executeCommand('nomus.cpg.resubmit');
+  const after = await byBranch();
+  const finalTree = await viewText();
+  gate.check('dev@ replies from VS Code (resolving it), is offered Resubmit, resubmits: the case is in_review again and the view says so',
+    answered.includes('  Every change request is resolved: resubmit for review') && after?.state === 'in_review' && after.openChangeRequests.length === 0
+      && since(n).join('\n') === `info: Nomus: Reply sent. Every change request on ${kase?.ref} is resolved: resubmit the case for review.\ninfo: Nomus: Review case ${kase?.ref} resubmitted: in review.`
+      && finalTree[0] === `Case ${kase?.ref} · in review (revision 1)`,
+    'resolved row, 2 info messages, in_review', { answered: answered.slice(0, 5), messages: since(n), state: after?.state });
 }
 
 export async function cpgCasesChecks(ctx) {
@@ -138,6 +227,9 @@ export async function cpgCasesChecks(ctx) {
     // ── 9. another org cannot see the case ───────────────────────────────
     const foreign = await ctx.data.member.get(`/api/v1/cpg/cases/${opened?.id}`);
     gate.check('the gate-health member reading the gate-policy case: 404 (never 403)', foreign.status === 404, '404', `${foreign.status} ${foreign.json?.code}`);
+
+    // ── 1 and 6 through the VS Code extension ────────────────────────────
+    await extensionChecks(ctx, work, blocking.length);
   } finally {
     const restore = await owner.client.patch('/api/v1/cpg/settings', { enabled: false, reviewerContextLlm: before.json?.reviewerContextLlm ?? false });
     gate.check('governance switched off again and the reviewer-context setting restored', restore.status === 200 && restore.json?.enabled === false,

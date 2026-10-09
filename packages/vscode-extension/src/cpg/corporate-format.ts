@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { CorporateFinding } from '@nomus/scanner';
+import type { CaseStatus } from '@nomus/scanner/corporate';
 import type { BundleState } from './bundle-cache';
 
 /**
@@ -81,4 +82,91 @@ export function groupFindings(findings: readonly CorporateFinding[]): FindingGro
     { id: 'blocking' as const, label: 'Blocking: needs review', findings: blocking },
     { id: 'advisory' as const, label: 'Advisory / grace period', findings: advisory },
   ].filter((g) => g.findings.length > 0);
+}
+
+// ─── Review cases (§10.3, §10.4) ───────────────────────────────────────
+
+type CaseState = CaseStatus['state'];
+
+/** A server message as a sentence ("Missing permission case.read" → "Missing permission case.read."). */
+export function sentence(text: string): string {
+  const t = text.trim();
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
+export function caseStateText(state: CaseState): string {
+  switch (state) {
+    case 'open': return 'open: some blocking findings have no justification';
+    case 'in_review': return 'in review';
+    case 'changes_requested': return 'changes requested';
+    case 'decided': return 'decided';
+    case 'closed': return 'closed';
+  }
+}
+
+/** `Case CPG-1A2B3C4D · in review (revision 3)` */
+export function caseLabel(c: Pick<CaseStatus, 'ref' | 'state' | 'latestRevision'>): string {
+  return `Case ${c.ref} · ${caseStateText(c.state)} (revision ${c.latestRevision})`;
+}
+
+/** `AI Review Board: needs review (2 blocking)` */
+export function laneText(l: CaseStatus['lanes'][number]): string {
+  if (l.state === 'changes_requested') return `${l.boardName}: changes requested`;
+  if (l.state === 'decided') return l.blocking === 0 ? `${l.boardName}: nothing to decide` : `${l.boardName}: decided (${l.decided} of ${l.blocking})`;
+  return `${l.boardName}: needs review (${l.blocking} blocking)`;
+}
+
+function excerpt(text: string, max = 80): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+
+/** `Changes requested by Dana (Legal): "Move the call behind…"` */
+export function changeRequestText(r: CaseStatus['openChangeRequests'][number], max = 80): string {
+  return `Changes requested by ${r.authorName} (${r.boardName}): "${excerpt(r.body, max)}"`;
+}
+
+const boardsOf = (c: CaseStatus) => c.lanes.filter((l) => l.blocking > 0).map((l) => l.boardName).sort((a, b) => a.localeCompare(b)).join(', ');
+
+/** The confirmation after request review (E40). */
+export function reviewResultText(r: { created: boolean; revisionCreated: boolean; case: CaseStatus }): string {
+  const c = r.case;
+  const sent = boardsOf(c) ? ` Sent to: ${boardsOf(c)}.` : '';
+  if (r.created) return `Review case ${c.ref} opened (revision ${c.latestRevision}).${sent}`;
+  if (r.revisionCreated) return `Review case ${c.ref} updated (revision ${c.latestRevision}).${sent}`;
+  return `Review case ${c.ref}: justifications recorded (the code is unchanged since revision ${c.latestRevision}).${sent}`;
+}
+
+export interface CaseNotice { level: 'info' | 'warning'; text: string; actions?: string[] }
+
+const DECIDED = ['approved', 'excepted', 'rejected'] as const;
+
+/** What changed on the branch's case since the last poll (`prev` null: never seen on this machine). */
+export function caseNotices(prev: CaseStatus | null, next: CaseStatus): CaseNotice[] {
+  const notices: CaseNotice[] = [];
+  const seen = new Set(prev?.openChangeRequests.map((r) => r.commentId) ?? []);
+  for (const r of next.openChangeRequests) {
+    if (!seen.has(r.commentId)) notices.push({ level: 'warning', text: `${next.ref}: ${changeRequestText(r, 200)}`, actions: ['Reply', 'Open case'] });
+  }
+  const before = new Map(prev?.resolutions.map((r) => [r.fingerprint, r.status]) ?? []);
+  const counts = DECIDED.map((status) => [status, next.resolutions.filter((r) => r.status === status && before.get(r.fingerprint) !== status).length] as const)
+    .filter(([, n]) => n > 0).map(([status, n]) => `${n} finding${n === 1 ? '' : 's'} ${status}`);
+  const nowDecided = next.state === 'decided' && prev !== null && prev.state !== 'decided';
+  if (counts.length > 0 || nowDecided) {
+    const parts = [...(counts.length ? [`${counts.join(', ')}.`] : []), ...(nowDecided ? ['Every blocking finding is decided.'] : [])];
+    notices.push({ level: 'info', text: `${next.ref}: ${parts.join(' ')}`, actions: ['Open case'] });
+  }
+  return notices;
+}
+
+const CLOSE_REASONS: Record<string, string> = {
+  merged: 'the pull request was merged',
+  pr_closed_unmerged: 'the pull request was closed without merging',
+  withdrawn: 'it was withdrawn',
+  closed_by_reviewer: 'a reviewer closed it',
+  abandoned: 'it had no activity for 90 days',
+};
+
+export function closedNotice(ref: string, reason: string | null): string {
+  return `Review case ${ref} is closed${reason && CLOSE_REASONS[reason] ? `: ${CLOSE_REASONS[reason]}` : ''}.`;
 }

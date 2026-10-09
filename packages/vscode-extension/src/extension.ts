@@ -11,6 +11,9 @@ import { WelcomePanel } from './welcome-panel';
 import { NomusApiClient } from './api-client';
 import { CorporateViewProvider } from './cpg/corporate-view';
 import { CorporateController } from './cpg/corporate-controller';
+import { CpgClient } from './cpg/cpg-client';
+import { CaseTracker } from './cpg/case-status';
+import { openCase, replyToChangeRequest, requestReview, resubmit, type CaseCommandDeps } from './cpg/request-review';
 
 let diagnosticsProvider: DiagnosticsProvider;
 let findingsProvider: FindingsTreeProvider;
@@ -22,6 +25,7 @@ let authManager: AuthManager;
 let apiClient: NomusApiClient;
 let corporateView: CorporateViewProvider;
 let corporate: CorporateController;
+let cases: CaseTracker;
 
 export function activate(context: vscode.ExtensionContext) {
   diagnosticsProvider = new DiagnosticsProvider();
@@ -44,6 +48,11 @@ export function activate(context: vscode.ExtensionContext) {
     diagnostics: diagnosticsProvider,
     view: corporateView,
   });
+  // The branch's review case (polled; shown in the same view).
+  const cpgClient = new CpgClient(() => authManager.getApiKey());
+  cases = new CaseTracker(context, cpgClient);
+  context.subscriptions.push(cases.onDidChange((view) => corporateView.setCase(view)));
+  const caseDeps: CaseCommandDeps = { context, client: cpgClient, corporate, cases };
 
   // Register URI handler for auth callbacks
   context.subscriptions.push(vscode.window.registerUriHandler(authManager));
@@ -65,6 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
       aiBomProvider.refresh(),
       radarProvider.refresh(),
       corporate.refresh(),
+      cases.refresh(true),
     ]);
   }
 
@@ -114,10 +124,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('nomus.refreshViews', () => refreshAllViews()),
     vscode.commands.registerCommand('nomus.cpg.refresh', async () => {
       // Revalidate the policy bundle now (If-None-Match), then re-check the open file.
-      await corporate.refresh();
+      await Promise.all([corporate.refresh(), cases.refresh(true)]);
       const doc = vscode.window.activeTextEditor?.document;
       if (doc) await scanCurrentFile(diagnosticsProvider, findingsProvider, statusBar, doc, getApiKey, complianceStatusProvider, corporate);
     }),
+    vscode.commands.registerCommand('nomus.cpg.requestReview', () => requestReview(caseDeps)),
+    vscode.commands.registerCommand('nomus.cpg.replyToChangeRequest', (arg?: Parameters<typeof replyToChangeRequest>[1]) => replyToChangeRequest(caseDeps, arg)),
+    vscode.commands.registerCommand('nomus.cpg.resubmit', () => resubmit(caseDeps)),
+    vscode.commands.registerCommand('nomus.cpg.openCase', () => openCase(caseDeps)),
     vscode.commands.registerCommand('nomus.generateAiBom', async () => {
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Nomus: Generating AI-BOM from scan findings...' },
@@ -204,6 +218,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
       } else {
         corporate.reset();
+        cases.reset();
       }
     }),
   );
@@ -215,6 +230,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (config.get<boolean>('scanOnSave', true)) {
         scanCurrentFile(diagnosticsProvider, findingsProvider, statusBar, doc, getApiKey, complianceStatusProvider, corporate);
       }
+      void cases.refresh(); // at most once a minute
     }),
   );
 
@@ -235,7 +251,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Register disposables
-  context.subscriptions.push(diagnosticsProvider, statusBar, authManager, corporateView);
+  context.subscriptions.push(diagnosticsProvider, statusBar, authManager, corporateView, cases);
 
   // Check auth state on activation
   authManager.isAuthenticated().then((authenticated) => {

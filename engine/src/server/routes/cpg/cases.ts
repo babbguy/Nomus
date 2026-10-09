@@ -1,13 +1,14 @@
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, isNull, lt, or, type SQL } from 'drizzle-orm';
+import { bodyLimit } from 'hono/body-limit';
+import { and, desc, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
-  caseByBranchResponseSchema, justificationInputSchema, parseFingerprint, requestReviewRequestSchema, requestReviewResponseSchema,
+  caseByBranchResponseSchema, findingsStatusRequestSchema, findingsStatusResponseSchema, justificationInputSchema, parseFingerprint, requestReviewRequestSchema, requestReviewResponseSchema,
 } from '@nomus/scanner/corporate';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
-import { cpgCaseFindings, cpgCases } from '../../../db/schema-cpg.js';
+import { cpgCaseFindings, cpgCaseRevisions, cpgCases } from '../../../db/schema-cpg.js';
 import { CPG_REVIEWER_CONTEXT_PROMPT_VERSION } from '../../../llm/prompts/cpg-reviewer-context.js';
 import { requireSessionOrApiKey } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
@@ -22,18 +23,18 @@ import { addComment, requestChanges, resubmit, type CommentRow } from '../../../
 import { closeCase } from '../../../cpg/cases/close.js';
 import { reviewerContext } from '../../../cpg/cases/context.js';
 import {
-  caseDetail, caseStatus, caseSummary, commentOf, justificationOf, reviewerContextOf, revisionDetail,
+  caseDetail, caseStatus, caseSummary, commentOf, findingsStatus, justificationOf, reviewerContextOf, revisionDetail,
 } from '../../../cpg/cases/serialize.js';
 import { userNames } from '../../../cpg/policies/service.js';
 import {
   caseByBranchQuerySchema, caseListQuerySchema, caseListResponseSchema, closeCaseRequestSchema, commentRequestSchema, commentResponseSchema,
   emptyRequestSchema, justificationResponseSchema, requestChangesRequestSchema,
 } from '../../../cpg/contracts.js';
-import { CpgError, notFound } from '../../../cpg/errors.js';
+import { CpgError, cpgError, notFound } from '../../../cpg/errors.js';
 import { actorFrom, handle, parseBody, parseQuery, pathParam } from './helpers.js';
 
 /**
- * Review cases (design spec §5, E40 to E52). Permissions are checked against
+ * Review cases (design spec §5, E40 to E53). Permissions are checked against
  * the case's repository, so team- and repo-scoped grants work; an id of
  * another organization is 404 before any permission is checked. Writes need
  * a user (an org key gets 403 user_identity_required) and an organization
@@ -46,6 +47,15 @@ type Db = BetterSQLite3Database<any>;
 
 /** `userKey`: also accept the VS Code user-bound key (the "UK" of the endpoint table). */
 const auth = (userKey: boolean) => [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: userKey })] as const;
+/** Reads the CI action also makes: an org key with read:policies is accepted ("K[read:policies]"). */
+const readAuth = [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: true, allowOrgKey: true })] as const;
+
+/** §9.1: request-review bodies over 4 MiB are refused before they are read. */
+const MAX_REVIEW_BODY = 4 * 1024 * 1024;
+const reviewBodyLimit = bodyLimit({
+  maxSize: MAX_REVIEW_BODY,
+  onError: (c) => cpgError(c, 413, 'payload_too_large', 'The request body is over 4 MiB', { maxBytes: MAX_REVIEW_BODY }),
+});
 
 function requirePermission(actor: CpgActor, permission: PermissionKey, repo?: string): void {
   if (!can(actor, permission, repo ? { repo } : undefined)) throw new CpgError(403, 'forbidden', `Missing permission ${permission}`, { permission });
@@ -64,11 +74,23 @@ function caseFor(c: Context<AppEnv>, permission: PermissionKey): { db: Db; actor
   return { db, actor, kase };
 }
 
+/** The org of a read that an org key may make; a user needs `case.read` on the repository. */
+function readerOrg(c: Context<AppEnv>, repo: string): string {
+  if (identityOf(c) === 'org_key') {
+    const orgId = c.get('orgId');
+    if (!orgId) throw new CpgError(401, 'unauthenticated', 'Authentication required');
+    return orgId;
+  }
+  const actor = actorFrom(c);
+  requirePermission(actor, 'case.read', repo);
+  return actor.orgId;
+}
+
 const origin = (c: Context<AppEnv>) => new URL(c.req.url).origin;
 const statusOf = (c: Context<AppEnv>, db: Db, kase: CaseRow) => caseStatus(db, getCase(db, kase.orgId, kase.id), origin(c));
 
 // E40 request review: find or create the branch's case, add a revision, record the justifications.
-cpgCaseRoutes.post('/cases/request-review', ...auth(true), handle(async (c) => {
+cpgCaseRoutes.post('/cases/request-review', ...auth(true), reviewBodyLimit, handle(async (c) => {
   const body = await parseBody(c, requestReviewRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();
@@ -109,6 +131,13 @@ cpgCaseRoutes.get('/cases', ...auth(true), handle((c) => {
   const where: Array<SQL | undefined> = [eq(cpgCases.orgId, actor.orgId)];
   if (q.state) where.push(eq(cpgCases.state, q.state));
   if (q.repo) where.push(eq(cpgCases.repo, q.repo));
+  if (q.boardId) {
+    // A lane of the board: a finding of the latest revision whose policy version the board owns (§5.6).
+    where.push(sql`exists (select 1 from ${cpgCaseFindings} f
+      join ${cpgCaseRevisions} r on r.id = f.revision_id
+      join cpg_policy_versions v on v.id = f.policy_version_id, json_each(v.owning_board_ids) b
+      where f.case_id = ${cpgCases.id} and r.revision = ${cpgCases.latestRevision} and b.value = ${q.boardId})`);
+  }
   if (q.mine === 'true') where.push(eq(cpgCases.openedBy, `user:${actor.userId}`));
   if (q.cursor) {
     const [at, id] = Buffer.from(q.cursor, 'base64url').toString('utf8').split('|');
@@ -125,15 +154,24 @@ cpgCaseRoutes.get('/cases', ...auth(true), handle((c) => {
 }));
 
 // E42 the open case of a branch (the extension's status poll).
-cpgCaseRoutes.get('/cases/by-branch', ...auth(true), handle((c) => {
+cpgCaseRoutes.get('/cases/by-branch', ...readAuth, handle((c) => {
   const q = parseQuery(c, caseByBranchQuerySchema);
-  const actor = actorFrom(c);
+  const orgId = readerOrg(c, q.repo);
   const db = getDb();
-  requirePermission(actor, 'case.read', q.repo);
-  const kase = getOrgSettings(db, actor.orgId)?.enabled
-    ? db.select().from(cpgCases).where(and(eq(cpgCases.orgId, actor.orgId), eq(cpgCases.repo, q.repo), eq(cpgCases.branch, q.branch), isNull(cpgCases.closedAt))).get()
+  const kase = getOrgSettings(db, orgId)?.enabled
+    ? db.select().from(cpgCases).where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, q.repo), eq(cpgCases.branch, q.branch), isNull(cpgCases.closedAt))).get()
     : undefined;
   return c.json(caseByBranchResponseSchema.parse({ case: kase ? caseStatus(db, kase, origin(c)) : null }));
+}));
+
+// E53 the resolution of the fingerprints a scan found on a branch (the extension's request-review step and the action).
+cpgCaseRoutes.post('/findings/status', ...readAuth, handle(async (c) => {
+  const body = await parseBody(c, findingsStatusRequestSchema);
+  const orgId = readerOrg(c, body.repo);
+  const db = getDb();
+  const evaluatedAt = new Date().toISOString();
+  const items = getOrgSettings(db, orgId)?.enabled ? findingsStatus(db, orgId, body, body.fingerprints, evaluatedAt) : [];
+  return c.json(findingsStatusResponseSchema.parse({ items, evaluatedAt }));
 }));
 
 // E43

@@ -129,6 +129,8 @@ const window = {
   showInformationMessage: () => Promise.resolve(undefined),
   showWarningMessage: () => Promise.resolve(undefined),
   showErrorMessage: () => Promise.resolve(undefined),
+  showQuickPick: (): Promise<unknown> => Promise.resolve(undefined),
+  showInputBox: (): Promise<string | undefined> => Promise.resolve(undefined),
   withProgress: async (_opts: unknown, task: (progress: unknown) => Promise<void>) => task({}),
   onDidChangeActiveTextEditor: () => ({ dispose: () => {} }),
 };
@@ -145,6 +147,7 @@ const workspace = {
 // Mock commands
 const commands = {
   registerCommand: (_command: string, _callback: (...args: unknown[]) => unknown) => ({ dispose: () => {} }),
+  executeCommand: (_command: string, ..._args: unknown[]): Promise<unknown> => Promise.resolve(undefined),
 };
 
 // Mock env

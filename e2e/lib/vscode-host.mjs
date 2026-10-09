@@ -21,8 +21,10 @@ export function createHost({ settings, workspaceRoot }) {
     saveHandlers: [],
     quickPick: [],          // queued answers: fn(items) -> item
     inputBox: [],           // queued answers: string
+    inputBoxOptions: [],    // the options of each InputBox shown (title, value: a restored draft, …)
     secrets: new Map(),
     globalState: new Map(),
+    workspaceState: new Map(),
     statusBar: { text: '' },
   };
 
@@ -79,7 +81,7 @@ export function createHost({ settings, workspaceRoot }) {
       showErrorMessage: show('error'),
       // The queued answer gets the items and the options; with canPickMany it may return an array.
       showQuickPick: async (items, options) => { const a = state.quickPick.shift(); const list = await items; return a ? a(list, options ?? {}) : undefined; },
-      showInputBox: async () => state.inputBox.shift(),
+      showInputBox: async (options) => { state.inputBoxOptions.push(options ?? {}); return state.inputBox.shift(); },
       withProgress: async (_opts, task) => task({ report() {} }, { isCancellationRequested: false, onCancellationRequested: () => disposable() }),
       registerTreeDataProvider: (id, provider) => { state.trees.set(id, provider); return disposable(); },
       createTreeView: (id, opts) => { state.trees.set(id, opts.treeDataProvider); return { dispose() {}, reveal() {} }; },
@@ -134,7 +136,7 @@ export function createHost({ settings, workspaceRoot }) {
       onDidChange: () => disposable(),
     },
     globalState: { get: (k, d) => (state.globalState.has(k) ? state.globalState.get(k) : d), update: async (k, v) => { state.globalState.set(k, v); }, keys: () => [...state.globalState.keys()] },
-    workspaceState: { get: (_k, d) => d, update: async () => {}, keys: () => [] },
+    workspaceState: { get: (k, d) => (state.workspaceState.has(k) ? state.workspaceState.get(k) : d), update: async (k, v) => { if (v === undefined) state.workspaceState.delete(k); else state.workspaceState.set(k, v); }, keys: () => [...state.workspaceState.keys()] },
     asAbsolutePath: (p) => path.join(workspaceRoot ?? process.cwd(), p),
   };
 

@@ -26,13 +26,13 @@ const BAD_TEXT = /\bundefined\b|\bNaN\b|\[object Object\]|\bnull\b|Invalid Date/
 const SEV = { 0: 'Error', 1: 'Warning', 2: 'Information', 3: 'Hint' };
 const HEAD_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-/** A minimal .git directory (no git binary): branch feat/policy-check, origin on github.com. */
-function writeGitDir(root) {
+/** A minimal .git directory (no git binary): a branch under feat/ and an origin on github.com. */
+export function writeGitDir(root, branch = 'feat/policy-check', origin = 'https://github.com/Gate-Example/Policy-Repo.git') {
   const g = path.join(root, '.git');
   fs.mkdirSync(path.join(g, 'refs', 'heads', 'feat'), { recursive: true });
-  fs.writeFileSync(path.join(g, 'HEAD'), 'ref: refs/heads/feat/policy-check\n');
-  fs.writeFileSync(path.join(g, 'config'), '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = https://github.com/Gate-Example/Policy-Repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n');
-  fs.writeFileSync(path.join(g, 'refs', 'heads', 'feat', 'policy-check'), `${HEAD_SHA}\n`);
+  fs.writeFileSync(path.join(g, 'HEAD'), `ref: refs/heads/${branch}\n`);
+  fs.writeFileSync(path.join(g, 'config'), `[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = ${origin}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`);
+  fs.writeFileSync(path.join(g, 'refs', 'heads', ...branch.split('/')), `${HEAD_SHA}\n`);
 }
 
 const describe = (d) => ({
