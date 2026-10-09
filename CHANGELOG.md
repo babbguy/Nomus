@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 2 (scanner library): `@nomus/scanner/corporate`, the pure
+  library the engine, the VS Code extension and the GitHub Action share for corporate policies: the
+  rule schema and closed vocabularies, globs, regex safety, the deterministic matcher, the finding
+  fingerprint, repository and language helpers, and the signed-bundle client. Scans stay
+  deterministic: nothing in it calls an LLM. The SDK-usage detector now reports the last line of
+  each call (`endLine`).
 - Corporate policy governance, phase 1 (engine): per-organization role-based access control.
   Seven system roles (Org Admin, Policy Author, Policy Approver, Case Reviewer, Exception Approver,
   Developer, Auditor), custom roles, org-, team- and repository-scoped grants, teams with

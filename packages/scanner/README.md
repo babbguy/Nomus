@@ -116,6 +116,7 @@ TypeScript, JavaScript, Python, Java, Go.
 | `@nomus/scanner/capabilities` | AI capability detection |
 | `@nomus/scanner/reporter` | Console/JSON output formatters |
 | `@nomus/scanner/detector` | Detector plugin registry |
+| `@nomus/scanner/corporate` | Corporate policy library: rule schema and vocabularies, glob and regex safety, the deterministic matcher (`evaluateCorporateRules`), the finding fingerprint, repository and language helpers, and the signed-bundle client (`fetchCorporateBundle`, `verifyCorporateBundle`). Pure and LLM-free; only the bundle client uses the network |
 
 ## Build
 
@@ -137,3 +138,4 @@ The scanner reports regulatory applicability information. It is not legal advice
 | `src/match/rule-matcher.ts` | Rule-to-signal matching logic |
 | `src/output/sarif.ts` | SARIF output for CI/CD integration |
 | `src/config/schema.ts` | `.nomus.yml` config schema |
+| `src/corporate/` | Corporate policy library (`@nomus/scanner/corporate`), shared with the engine, the VS Code extension and the GitHub Action |
