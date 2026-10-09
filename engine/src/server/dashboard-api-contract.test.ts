@@ -534,3 +534,71 @@ describe('JSON response sanity', () => {
     expect(typeof body.count).toBe('number');
   });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// Corporate Policy Governance (/api/v1/cpg, E1–E18). The governance pages
+// use a browser session, so these run as the org's first member (Org Admin
+// + Developer) and parse each body with the engine's zod contract.
+// ════════════════════════════════════════════════════════════════════
+
+describe('CPG API contracts', () => {
+  let cookie = '';
+  let orgId = '';
+
+  beforeAll(async () => {
+    const { makeOrg, makeUser } = await import('../cpg/__fixtures__/rbac-fixtures.js');
+    orgId = makeOrg('Contract');
+    cookie = makeUser(orgId).cookie;
+  });
+
+  async function session(method: string, path: string, body?: unknown) {
+    return app.request(`http://localhost${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
+  it('GET reads return their documented shapes', async () => {
+    const c = await import('../cpg/contracts.js');
+    const reads: Array<[string, { parse: (v: unknown) => unknown }]> = [
+      ['/api/v1/cpg/me', c.meResponseSchema],
+      ['/api/v1/cpg/permissions', c.listOf(c.permissionResponseSchema)],
+      ['/api/v1/cpg/roles', c.listOf(c.roleResponseSchema)],
+      ['/api/v1/cpg/users', c.listOf(c.orgUserResponseSchema)],
+      ['/api/v1/cpg/teams', c.listOf(c.teamResponseSchema)],
+      ['/api/v1/cpg/settings', c.cpgSettingsResponseSchema],
+      ['/api/v1/cpg/audit', c.auditListResponseSchema],
+    ];
+    for (const [path, schema] of reads) {
+      const res = await session('GET', path);
+      expect(res.status, path).toBe(200);
+      const body: unknown = await res.json();
+      expect(() => schema.parse(body), path).not.toThrow();
+    }
+  });
+
+  it('write routes are registered and never 5xx on invalid input', async () => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    for (const [method, path] of [
+      ['POST', '/api/v1/cpg/roles'], ['PATCH', `/api/v1/cpg/roles/${id}`], ['POST', `/api/v1/cpg/roles/${id}/archive`],
+      ['POST', '/api/v1/cpg/users'], ['PATCH', `/api/v1/cpg/users/${id}`], ['POST', `/api/v1/cpg/users/${id}/grants`],
+      ['POST', `/api/v1/cpg/grants/${id}/revoke`], ['POST', '/api/v1/cpg/teams'], ['PATCH', `/api/v1/cpg/teams/${id}`],
+      ['PATCH', '/api/v1/cpg/settings'],
+    ] as const) {
+      const res = await session(method, path, { unexpected: true });
+      expect([400, 403, 404], `${method} ${path}`).toContain(res.status);
+      const body = await res.json();
+      expect(typeof body.code, `${method} ${path}`).toBe('string');
+    }
+    const e18 = await req('POST', `/api/v1/tenants/${orgId}/org-admins`, { userId: 'not-a-uuid' });
+    expect(e18.status).toBe(400);
+  });
+
+  it('every CPG route answers 401 without credentials', async () => {
+    for (const path of ['/api/v1/cpg/me', '/api/v1/cpg/roles', '/api/v1/cpg/users', '/api/v1/cpg/teams', '/api/v1/cpg/settings', '/api/v1/cpg/audit', '/api/v1/cpg/permissions']) {
+      const res = await app.request(`http://localhost${path}`);
+      expect(res.status, path).toBe(401);
+    }
+  });
+});

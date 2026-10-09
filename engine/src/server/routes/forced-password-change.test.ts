@@ -131,3 +131,32 @@ describe('normal session', () => {
     expect((await call('PATCH', '/api/v1/auth/profile', { cookie: normal.cookie, body: { name: 'Fine' } })).status).toBe(200);
   });
 });
+
+describe('temporary-password session on the CPG routes (/api/v1/cpg/*)', () => {
+  // One route from every CPG route file. The block fires in
+  // requireSessionOrApiKey, before any permission check.
+  const cpgRoutes: Array<[string, string, unknown]> = [
+    ['GET', '/api/v1/cpg/me', undefined], // me.ts
+    ['GET', '/api/v1/cpg/roles', undefined], // rbac.ts
+    ['POST', '/api/v1/cpg/users', { email: 'blocked@gate.example.org', name: 'Blocked' }], // rbac.ts (write)
+    ['GET', '/api/v1/cpg/settings', undefined], // settings.ts
+    ['PATCH', '/api/v1/cpg/settings', { enabled: true }], // settings.ts (write)
+    ['GET', '/api/v1/cpg/audit', undefined], // audit.ts
+  ];
+
+  for (const [method, path, body] of cpgRoutes) {
+    it(`${method} ${path} → 403 password_change_required`, async () => {
+      const pending = makeUser(temp.orgId, true);
+      const r = await call(method, path, { cookie: pending.cookie, body });
+      expect(r.status).toBe(403);
+      expect(r.json.code).toBe('password_change_required');
+    });
+  }
+
+  it('the same session reaches /cpg/me once the password is changed', async () => {
+    const pending = makeUser(temp.orgId, true);
+    expect((await call('GET', '/api/v1/cpg/me', { cookie: pending.cookie })).status).toBe(403);
+    expect((await call('POST', '/api/v1/auth/force-change-password', { cookie: pending.cookie, body: { password: 'another-new-password' } })).status).toBe(200);
+    expect((await call('GET', '/api/v1/cpg/me', { cookie: pending.cookie })).status).toBe(200);
+  });
+});

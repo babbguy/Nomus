@@ -74,6 +74,26 @@ export function resolveApiKey(dbKey: string, envFallback: string | undefined): s
   return envFallback || undefined;
 }
 
+const PROVIDER_KEY_SOURCES: Record<ProviderName, { setting: string; env: () => string | undefined }> = {
+  anthropic: { setting: 'llm.apiKeys.anthropic', env: () => env().NOMUS_ANTHROPIC_API_KEY },
+  google: { setting: 'llm.apiKeys.google', env: () => env().NOMUS_GOOGLE_AI_KEY },
+  openai: { setting: 'llm.apiKeys.openai', env: () => process.env.NOMUS_OPENAI_API_KEY },
+};
+
+/**
+ * True when the provider configured for `role` has an API key (settings or
+ * env), i.e. a generate call would be attempted rather than fail for lack of
+ * credentials. Synchronous; makes no network call.
+ */
+export function isLlmProviderConfigured(role: 'classifier' | 'translator' = 'translator'): boolean {
+  const config = env();
+  const providerName = (getSetting(`llm.${role}.provider`)
+    ?? (role === 'classifier' ? config.NOMUS_LLM_CLASSIFIER_PROVIDER : config.NOMUS_LLM_TRANSLATOR_PROVIDER)) as ProviderName;
+  const source = PROVIDER_KEY_SOURCES[providerName];
+  if (!source) return false;
+  return !!resolveApiKey(source.setting, source.env());
+}
+
 // ─── Provider Registry ───────────────────────────────────────
 
 let _providers: Record<ProviderName, LLMProvider> | null = null;
