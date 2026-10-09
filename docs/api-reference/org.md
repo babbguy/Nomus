@@ -1,8 +1,16 @@
 # Your organization (`/api/v1/org`)
 
-Self-service endpoints for the organization you are signed in to. Any signed-in user, member or
-platform admin, can use them; nobody needs a platform administrator to create the API keys that
-the scanner, GitHub Action, VS Code extension and MCP server use.
+Self-service endpoints for the organization you are signed in to. Nobody needs a platform
+administrator to create the API keys that the scanner, GitHub Action, VS Code extension and MCP
+server use.
+
+Since v1.2.0 each route except `GET /api/v1/org` requires a permission from your organization's
+[roles](../admin-guide/roles-and-permissions.md): `org.profile.update` for `PATCH /org`,
+`org.api_keys.manage` for the `/org/api-keys` routes and `org.members.read` for `/org/members`.
+Every member holds them through the Developer role (legacy grants), so behaviour is unchanged
+unless an Org Admin removes them. Without the permission the route answers
+`403 {"error": "...", "code": "forbidden", "details": {"permission": "..."}}`. A platform admin
+session keeps its v1.1.0 access to these routes.
 
 - **Session only.** These routes read the `nomus_session` cookie. An API key cannot call them, so a
   key cannot be used to mint more keys.
@@ -20,6 +28,13 @@ the scanner, GitHub Action, VS Code extension and MCP server use.
 | `POST /api/v1/org/api-keys` | Create a key; the raw key is returned once |
 | `DELETE /api/v1/org/api-keys/:keyId` | Revoke a key |
 | `GET /api/v1/org/members` | Read-only list of users in your organization |
+
+| Method and path | Permission (v1.2.0) |
+|-----------------|---------------------|
+| `GET /api/v1/org` | none (any signed-in user) |
+| `PATCH /api/v1/org` | `org.profile.update` |
+| `GET`, `POST /api/v1/org/api-keys`, `DELETE /api/v1/org/api-keys/:keyId` | `org.api_keys.manage` |
+| `GET /api/v1/org/members` | `org.members.read` |
 
 ---
 
@@ -127,6 +142,7 @@ your organization. Key creation and revocation are written to the engine log wit
 }
 ```
 
-Read-only. Adding, changing and deactivating users is a platform-administrator task
-(`/api/v1/users`, dashboard Admin, Users; see the [admin guide](../admin-guide/operations.md)).
+Read-only. Platform administrators manage users with `/api/v1/users` (dashboard Admin, Users; see
+the [admin guide](../admin-guide/operations.md)); since v1.2.0 an Org Admin can also invite and
+deactivate users of their own organization with [`/api/v1/cpg/users`](./governance.md#users-and-grants).
 No password hashes or tokens are ever included.

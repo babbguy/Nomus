@@ -11,6 +11,7 @@ How to run your own Nomus instance. Nomus is self-hosted open-source software.
 - **[Managing Regulations](./regulations.md)**: add, edit and retire regulations (sources) and correct individual rules; built-in vs customized vs custom sources; locked rules
 - **[Deployment](./deployment.md)**: Docker Compose, optional TLS proxy, bare-metal example, environment variables, hardening
 - **[Operations](./operations.md)**: organizations and users, monitoring, backups, logs, scheduled jobs, upgrades
+- **[Roles and permissions](./roles-and-permissions.md)**: per-organization roles, grants, teams, the upgrade migration, platform administrators and the governance audit log
 
 ---
 
