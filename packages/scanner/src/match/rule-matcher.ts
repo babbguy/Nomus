@@ -33,6 +33,60 @@ export interface Finding {
   suggestion?: string;
 }
 
+export type CorporateTier = 'advisory' | 'review-required' | 'prohibited';
+
+/**
+ * The status of a corporate finding as the scanner can know it, before any
+ * review decision: `needs_review` (blocking), `grace` (a review-required or
+ * prohibited policy before its enforce-from instant: advisory) or
+ * `advisory` (an advisory policy).
+ */
+export type CorporateFindingStatus = 'needs_review' | 'grace' | 'advisory';
+
+/**
+ * A corporate policy finding (CPG, design spec §8.6, §16.3). Reported in
+ * `ScanResult.corporateFindings`, never in `findings`, `counts` or `status`.
+ */
+export interface CorporateFinding {
+  source: 'corporate';
+  /** The file as the scan knows it (absolute for runScan, the caller's key for in-memory scans). */
+  file: string;
+  /** Repository-relative POSIX path. */
+  filePath: string;
+  language: 'typescript' | 'javascript' | 'python' | 'java' | 'go' | 'other';
+  startLine: number;
+  endLine: number;
+  /** The line of the anchor hit (the rule's first matcher). */
+  anchorLine: number;
+  matchedBy: string;
+  policyKey: string;
+  policyVersion: number;
+  tier: CorporateTier;
+  status: CorporateFindingStatus;
+  /** True when the finding needs a review decision (CI blocks on it from Phase 6). */
+  blocking: boolean;
+  /** ISO-8601 instant from which the policy is enforced (the end of its grace period). */
+  enforceFrom: string;
+  /** sha256(normalize(snippet)):policyKey:policyVersion (spec §6). */
+  fingerprint: string;
+  snippetHash: string;
+  /** The normalized snippet the fingerprint hashes. Kept local: never written to reports or SARIF. */
+  snippet: string;
+  truncated: boolean;
+  rule: {
+    policyId: string;
+    policyKey: string;
+    version: number;
+    title: string;
+    tier: CorporateTier;
+    message: string;
+    owningBoards: Array<{ id: string; name: string }>;
+    enforceFrom: string;
+    activatedAt: string;
+    policyReference: string;
+  };
+}
+
 /** The SDK a signal is about, or undefined for signals that describe data, not an SDK. */
 function sdkOfSignal(signal: DetectorSignal): string | undefined {
   if (signal.source === 'import-detector') return signal.target;

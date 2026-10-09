@@ -21,11 +21,22 @@ node packages/scanner/dist/index.js .                  # Scan current directory
 node packages/scanner/dist/index.js ./src --json       # JSON output
 node packages/scanner/dist/index.js ./src --sarif      # SARIF output (for CI integrations)
 node packages/scanner/dist/index.js . --fail-on=high   # Fail on high+ severity findings
+node packages/scanner/dist/index.js . --no-corporate   # Skip your organization's corporate policies
 ```
 
 The path and flags may come in any order; `--help` prints usage and `--version` the version. Exit codes: `0` pass, `1` findings at or above `--fail-on` (default `critical`), `2` usage or configuration error (an unknown flag, or a missing `.nomus.yml`), `3` Nomus API unreachable or unusable. A scan that detects no AI SDK usage passes without contacting the engine.
 
 A `.nomus.yml` (see below) is required in the scanned directory.
+
+**Corporate policies.** When your organization has corporate policy governance switched on, the CLI
+also downloads its signed policy bundle (the key needs `read:policies`), verifies every signature
+before using any rule, and evaluates the rules locally: no LLM, no code uploaded. Corporate findings
+appear in a separate console section, as `corporate` and `corporateFindings` in the JSON, and as a
+second SARIF run (`automationDetails.id: nomus-corporate/`). They never change the regulatory
+results or the exit code. A bundle that does not verify exits `3` with the reason; a bundle that
+cannot be fetched is reported on stderr as NOT checked, and the regulatory scan runs as before.
+`--no-corporate` skips corporate policies. Corporate rules ignore `.nomus.yml` `ignore`
+and `detectors`. See [Corporate Policies in the CLI and VS Code](../../docs/user-guide/corporate-policies.md).
 
 ### Programmatic
 
@@ -43,6 +54,12 @@ const result = await runScan({
 console.log(result.findings);   // Finding[]
 console.log(result.status);     // 'pass' | 'fail'
 console.log(result.counts);     // { critical, high, medium, low, total }
+
+// Corporate policies are off unless asked for. 'auto' fetches and verifies the org bundle
+// (it throws NomusApiError if the bundle cannot be fetched or does not verify).
+const withPolicies = await runScan({ rootDir: './my-project', corporate: { mode: 'auto' } });
+console.log(withPolicies.corporateFindings); // CorporateFinding[]: range, tier, status, blocking, fingerprint
+console.log(withPolicies.corporate);         // { enabled, bundleHash, policyCount, scannedFileCount, ... }
 ```
 
 ## Configuration

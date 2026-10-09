@@ -4,6 +4,7 @@ import { FindingsTreeProvider } from './sidebar/findings-provider';
 import { ComplianceStatusProvider } from './sidebar/compliance-status-provider';
 import { StatusBarManager } from './status-bar';
 import { loadWorkspaceConfig, WorkspaceConfigError } from './workspace-config';
+import type { CorporateController } from './cpg/corporate-controller';
 
 const SUPPORTED_LANGUAGES = new Set([
   'typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java', 'go',
@@ -33,9 +34,20 @@ export async function scanCurrentFile(
   doc?: vscode.TextDocument,
   getApiKey?: ApiKeyGetter,
   complianceStatus?: ComplianceStatusProvider,
+  corporate?: CorporateController,
 ) {
   const document = doc ?? vscode.window.activeTextEditor?.document;
-  if (!document || !SUPPORTED_LANGUAGES.has(document.languageId)) return;
+  if (!document) return;
+  if (!SUPPORTED_LANGUAGES.has(document.languageId)) {
+    // Corporate policies can cover any file (a model name in a config file);
+    // regulatory scanning stays limited to the supported languages.
+    if (corporate) diagnostics.setCorporateFindings(document.uri, await corporate.evaluateDocument(document));
+    return;
+  }
+
+  // Corporate findings first: they do not depend on the regulatory API, so an
+  // API failure below still leaves them shown (they render in the same set call).
+  const corporateFindings = corporate ? await corporate.evaluateDocument(document) : undefined;
 
   try {
     const { detectImportsInContent } = await import('@nomus/scanner/detect');
@@ -45,7 +57,7 @@ export async function scanCurrentFile(
     const imports = detectImportsInContent(content, document.fileName);
 
     if (imports.length === 0) {
-      diagnostics.setFindings(document.uri, []);
+      diagnostics.setFindings(document.uri, [], corporateFindings);
       findings.setFindings([]);
       statusBar.update(0);
       complianceStatus?.setLocalFindings([]);
@@ -102,12 +114,14 @@ export async function scanCurrentFile(
     }
 
     console.log(`Nomus: ${diagnosticFindings.length} finding(s) in ${document.fileName}`);
-    diagnostics.setFindings(document.uri, diagnosticFindings);
+    diagnostics.setFindings(document.uri, diagnosticFindings, corporateFindings);
     findings.setFindings(diagnosticFindings);
     statusBar.update(diagnosticFindings.length);
     complianceStatus?.setLocalFindings(diagnosticFindings);
   } catch (err) {
-    // Fail closed: leave existing diagnostics/status untouched (no green state).
+    // Fail closed: leave existing regulatory diagnostics/status untouched (no
+    // green state). Corporate findings were computed independently.
+    if (corporateFindings) diagnostics.setCorporateFindings(document.uri, corporateFindings);
     if (err instanceof WorkspaceConfigError) {
       vscode.window.showErrorMessage(`Nomus: cannot use the workspace configuration — ${err.message}`);
       return;
@@ -129,6 +143,7 @@ export async function scanWorkspace(
   statusBar: StatusBarManager,
   getApiKey?: ApiKeyGetter,
   complianceStatus?: ComplianceStatusProvider,
+  corporate?: CorporateController,
 ) {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
@@ -145,6 +160,9 @@ export async function scanWorkspace(
     cancellable: false,
   }, async () => {
     try {
+      // The verified bundle (or none): the scan never fetches one itself here,
+      // so an unusable bundle is reported once, by the controller.
+      const corporateBundle = corporate ? await corporate.bundleForWorkspaceScan() : null;
       const { runScan } = await import('@nomus/scanner');
       // The workspace's .nomus.yml takes precedence over the jurisdictions setting.
       const workspaceConfig = await loadWorkspaceConfig(
@@ -159,6 +177,7 @@ export async function scanWorkspace(
         apiUrl: config.get<string>('apiUrl'),
         failOn: config.get<string>('failOn', 'medium'),
         jurisdictions,
+        ...(corporateBundle ? { corporate: { mode: 'auto' as const, bundle: corporateBundle } } : {}),
         ...(workspaceConfig ? { config: workspaceConfig } : apiKey ? {
           config: {
             jurisdictions,
@@ -189,6 +208,8 @@ export async function scanWorkspace(
       for (const [file, fileFindings] of byFile) {
         diagnostics.setFindings(vscode.Uri.file(file), fileFindings);
       }
+
+      if (corporate && corporateBundle) corporate.applyWorkspaceFindings(result.corporateFindings);
 
       const allFindings = Array.from(byFile.values()).flat();
       findingsProvider.setFindings(allFindings);

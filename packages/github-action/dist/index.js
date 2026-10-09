@@ -273709,7 +273709,1431 @@ function getModelExample(sdk) {
     return examples[sdk] ?? 'ai-model';
 }
 //# sourceMappingURL=suggestions.js.map
+// EXTERNAL MODULE: external "node:crypto"
+var external_node_crypto_ = __nccwpck_require__(7598);
+;// CONCATENATED MODULE: ../scanner/dist/corporate/canonical.js
+
+/**
+ * Canonical JSON for signed and hashed CPG payloads: keys sorted at every
+ * depth, no whitespace. Byte-identical to the engine's `canonicalJSON`
+ * (engine/src/core/policy-compiler.ts); an engine test pins the parity, so a
+ * hash or signature the server computes verifies in the client.
+ */
+function canonicalJson(value) {
+    return JSON.stringify(sortKeysDeep(value));
+}
+function sortKeysDeep(value) {
+    if (Array.isArray(value))
+        return value.map(sortKeysDeep);
+    if (value !== null && typeof value === 'object') {
+        const sorted = {};
+        for (const key of Object.keys(value).sort()) {
+            sorted[key] = sortKeysDeep(value[key]);
+        }
+        return sorted;
+    }
+    return value;
+}
+function sha256Hex(text) {
+    return (0,external_node_crypto_.createHash)('sha256').update(text, 'utf8').digest('hex');
+}
+//# sourceMappingURL=canonical.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/glob.js
+/**
+ * The one glob engine of Corporate Policy Governance (design spec §7.1),
+ * shared by team repository patterns, standing-exception patterns and the
+ * file scope of corporate rules. A glob compiles to an anchored RegExp.
+ *
+ * - `/` is the only separator; a glob containing `\` is rejected (inputs are
+ *   repo-relative POSIX paths; {@link toPosixPath} converts `\` first).
+ * - `*` matches a run of characters other than `/`; `?` exactly one.
+ * - `**` must be a whole segment and matches zero or more segments.
+ * - `{a,b}` alternation, not nested, at most 10 alternatives.
+ * - No character classes, no `!` negation, no extglobs, no leading `./` or `/`.
+ * - Paths are case-sensitive. Dotfiles match like any other name.
+ * - At most 200 characters per glob and 50 globs per list.
+ */
+const MAX_GLOB_LENGTH = 200;
+const MAX_GLOBS_PER_LIST = 50;
+const MAX_ALTERNATIVES = 10;
+class InvalidGlobError extends Error {
+    glob;
+    constructor(glob, reason) {
+        super(`Invalid glob "${glob}": ${reason}`);
+        this.glob = glob;
+        this.name = 'InvalidGlobError';
+    }
+}
+function escapeRe(ch) {
+    return /[.+^${}()|[\]\\]/.test(ch) ? `\\${ch}` : ch;
+}
+function segmentToRe(glob, seg) {
+    if (seg.length === 0)
+        throw new InvalidGlobError(glob, 'empty path segment');
+    if (seg.includes('**'))
+        throw new InvalidGlobError(glob, '** must be a whole segment');
+    let out = '';
+    for (const ch of seg) {
+        if (ch === '*')
+            out += '[^/]*';
+        else if (ch === '?')
+            out += '[^/]';
+        else
+            out += escapeRe(ch);
+    }
+    return out;
+}
+function alternativeToRe(glob, alt) {
+    const segs = alt.split('/');
+    let re = '';
+    let needSep = false;
+    for (let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        const last = i === segs.length - 1;
+        if (seg === '**') {
+            if (last) {
+                re += needSep ? '(?:/[^/]+)*' : '(?:[^/]+(?:/[^/]+)*)?';
+                needSep = true;
+            }
+            else {
+                re += needSep ? '(?:/[^/]+)*/' : '(?:[^/]+/)*';
+                needSep = false;
+            }
+            continue;
+        }
+        if (needSep)
+            re += '/';
+        re += segmentToRe(glob, seg);
+        needSep = true;
+    }
+    return re;
+}
+function expandBraces(glob) {
+    const open = glob.indexOf('{');
+    if (open === -1) {
+        if (glob.includes('}'))
+            throw new InvalidGlobError(glob, 'unbalanced }');
+        return [glob];
+    }
+    const close = glob.indexOf('}', open);
+    if (close === -1)
+        throw new InvalidGlobError(glob, 'unbalanced {');
+    const inner = glob.slice(open + 1, close);
+    if (inner.includes('{'))
+        throw new InvalidGlobError(glob, 'nested alternation is not supported');
+    const options = inner.split(',');
+    if (options.length < 2)
+        throw new InvalidGlobError(glob, 'alternation needs at least two options');
+    if (options.length > MAX_ALTERNATIVES)
+        throw new InvalidGlobError(glob, `at most ${MAX_ALTERNATIVES} alternatives`);
+    const prefix = glob.slice(0, open);
+    const rest = expandBraces(glob.slice(close + 1));
+    const out = [];
+    for (const o of options)
+        for (const r of rest)
+            out.push(prefix + o + r);
+    if (out.length > MAX_ALTERNATIVES * MAX_ALTERNATIVES)
+        throw new InvalidGlobError(glob, 'too many alternatives');
+    return out;
+}
+/** Compile a glob to an anchored RegExp, or throw InvalidGlobError. */
+function compileGlob(glob) {
+    if (typeof glob !== 'string' || glob.length === 0)
+        throw new InvalidGlobError(String(glob), 'empty');
+    if (glob.length > MAX_GLOB_LENGTH)
+        throw new InvalidGlobError(glob, `longer than ${MAX_GLOB_LENGTH} characters`);
+    if (glob.includes('\\'))
+        throw new InvalidGlobError(glob, 'backslashes are not allowed; use /');
+    if (glob.startsWith('./'))
+        throw new InvalidGlobError(glob, 'leading ./ is not allowed');
+    if (glob.startsWith('/'))
+        throw new InvalidGlobError(glob, 'leading / is not allowed');
+    if (glob.startsWith('!'))
+        throw new InvalidGlobError(glob, 'negation is not supported');
+    if (/[[\]]/.test(glob))
+        throw new InvalidGlobError(glob, 'character classes are not supported');
+    if (/[@!+]\(/.test(glob))
+        throw new InvalidGlobError(glob, 'extglobs are not supported');
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u001f]/.test(glob))
+        throw new InvalidGlobError(glob, 'control characters are not allowed');
+    const alts = expandBraces(glob).map((a) => alternativeToRe(glob, a));
+    return new RegExp(`^(?:${alts.join('|')})$`);
+}
+/** null when the glob compiles, otherwise the reason. */
+function glob_globError(glob) {
+    try {
+        compileGlob(glob);
+        return null;
+    }
+    catch (err) {
+        return err.message;
+    }
+}
+/** Validate a repository pattern (a lowercase glob). Returns null when valid, else the reason. */
+function repoPatternError(pattern) {
+    if (pattern !== pattern.toLowerCase())
+        return `Invalid glob "${pattern}": repository patterns must be lowercase`;
+    return glob_globError(pattern);
+}
+function globMatches(glob, value) {
+    const re = typeof glob === 'string' ? compileGlob(glob) : glob;
+    return re.test(value);
+}
+/** A compiled glob list: matches when any glob matches. Throws InvalidGlobError on the first bad glob. */
+function compileGlobList(globs) {
+    if (globs.length > MAX_GLOBS_PER_LIST)
+        throw new InvalidGlobError(globs[0] ?? '', `at most ${MAX_GLOBS_PER_LIST} globs per list`);
+    const res = globs.map(compileGlob);
+    return (value) => res.some((re) => re.test(value));
+}
+/** `\` → `/` (Windows paths), for matching repo-relative paths. */
+function glob_toPosixPath(path) {
+    return path.replace(/\\/g, '/');
+}
+//# sourceMappingURL=glob.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/regex-safety.js
+/**
+ * Regex safety for author-supplied `line_regex` patterns (design spec §8.4.3).
+ *
+ * Corporate rules run in every developer's editor and in CI, so a pattern
+ * that can backtrack catastrophically is a denial of service. JavaScript has
+ * no linear-time regex engine, so the defence is static and conservative:
+ *
+ * - at most 200 characters; flags '' or 'i' only;
+ * - no backreferences (`\1`–`\9`, `\k<…>`), no lookaround, no named groups;
+ * - star height at most 1: no quantifier on a group that itself contains a
+ *   quantifier or an alternation (`(a+)+`, `(a|aa)*`, `(\w+\s?)*`);
+ * - at most 10 quantifiers, at most 2 of them unbounded (`*`, `+`, `{n,}`),
+ *   and bounded repetitions of at most {@link MAX_BOUNDED_REPEAT};
+ * - the pattern must compile and must not match an empty line (it would
+ *   flag every line of every file).
+ *
+ * Matching is per line, and lines longer than {@link MAX_REGEX_LINE_LENGTH}
+ * characters are skipped and counted, never matched. There is no multi-line
+ * matching. A fuzz test runs every accepted pattern of the test corpus
+ * against random and adversarial 4,096-character lines.
+ */
+const MAX_REGEX_SOURCE_LENGTH = 200;
+const MAX_REGEX_LINE_LENGTH = 4096;
+const MAX_QUANTIFIERS = 10;
+const MAX_UNBOUNDED_QUANTIFIERS = 2;
+const MAX_BOUNDED_REPEAT = 100;
+const REGEX_FLAGS = (/* unused pure expression or super */ null && (['', 'i']));
+const BRACE_QUANTIFIER = /^\{(\d+)(,(\d*))?\}/;
+/** Check a pattern against the static safety rules. Never throws. */
+function regex_safety_checkRegexSafety(source, flags) {
+    const reasons = [];
+    if (typeof source !== 'string' || source.length === 0)
+        return { ok: false, reasons: ['the pattern is empty'] };
+    if (source.length > MAX_REGEX_SOURCE_LENGTH)
+        reasons.push(`the pattern is longer than ${MAX_REGEX_SOURCE_LENGTH} characters`);
+    if (typeof flags !== 'string' || !REGEX_FLAGS.includes(flags))
+        reasons.push("flags must be '' or 'i'");
+    const stack = [{ hasQuantifier: false, hasAlternation: false }];
+    let last = null;
+    let quantifiers = 0;
+    let unbounded = 0;
+    const add = (r) => { if (!reasons.includes(r))
+        reasons.push(r); };
+    let i = 0;
+    while (i < source.length) {
+        const ch = source[i];
+        if (ch === '\\') {
+            const next = source[i + 1] ?? '';
+            if (/[1-9]/.test(next))
+                add('backreferences are not allowed');
+            if (next === 'k' && source[i + 2] === '<')
+                add('named backreferences are not allowed');
+            last = { kind: 'simple' };
+            i += 2;
+            continue;
+        }
+        if (ch === '[') {
+            let j = i + 1;
+            if (source[j] === '^')
+                j++;
+            if (source[j] === ']')
+                j++; // a leading ] is literal
+            while (j < source.length && source[j] !== ']')
+                j += source[j] === '\\' ? 2 : 1;
+            if (j >= source.length)
+                add('unterminated character class');
+            last = { kind: 'simple' };
+            i = j + 1;
+            continue;
+        }
+        if (ch === '(') {
+            if (source[i + 1] === '?') {
+                const head = source.slice(i, i + 4);
+                if (head.startsWith('(?:')) {
+                    i += 3;
+                }
+                else {
+                    if (head.startsWith('(?=') || head.startsWith('(?!') || head.startsWith('(?<=') || head.startsWith('(?<!'))
+                        add('lookahead and lookbehind are not allowed');
+                    else if (head.startsWith('(?<'))
+                        add('named groups are not allowed; use (?: … )');
+                    else
+                        add('unsupported group syntax');
+                    i += 2;
+                }
+            }
+            else {
+                i += 1;
+            }
+            stack.push({ hasQuantifier: false, hasAlternation: false });
+            last = null;
+            continue;
+        }
+        if (ch === ')') {
+            if (stack.length === 1) {
+                add('unbalanced )');
+                i += 1;
+                continue;
+            }
+            const frame = stack.pop();
+            const parent = stack[stack.length - 1];
+            // A quantifier anywhere inside makes the enclosing group "quantified" too.
+            if (frame.hasQuantifier)
+                parent.hasQuantifier = true;
+            last = { kind: 'group', risky: frame.hasQuantifier || frame.hasAlternation };
+            i += 1;
+            continue;
+        }
+        if (ch === '|') {
+            stack[stack.length - 1].hasAlternation = true;
+            last = null;
+            i += 1;
+            continue;
+        }
+        let qLen = 0;
+        let isUnbounded = false;
+        if (ch === '*' || ch === '+') {
+            qLen = 1;
+            isUnbounded = true;
+        }
+        else if (ch === '?') {
+            qLen = 1;
+        }
+        else if (ch === '{') {
+            const m = BRACE_QUANTIFIER.exec(source.slice(i));
+            if (m) {
+                qLen = m[0].length;
+                const min = Number(m[1]);
+                const hasComma = m[2] !== undefined;
+                const max = hasComma ? (m[3] === '' ? null : Number(m[3])) : min;
+                if (max === null)
+                    isUnbounded = true;
+                else if (max > MAX_BOUNDED_REPEAT || min > MAX_BOUNDED_REPEAT)
+                    add(`bounded repetitions may not exceed {${MAX_BOUNDED_REPEAT}}`);
+            }
+        }
+        if (qLen > 0) {
+            if (last === null) {
+                add('a quantifier must follow something to repeat');
+            }
+            else {
+                quantifiers++;
+                if (isUnbounded)
+                    unbounded++;
+                if (last.kind === 'group' && last.risky)
+                    add('nested quantifiers (star height above 1) are not allowed, e.g. (a+)+ or (a|b)*');
+            }
+            stack[stack.length - 1].hasQuantifier = true;
+            i += qLen;
+            if (source[i] === '?')
+                i += 1; // lazy modifier
+            last = null; // a quantified atom cannot be quantified again
+            continue;
+        }
+        last = { kind: 'simple' };
+        i += 1;
+    }
+    if (stack.length > 1)
+        add('unbalanced (');
+    if (quantifiers > MAX_QUANTIFIERS)
+        add(`at most ${MAX_QUANTIFIERS} quantifiers are allowed`);
+    if (unbounded > MAX_UNBOUNDED_QUANTIFIERS)
+        add(`at most ${MAX_UNBOUNDED_QUANTIFIERS} unbounded quantifiers (*, +, {n,}) are allowed; use a bounded {m,n}`);
+    if (reasons.length === 0) {
+        let re = null;
+        try {
+            re = new RegExp(source, flags);
+        }
+        catch (err) {
+            add(`the pattern does not compile: ${err.message}`);
+        }
+        if (re && re.test(''))
+            add('the pattern matches an empty line, so it would flag every line');
+    }
+    return { ok: reasons.length === 0, reasons };
+}
+/** Compile a pattern that passed {@link checkRegexSafety}; throws with the reasons otherwise. */
+function compileSafeRegex(source, flags) {
+    const result = regex_safety_checkRegexSafety(source, flags);
+    if (!result.ok)
+        throw new Error(`Unsafe regex /${source}/${flags}: ${result.reasons.join('; ')}`);
+    return new RegExp(source, flags);
+}
+//# sourceMappingURL=regex-safety.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/vocab.js
+/**
+ * The closed vocabularies a corporate rule may use (design spec §8.4.1).
+ *
+ * Every term here is something a built-in detector emits deterministically.
+ * The compile prompt shows these lists to the LLM, the rule schema accepts
+ * nothing else, and vocab.test.ts fails if a detector starts emitting a
+ * capability or SDK name that is missing here (vocabulary drift).
+ */
+/**
+ * SDK families a rule can name. Detectors report SDKs under several spellings
+ * (the package name, the Python module, the Go module, the SDK family); every
+ * spelling maps to exactly one family through {@link canonicalSdkFamily}.
+ */
+const KNOWN_SDKS = [
+    'openai',
+    'anthropic',
+    'google-genai',
+    'cohere',
+    'aws-bedrock',
+    'huggingface',
+    'replicate',
+];
+/** Every SDK spelling a detector can emit → its family. */
+const SDK_ALIASES = {
+    // import-detector targets (package / module names)
+    openai: 'openai',
+    'com.openai': 'openai',
+    'openai-go': 'openai',
+    '@anthropic-ai/sdk': 'anthropic',
+    anthropic: 'anthropic',
+    'com.anthropic': 'anthropic',
+    'anthropic-sdk-go': 'anthropic',
+    '@google/generative-ai': 'google-genai',
+    'google.generativeai': 'google-genai',
+    '@aws-sdk/client-bedrock-runtime': 'aws-bedrock',
+    'boto3-bedrock': 'aws-bedrock',
+    'aws-bedrock': 'aws-bedrock',
+    '@huggingface/inference': 'huggingface',
+    huggingface_hub: 'huggingface',
+    replicate: 'replicate',
+    'cohere-ai': 'cohere',
+    cohere: 'cohere',
+    // sdk-usage-detector dynamic-call names (regex engine)
+    bedrock: 'aws-bedrock',
+    genai: 'google-genai',
+    generativeai: 'google-genai',
+};
+/** The family of a detector SDK name, or null when it is not a known AI SDK. */
+function canonicalSdkFamily(name) {
+    return Object.prototype.hasOwnProperty.call(SDK_ALIASES, name) ? SDK_ALIASES[name] : null;
+}
+/**
+ * Capabilities emitted by the behavioural detectors (sdk-usage, data-flow,
+ * PHI/PII, risk classifier, transparency). The import detector's capabilities
+ * are what an SDK *could* do, so the `capability` matcher does not use them
+ * (§8.4.2; use `sdk_import` to match imports).
+ */
+const EMITTED_CAPABILITIES = [
+    // sdk-usage-detector: narrowed per called method
+    'text_generation', 'embeddings', 'image_generation', 'speech_to_text', 'text_to_speech',
+    'content_moderation', 'model_finetuning', 'classification', 'rerank', 'processes_user_input',
+    // data-flow-detector
+    'returns_ai_to_user', 'logs_ai_output', 'stores_ai_output', 'sends_to_third_party',
+    // phi-pattern-detector
+    'contains_phi', 'handles_phi', 'contains_pii', 'handles_pii', 'contains_financial', 'handles_financial',
+    'phi_in_ai_call', 'pii_in_ai_call', 'logs_phi', 'logs_pii',
+    // risk-classifier (EU AI Act Annex III)
+    'high_risk_biometric', 'high_risk_critical_infra', 'high_risk_education', 'high_risk_employment',
+    'high_risk_essential_services', 'high_risk_law_enforcement', 'high_risk_migration', 'high_risk_justice',
+    'handles_biometric',
+    // transparency-detector (EU AI Act Article 50)
+    'ai_user_interaction', 'generates_ai_content', 'generates_synthetic_media', 'emotion_recognition',
+];
+const DATA_CATEGORIES = ['phi', 'pii', 'financial'];
+const DATA_LABELS = ['ssn', 'dob', 'email', 'phone', 'mrn', 'credit_card', 'phi_var', 'pii_var', 'fin_var'];
+const FLOW_SOURCES = ['user_input', 'db_read', 'fs_read', 'env_var'];
+const FLOW_SINKS = ['returns_to_user', 'logs_output', 'stores_output', 'third_party'];
+const LANGUAGES = ['typescript', 'javascript', 'python', 'java', 'go', 'other'];
+const TIERS = ['advisory', 'review-required', 'prohibited'];
+/** Policy keys: `corp.` + lowercase letters, digits, `.`, `_`, `-`; never `:` (it separates fingerprint parts). */
+const POLICY_KEY_RE = /^corp\.[a-z0-9][a-z0-9._-]{0,84}$/;
+//# sourceMappingURL=vocab.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/rule-schema.js
+
+
+
+
+/**
+ * The corporate rule schema (design spec §8.4.1). A compiled corporate
+ * policy is this JSON: data, not code. The deterministic matcher
+ * (matcher.ts) interprets it; nothing at scan time calls an LLM.
+ *
+ * The same schema validates the compile step's LLM output in the engine,
+ * the rules in the signed bundle, and the rules the scanner evaluates.
+ */
+const CORPORATE_RULE_SCHEMA_VERSION = 1;
+const rule_schema_glob = stringType().min(1).max(200);
+const safeRegexSchema = objectType({
+    source: stringType().min(1).max(MAX_REGEX_SOURCE_LENGTH),
+    flags: enumType(['', 'i']),
+    /** Match against the line with comments blanked out (detect/file-content.ts stripComments). */
+    ignoreComments: booleanType().default(true),
+}).strict();
+const methodName = stringType().regex(/^[A-Za-z_][A-Za-z0-9_.]{0,99}$/);
+const matcherSchema = discriminatedUnionType('kind', [
+    objectType({
+        kind: literalType('sdk_call'),
+        sdks: arrayType(enumType(KNOWN_SDKS)).min(1).max(20),
+        /** Method paths as the SDK-usage detector reports them, e.g. `chat.completions.create`. */
+        methods: arrayType(methodName).min(1).max(50).optional(),
+    }).strict(),
+    objectType({
+        kind: literalType('sdk_import'),
+        sdks: arrayType(enumType(KNOWN_SDKS)).min(1).max(20),
+    }).strict(),
+    objectType({
+        kind: literalType('capability'),
+        capabilities: arrayType(enumType(EMITTED_CAPABILITIES)).min(1).max(20),
+    }).strict(),
+    objectType({
+        kind: literalType('data_pattern'),
+        categories: arrayType(enumType(DATA_CATEGORIES)).min(1).max(3),
+        labels: arrayType(enumType(DATA_LABELS)).min(1).max(9).optional(),
+    }).strict(),
+    objectType({
+        kind: literalType('data_flow'),
+        sources: arrayType(enumType(FLOW_SOURCES)).min(1).max(4).optional(),
+        sinks: arrayType(enumType(FLOW_SINKS)).min(1).max(4).optional(),
+    }).strict(),
+    objectType({
+        kind: literalType('line_regex'),
+        pattern: safeRegexSchema,
+    }).strict(),
+]);
+const corporateRuleSchema = objectType({
+    schemaVersion: literalType(CORPORATE_RULE_SCHEMA_VERSION),
+    match: objectType({
+        /** Every matcher must hit; hits of all[0] are the anchors. */
+        all: arrayType(matcherSchema).min(1).max(4),
+        /** Companion hits must be within this many lines of the anchor; null = anywhere in the same file. */
+        withinLines: numberType().int().min(0).max(200).nullable().default(null),
+        /** An anchor is suppressed when any of these hits in the window (or the file). */
+        unless: arrayType(matcherSchema).max(4).default([]),
+        unlessScope: enumType(['window', 'file']).default('file'),
+    }).strict(),
+    files: objectType({
+        include: arrayType(rule_schema_glob).min(1).max(MAX_GLOBS_PER_LIST).default(['**/*']),
+        exclude: arrayType(rule_schema_glob).max(MAX_GLOBS_PER_LIST).default([]),
+        languages: arrayType(enumType(LANGUAGES)).min(1).max(LANGUAGES.length).optional(),
+    }).strict(),
+    snippet: objectType({
+        contextBefore: numberType().int().min(0).max(20).default(0),
+        contextAfter: numberType().int().min(0).max(20).default(0),
+    }).strict().default({}),
+    /** Shown to developers on every finding; plain text, no placeholders. */
+    message: stringType().min(10).max(300),
+}).strict();
+const PLACEHOLDER_RE = /\{\{|\}\}|\$\{|<%|%>|\{[A-Za-z_][A-Za-z0-9_]*\}/;
+function issuePath(path) {
+    return path.length === 0 ? 'rule' : `rule.${path.join('.')}`;
+}
+/**
+ * Deterministic validation of a corporate rule (compile pipeline step 5):
+ * the schema and closed vocabularies, regex safety, globs that compile,
+ * limits, and a message without template placeholders. Every reason is
+ * returned, not just the first. Never throws.
+ */
+function validateCorporateRule(input) {
+    const parsed = corporateRuleSchema.safeParse(input);
+    if (!parsed.success) {
+        return { ok: false, rule: null, reasons: parsed.error.issues.map((i) => `${issuePath(i.path)}: ${i.message}`) };
+    }
+    const rule = parsed.data;
+    const reasons = [];
+    const matchers = [
+        ...rule.match.all.map((m, i) => [`rule.match.all.${i}`, m]),
+        ...rule.match.unless.map((m, i) => [`rule.match.unless.${i}`, m]),
+    ];
+    for (const [path, m] of matchers) {
+        if (m.kind === 'line_regex') {
+            const safety = checkRegexSafety(m.pattern.source, m.pattern.flags);
+            for (const r of safety.reasons)
+                reasons.push(`${path}.pattern: ${r}`);
+        }
+        if (m.kind === 'data_flow' && (m.sources?.length ?? 0) + (m.sinks?.length ?? 0) === 0) {
+            reasons.push(`${path}: a data_flow matcher needs at least one source or sink`);
+        }
+        for (const list of ['sdks', 'capabilities', 'categories', 'labels', 'methods', 'sources', 'sinks']) {
+            const values = m[list];
+            if (Array.isArray(values) && new Set(values).size !== values.length)
+                reasons.push(`${path}.${list}: values must not repeat`);
+        }
+    }
+    if (rule.match.unlessScope === 'window' && rule.match.withinLines === null) {
+        reasons.push('rule.match.unlessScope: "window" needs match.withinLines (null means the whole file; use "file")');
+    }
+    if (rule.match.unless.length === 0 && rule.match.unlessScope === 'window') {
+        reasons.push('rule.match.unlessScope: "window" has no effect without match.unless');
+    }
+    for (const [path, list] of [['rule.files.include', rule.files.include], ['rule.files.exclude', rule.files.exclude]]) {
+        list.forEach((g, i) => {
+            const err = globError(g);
+            if (err)
+                reasons.push(`${path}.${i}: ${err}`);
+        });
+        if (new Set(list).size !== list.length)
+            reasons.push(`${path}: globs must not repeat`);
+    }
+    if (PLACEHOLDER_RE.test(rule.message))
+        reasons.push('rule.message: must be plain text without template placeholders');
+    if (/[\r\n]/.test(rule.message))
+        reasons.push('rule.message: must be a single line');
+    return reasons.length === 0 ? { ok: true, rule, reasons: [] } : { ok: false, rule: null, reasons };
+}
+//# sourceMappingURL=rule-schema.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/contracts.js
+
+
+
+
+/**
+ * Client contracts shared by the engine, the VS Code extension and the
+ * GitHub Action (design spec §8.6, §9.3). Phase 2 defines the bundle; the
+ * review-case and CI contracts are added by later phases.
+ *
+ * The signed payload builders live here too, so the server that signs and
+ * the client that verifies build byte-identical canonical JSON.
+ */
+const isoDate = stringType().datetime();
+const sha256 = stringType().regex(/^[0-9a-f]{64}$/);
+const bundlePolicySchema = objectType({
+    policyId: stringType().uuid(),
+    policyKey: stringType().regex(/^corp\.[a-z0-9][a-z0-9._-]{0,84}$/),
+    version: numberType().int().min(1),
+    title: stringType().min(3).max(120),
+    tier: enumType(TIERS),
+    /** In the order they were signed (sorted by id). */
+    owningBoards: arrayType(objectType({ id: stringType().uuid(), name: stringType() }).strict()).min(1),
+    /** Before this instant the policy is advisory everywhere (grace period). */
+    enforceFrom: isoDate,
+    activatedAt: isoDate,
+    rule: corporateRuleSchema,
+    ruleHash: sha256,
+    activationSignature: stringType().min(1),
+}).strict();
+const corporateBundleSchema = objectType({
+    kind: literalType('nomus.cpg-bundle.v1'),
+    /** cpg_org_settings.enabled; policies is [] when false. */
+    enabled: booleanType(),
+    orgId: stringType().uuid(),
+    generatedAt: isoDate,
+    /** sha256(canonicalJson({policies})) over the policies sorted by key, without activationSignature. */
+    bundleHash: sha256,
+    policies: arrayType(bundlePolicySchema),
+    minScannerVersion: literalType('1.2.0'),
+    /** Ed25519 over canonicalJson({kind, orgId, enabled, bundleHash, generatedAt}). */
+    signature: stringType().min(1),
+}).strict();
+const BUNDLE_KIND = 'nomus.cpg-bundle.v1';
+const POLICY_ACTIVATION_KIND = 'nomus.cpg-policy.v1';
+/** sha256 of a rule's canonical JSON (the `ruleHash` of a version). */
+function ruleHashOf(rule) {
+    return sha256Hex(canonicalJson(rule));
+}
+function byKey(a, b) {
+    return a.policyKey < b.policyKey ? -1 : a.policyKey > b.policyKey ? 1 : 0;
+}
+/** Policies in bundle order: sorted by policyKey (code-unit order, locale-independent). */
+function sortBundlePolicies(policies) {
+    return [...policies].sort(byKey);
+}
+/** The bundle hash: over the sorted policies without their activation signatures. */
+function bundleHashOf(policies) {
+    const content = sortBundlePolicies(policies).map(({ activationSignature: _sig, ...rest }) => rest);
+    return sha256Hex(canonicalJson({ policies: content }));
+}
+/** The canonical text the bundle signature covers. */
+function bundleSignedText(b) {
+    return canonicalJson({ kind: BUNDLE_KIND, orgId: b.orgId, enabled: b.enabled, bundleHash: b.bundleHash, generatedAt: b.generatedAt });
+}
+/** The activation payload of a bundle policy, as the server signed it (§8.5). */
+function policyActivationPayload(orgId, p) {
+    return {
+        kind: POLICY_ACTIVATION_KIND,
+        orgId,
+        policyId: p.policyId,
+        policyKey: p.policyKey,
+        version: p.version,
+        title: p.title,
+        tier: p.tier,
+        owningBoardIds: p.owningBoards.map((b) => b.id),
+        ruleHash: p.ruleHash,
+        enforceFrom: p.enforceFrom,
+        activatedAt: p.activatedAt,
+    };
+}
+//# sourceMappingURL=contracts.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/bundle-client.js
+
+
+
+
+/** A NomusApiError (same name, same fail-closed handling) that says why the bundle is unusable. */
+class CorporateBundleError extends NomusApiError {
+    failure;
+    constructor(failure, message, detail) {
+        super(message, detail);
+        this.failure = failure;
+    }
+}
+/** The failure behind an error thrown by this module; anything unexpected counts as `invalid`. */
+function bundleFailureOf(err) {
+    const f = err?.failure;
+    if (f && typeof f === 'object' && (f.kind === 'unreachable' || f.kind === 'invalid' || (f.kind === 'http' && typeof f.status === 'number')))
+        return f;
+    return { kind: 'invalid' };
+}
+const unreachable = (message, detail) => new CorporateBundleError({ kind: 'unreachable' }, message, detail);
+const invalid = (message, detail) => new CorporateBundleError({ kind: 'invalid' }, message, detail);
+function httpError(what, status, detail) {
+    const hint = status === 401 ? ': the API key was rejected (401)' : status === 403 ? ': the API key lacks the read:policies scope (403)' : '';
+    return new CorporateBundleError({ kind: 'http', status }, `${what} answered ${status}${hint}`, detail);
+}
+const DEFAULT_TIMEOUT_MS = 30_000;
+/** The instance public key (base64 SPKI DER) from /.well-known/nomus-keys. */
+async function fetchSigningKey(apiUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS) {
+    let res;
+    try {
+        res = await fetchImpl(`${apiUrl.replace(/\/+$/, '')}/.well-known/nomus-keys`, { signal: AbortSignal.timeout(timeoutMs) });
+    }
+    catch (err) {
+        throw unreachable('Could not reach the Nomus signing-key endpoint', err);
+    }
+    if (!res.ok)
+        throw httpError('The Nomus signing-key endpoint', res.status, res.status);
+    let body;
+    try {
+        body = await res.json();
+    }
+    catch (err) {
+        throw invalid('The Nomus signing-key endpoint returned invalid JSON', err);
+    }
+    const key = body?.keys?.[0]?.spki;
+    if (typeof key !== 'string' || key.length === 0)
+        throw invalid('The Nomus signing-key endpoint returned no key', body);
+    return key;
+}
+function verifyEd25519(text, signatureB64, spkiB64) {
+    try {
+        const key = (0,external_node_crypto_.createPublicKey)({ key: Buffer.from(spkiB64, 'base64'), format: 'der', type: 'spki' });
+        return (0,external_node_crypto_.verify)(null, Buffer.from(text, 'utf8'), key, Buffer.from(signatureB64, 'base64'));
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Verify a bundle offline against the instance public key: the contract,
+ * the bundle signature, the recomputed bundle hash, every rule hash and
+ * every activation signature. Throws NomusApiError on the first failure.
+ */
+function verifyCorporateBundle(raw, spkiB64) {
+    const parsed = corporateBundleSchema.safeParse(raw);
+    if (!parsed.success)
+        throw invalid('The corporate policy bundle does not match the contract', parsed.error.issues);
+    const bundle = parsed.data;
+    if (!verifyEd25519(bundleSignedText(bundle), bundle.signature, spkiB64)) {
+        throw invalid('The corporate policy bundle signature does not verify');
+    }
+    if (bundleHashOf(bundle.policies) !== bundle.bundleHash) {
+        throw invalid('The corporate policy bundle hash does not match its policies');
+    }
+    if (!bundle.enabled && bundle.policies.length > 0) {
+        throw invalid('A disabled corporate policy bundle must not carry policies');
+    }
+    const keys = new Set();
+    for (const p of bundle.policies) {
+        if (keys.has(p.policyKey))
+            throw invalid(`The corporate policy bundle lists ${p.policyKey} twice`);
+        keys.add(p.policyKey);
+        if (ruleHashOf(p.rule) !== p.ruleHash)
+            throw invalid(`The rule of ${p.policyKey} v${p.version} does not match its hash`);
+        const payload = canonicalJson(policyActivationPayload(bundle.orgId, p));
+        if (!verifyEd25519(payload, p.activationSignature, spkiB64)) {
+            throw invalid(`The activation signature of ${p.policyKey} v${p.version} does not verify`);
+        }
+    }
+    return bundle;
+}
+/** Fetch `/api/v1/cpg/bundle` and verify it (see the module comment for the fail-closed rules). */
+async function fetchCorporateBundle(opts) {
+    const fetchImpl = opts.fetchImpl ?? fetch;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const base = opts.apiUrl.replace(/\/+$/, '');
+    const headers = { Authorization: `Bearer ${opts.apiKey}`, Accept: 'application/json' };
+    if (opts.cached)
+        headers['If-None-Match'] = opts.cached.etag;
+    let res;
+    try {
+        res = await fetchImpl(`${base}/api/v1/cpg/bundle`, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    }
+    catch (err) {
+        throw unreachable('Could not reach the Nomus corporate policy bundle endpoint', err);
+    }
+    if (res.status === 404)
+        return { available: false };
+    const spki = await fetchSigningKey(base, fetchImpl, timeoutMs);
+    if (res.status === 304 && opts.cached) {
+        return { available: true, bundle: verifyCorporateBundle(opts.cached.bundle, spki), etag: opts.cached.etag, notModified: true, publicKeySpki: spki };
+    }
+    if (res.status !== 200) {
+        let detail = res.status;
+        try {
+            detail = await res.json();
+        }
+        catch { /* keep the status */ }
+        throw httpError('The Nomus corporate policy bundle endpoint', res.status, detail);
+    }
+    let body;
+    try {
+        body = await res.json();
+    }
+    catch (err) {
+        throw invalid('The Nomus corporate policy bundle is not valid JSON', err);
+    }
+    const bundle = verifyCorporateBundle(body, spki);
+    return { available: true, bundle, etag: res.headers.get('etag'), notModified: false, publicKeySpki: spki };
+}
+//# sourceMappingURL=bundle-client.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/languages.js
+/**
+ * File language for corporate rule scoping (`files.languages`) and for the
+ * `language` of a finding. Decided by extension only, so it is deterministic
+ * and identical in the CLI, the editor and CI.
+ */
+const EXTENSIONS = [
+    [/\.(ts|tsx|mts|cts)$/i, 'typescript'],
+    [/\.(js|jsx|mjs|cjs)$/i, 'javascript'],
+    [/\.(py|pyi)$/i, 'python'],
+    [/\.java$/i, 'java'],
+    [/\.go$/i, 'go'],
+];
+function languageOf(path) {
+    for (const [re, lang] of EXTENSIONS)
+        if (re.test(path))
+            return lang;
+    return 'other';
+}
+//# sourceMappingURL=languages.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/fingerprint.js
+
+/**
+ * The corporate finding fingerprint (design spec §6). This is the only
+ * implementation: the engine, the VS Code extension and the GitHub Action
+ * all import it, so an approval recorded by the server matches the finding
+ * the editor and CI compute.
+ *
+ *   fingerprint = sha256(normalizeSnippet(snippet)) + ':' + policyKey + ':' + policyVersion
+ *
+ * The file path and line numbers are deliberately not part of it (owner
+ * decision D10): moving code does not re-flag it, editing it does.
+ */
+/** The largest snippet range, in lines; longer ranges are truncated and flagged. */
+const MAX_SNIPPET_LINES = 400;
+/**
+ * Exactly three operations (§6.2): CRLF and lone CR become LF; trailing
+ * whitespace is stripped from every line; runs of blank lines collapse to
+ * one. Comments, indentation, case and Unicode form are left alone, so any
+ * semantic edit changes the hash.
+ */
+function normalizeSnippet(s) {
+    const lines = s.replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((l) => l.trimEnd());
+    const out = [];
+    for (const l of lines) {
+        if (l === '' && out.length > 0 && out[out.length - 1] === '')
+            continue;
+        out.push(l);
+    }
+    return out.join('\n');
+}
+/** sha256 of the UTF-8 bytes of the normalized snippet, lowercase hex. */
+function snippetHash(snippet) {
+    return (0,external_node_crypto_.createHash)('sha256').update(normalizeSnippet(snippet), 'utf8').digest('hex');
+}
+function fingerprintOf(snippet, policyKey, policyVersion) {
+    if (policyKey.includes(':'))
+        throw new Error(`policyKey may not contain ':' (${policyKey})`);
+    if (!Number.isInteger(policyVersion) || policyVersion < 1)
+        throw new Error(`policyVersion must be a positive integer (${policyVersion})`);
+    return `${snippetHash(snippet)}:${policyKey}:${policyVersion}`;
+}
+const FINGERPRINT_RE = /^[0-9a-f]{64}:corp\.[a-z0-9][a-z0-9._-]{0,84}:[1-9][0-9]{0,6}$/;
+/** Split a fingerprint on its first and last ':' (§6.3). Returns null when malformed. */
+function parseFingerprint(fp) {
+    if (!FINGERPRINT_RE.test(fp))
+        return null;
+    const first = fp.indexOf(':');
+    const last = fp.lastIndexOf(':');
+    return { snippetHash: fp.slice(0, first), policyKey: fp.slice(first + 1, last), policyVersion: Number(fp.slice(last + 1)) };
+}
+/** Drop one leading U+FEFF (§6.1): `readFileSync` keeps a BOM that VS Code's `getText()` never has. */
+function stripBom(content) {
+    return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+}
+/** Split file content into lines on CRLF, CR or LF (§6.1); line N is element N-1. */
+function splitLines(content) {
+    return content.split(/\r\n|\r|\n/);
+}
+/**
+ * The snippet of a matched range (§6.1): widen by the context lines, clamp
+ * to the file, cap at {@link MAX_SNIPPET_LINES} lines. `lines` comes from
+ * {@link splitLines} of BOM-stripped content.
+ */
+function extractSnippet(lines, start, end, contextBefore = 0, contextAfter = 0) {
+    const total = Math.max(lines.length, 1);
+    let s = Math.max(1, Math.min(start, end) - contextBefore);
+    let e = Math.min(total, Math.max(start, end) + contextAfter);
+    if (s > total)
+        s = total;
+    if (e < s)
+        e = s;
+    let truncated = false;
+    if (e - s + 1 > MAX_SNIPPET_LINES) {
+        e = s + MAX_SNIPPET_LINES - 1;
+        truncated = true;
+    }
+    return { startLine: s, endLine: e, snippet: lines.slice(s - 1, e).join('\n'), truncated };
+}
+//# sourceMappingURL=fingerprint.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/matcher.js
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * The deterministic corporate matcher (design spec §8.2, §8.4.2).
+ *
+ * Pure: the same files and rules always give the same findings. It reads no
+ * clock, makes no network call and never calls an LLM; the detectors it runs
+ * are the scanner's own, on in-memory content. The only inputs are the file
+ * contents (keyed by repo-relative path) and the rules.
+ *
+ * Corporate rules ignore the repository's `.nomus.yml` ignore list and
+ * detector toggles (decision D14): a developer must not be able to hide a
+ * violation by editing a file they own. The only fixed exclusions are
+ * `.git` and `node_modules` directories, files over 2 MB and binary files.
+ */
+const MAX_CORPORATE_FILE_BYTES = 2 * 1024 * 1024;
+const BINARY_SNIFF_CHARS = 8192;
+/** Detectors whose signals a matcher kind reads. `line_regex` needs none. */
+const DETECTORS_FOR = {
+    sdk_call: ['sdk-usage-detector'],
+    sdk_import: ['import-detector'],
+    // Behavioural detectors only: the import detector's capabilities are what an
+    // SDK could do, not what the code does (use sdk_import for imports).
+    capability: ['sdk-usage-detector', 'phi-pattern-detector', 'risk-classifier', 'transparency-detector', 'data-flow-detector'],
+    data_pattern: ['phi-pattern-detector'],
+    data_flow: ['data-flow-detector'],
+    line_regex: [],
+};
+function makeDetector(name) {
+    switch (name) {
+        case 'import-detector': return new ImportDetector();
+        case 'sdk-usage-detector': return new SdkUsageDetector();
+        case 'phi-pattern-detector': return new PhiPatternDetector();
+        case 'risk-classifier': return new RiskClassifier();
+        case 'transparency-detector': return new TransparencyDetector();
+        case 'data-flow-detector': return new DataFlowDetector();
+    }
+}
+/** Normalize a path to repo-relative POSIX form; null when it escapes the repository. */
+function matcher_toRepoRelative(path) {
+    const p = glob_toPosixPath(path).replace(/^\.\/+/, '');
+    if (p.length === 0 || p.startsWith('/') || /^[a-z]:/i.test(p))
+        return null;
+    if (p.split('/').some((seg) => seg === '..' || seg === ''))
+        return null;
+    return p;
+}
+function fixedExclusion(path, content) {
+    if (path.split('/').some((seg) => seg === '.git' || seg === 'node_modules'))
+        return 'excluded_directory';
+    if (Buffer.byteLength(content, 'utf8') > MAX_CORPORATE_FILE_BYTES)
+        return 'too_large';
+    if (content.slice(0, BINARY_SNIFF_CHARS).includes('\u0000'))
+        return 'binary';
+    return null;
+}
+function prepare(p) {
+    const include = compileGlobList(p.rule.files.include);
+    const exclude = compileGlobList(p.rule.files.exclude);
+    const languages = p.rule.files.languages ? new Set(p.rule.files.languages) : null;
+    const regexes = new Map();
+    for (const m of [...p.rule.match.all, ...p.rule.match.unless]) {
+        if (m.kind === 'line_regex')
+            regexes.set(m, new RegExp(m.pattern.source, m.pattern.flags));
+    }
+    return {
+        input: p,
+        inScope: (path, language) => include(path) && !exclude(path) && (!languages || languages.has(language)),
+        regexes,
+    };
+}
+function signalsOf(file, names) {
+    const out = [];
+    for (const n of names)
+        out.push(...(file.signals.get(n) ?? []));
+    return out;
+}
+function metaOf(s) {
+    return (s.metadata ?? {});
+}
+function hitsFor(m, file, regex, counters) {
+    const at = (s) => {
+        const endLine = metaOf(s).endLine;
+        return { line: s.line, endLine: typeof endLine === 'number' && endLine >= s.line ? endLine : s.line };
+    };
+    switch (m.kind) {
+        case 'sdk_call':
+            return signalsOf(file, ['sdk-usage-detector']).filter((s) => {
+                const meta = metaOf(s);
+                const family = typeof meta.sdk === 'string' ? canonicalSdkFamily(meta.sdk) : null;
+                if (!family || !m.sdks.includes(family))
+                    return false;
+                const method = typeof meta.method === 'string' ? meta.method : null;
+                // Dynamic calls (sdk[name]()) have no method: they match only when no methods are listed.
+                if (m.methods)
+                    return method !== null && m.methods.includes(method);
+                return true;
+            }).map(at);
+        case 'sdk_import':
+            return signalsOf(file, ['import-detector']).filter((s) => {
+                const family = canonicalSdkFamily(s.target);
+                return family !== null && m.sdks.includes(family);
+            }).map(at);
+        case 'capability': {
+            const wanted = new Set(m.capabilities);
+            return signalsOf(file, DETECTORS_FOR.capability).filter((s) => s.capabilities.some((c) => wanted.has(c))).map(at);
+        }
+        case 'data_pattern':
+            return signalsOf(file, ['phi-pattern-detector']).filter((s) => {
+                const category = metaOf(s).category;
+                if (typeof category !== 'string' || !m.categories.includes(category))
+                    return false;
+                return !m.labels || m.labels.includes(s.target);
+            }).map(at);
+        case 'data_flow':
+            return signalsOf(file, ['data-flow-detector']).filter((s) => {
+                const meta = metaOf(s);
+                if (m.sources && !(typeof meta.source === 'string' && m.sources.includes(meta.source)))
+                    return false;
+                if (m.sinks && !(typeof meta.sink === 'string' && m.sinks.includes(meta.sink)))
+                    return false;
+                return true;
+            }).map(at);
+        case 'line_regex': {
+            if (!regex)
+                return [];
+            let lines = file.lines;
+            if (m.pattern.ignoreComments) {
+                file.stripped ??= splitLines(stripComments(file.path, file.text));
+                lines = file.stripped;
+            }
+            const hits = [];
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.length > MAX_REGEX_LINE_LENGTH) {
+                    counters.longLines++;
+                    continue;
+                }
+                regex.lastIndex = 0;
+                if (regex.test(line))
+                    hits.push({ line: i + 1, endLine: i + 1 });
+            }
+            return hits;
+        }
+    }
+}
+/** The companion hit nearest the anchor (ties: the earlier line), or null. */
+function nearest(hits, anchor, within) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const h of hits) {
+        const d = Math.abs(h.line - anchor.line);
+        if (within !== null && d > within)
+            continue;
+        if (d < bestDist || (d === bestDist && best !== null && h.line < best.line)) {
+            best = h;
+            bestDist = d;
+        }
+    }
+    return best;
+}
+function evaluateRule(rule, file, counters) {
+    const { policyKey, version, rule: r } = rule.input;
+    const within = r.match.withinLines;
+    const hitCache = new Map();
+    const hits = (m) => {
+        let h = hitCache.get(m);
+        if (!h) {
+            h = hitsFor(m, file, rule.regexes.get(m), counters);
+            hitCache.set(m, h);
+        }
+        return h;
+    };
+    const [first, ...companions] = r.match.all;
+    const out = new Map();
+    for (const anchor of hits(first)) {
+        let start = anchor.line;
+        let end = anchor.endLine;
+        let ok = true;
+        for (const m of companions) {
+            const c = nearest(hits(m), anchor, within);
+            if (!c) {
+                ok = false;
+                break;
+            }
+            start = Math.min(start, c.line);
+            end = Math.max(end, c.endLine);
+        }
+        if (!ok)
+            continue;
+        const suppressed = r.match.unless.some((m) => {
+            const scopeWithin = r.match.unlessScope === 'window' ? within : null;
+            return nearest(hits(m), anchor, scopeWithin) !== null;
+        });
+        if (suppressed)
+            continue;
+        const range = extractSnippet(file.lines, start, end, r.snippet.contextBefore, r.snippet.contextAfter);
+        const key = `${range.startLine}:${range.endLine}`;
+        if (out.has(key))
+            continue;
+        const normalized = normalizeSnippet(range.snippet);
+        out.set(key, {
+            policyKey,
+            policyVersion: version,
+            filePath: file.path,
+            language: file.language,
+            startLine: range.startLine,
+            endLine: range.endLine,
+            anchorLine: anchor.line,
+            matchedBy: first.kind,
+            snippet: normalized,
+            snippetHash: snippetHash(normalized),
+            fingerprint: fingerprintOf(normalized, policyKey, version),
+            truncated: range.truncated,
+            message: r.message,
+        });
+    }
+    return [...out.values()];
+}
+function compareFindings(a, b) {
+    if (a.filePath !== b.filePath)
+        return a.filePath < b.filePath ? -1 : 1;
+    if (a.startLine !== b.startLine)
+        return a.startLine - b.startLine;
+    if (a.policyKey !== b.policyKey)
+        return a.policyKey < b.policyKey ? -1 : 1;
+    return a.endLine - b.endLine;
+}
+/**
+ * Evaluate corporate rules over in-memory files (repo-relative path → UTF-8
+ * content). One finding per (policyKey, file, startLine, endLine), sorted by
+ * (file, startLine, policyKey).
+ */
+async function evaluateCorporateRules(files, policies) {
+    const prepared = policies.map(prepare);
+    const skippedFiles = [];
+    const counters = { longLines: 0 };
+    const scoped = [];
+    for (const [rawPath, rawContent] of files) {
+        const path = matcher_toRepoRelative(rawPath);
+        if (path === null) {
+            skippedFiles.push({ filePath: rawPath, reason: 'invalid_path' });
+            continue;
+        }
+        const excluded = fixedExclusion(path, rawContent);
+        if (excluded) {
+            skippedFiles.push({ filePath: path, reason: excluded });
+            continue;
+        }
+        const language = languageOf(path);
+        const rules = prepared.filter((p) => p.inScope(path, language));
+        if (rules.length === 0)
+            continue;
+        const text = stripBom(rawContent).replace(/\r\n?/g, '\n');
+        scoped.push({ file: { path, language, text, lines: splitLines(text), signals: new Map() }, rules });
+    }
+    // Run each needed detector once over the files whose rules need it.
+    const needed = new Map();
+    for (const { file, rules } of scoped) {
+        const names = new Set();
+        for (const r of rules) {
+            for (const m of [...r.input.rule.match.all, ...r.input.rule.match.unless])
+                for (const n of DETECTORS_FOR[m.kind])
+                    names.add(n);
+        }
+        for (const n of names) {
+            const list = needed.get(n) ?? [];
+            list.push(file);
+            needed.set(n, list);
+        }
+    }
+    for (const [name, list] of needed) {
+        const byPath = new Map(list.map((f) => [f.path, f]));
+        const ctx = {
+            rootDir: '',
+            files: list.map((f) => f.path),
+            fileContents: new Map(list.map((f) => [f.path, f.text])),
+            config: { jurisdictions: [], ignore: [] },
+        };
+        for (const s of await makeDetector(name).detect(ctx)) {
+            const f = byPath.get(s.file);
+            if (!f)
+                continue;
+            const arr = f.signals.get(name) ?? [];
+            arr.push(s);
+            f.signals.set(name, arr);
+        }
+    }
+    const findings = [];
+    for (const { file, rules } of scoped)
+        for (const r of rules)
+            findings.push(...evaluateRule(r, file, counters));
+    findings.sort(compareFindings);
+    return { findings, scannedFileCount: scoped.length, skippedLongLines: counters.longLines, skippedFiles };
+}
+/**
+ * Evaluate one rule on one in-memory file (compile pipeline step 6, example
+ * verification). The fingerprints use `policyKey` / `version` as given.
+ */
+async function evaluateRuleOnText(rule, path, code, policyKey = 'corp.example', version = 1) {
+    return evaluateCorporateRules([[path, code]], [{ policyKey, version, rule }]);
+}
+//# sourceMappingURL=matcher.js.map
+;// CONCATENATED MODULE: ../scanner/dist/scan-corporate.js
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+
+
+
+
+
+/** Files are read in batches so a large repository is never held in memory at once. */
+const READ_BATCH = 500;
+/** The summary of a scan that did not use corporate policies. */
+function scan_corporate_corporateOff() {
+    return {
+        available: false, enabled: false, orgId: null, bundleHash: null,
+        policyCount: 0, scannedFileCount: 0, skippedLongLines: 0, skippedFileCount: 0,
+    };
+}
+/**
+ * The local status of a corporate finding before any review (Phase 3 has no
+ * decisions yet): `advisory` for advisory policies, `grace` until the
+ * policy's enforce-from instant, otherwise `needs_review`, which blocks.
+ */
+function corporateStatusOf(policy, now) {
+    if (policy.tier === 'advisory')
+        return { status: 'advisory', blocking: false };
+    if (now.getTime() < Date.parse(policy.enforceFrom))
+        return { status: 'grace', blocking: false };
+    return { status: 'needs_review', blocking: true };
+}
+/**
+ * Resolve the bundle a scan uses. `off`, or no API key: none. A bundle
+ * passed by the caller is used as is. Otherwise fetch and verify it; any
+ * failure throws NomusApiError (fail closed). An engine that predates CPG
+ * (404) gives `null`: no corporate policy can exist there.
+ */
+async function scan_corporate_resolveCorporateBundle(options, apiUrl, apiKey) {
+    if (!options || options.mode !== 'auto')
+        return null;
+    if (options.bundle)
+        return options.bundle;
+    if (!apiKey)
+        return null;
+    const res = await fetchCorporateBundle({ apiUrl, apiKey, fetchImpl: options.fetchImpl });
+    return res.available ? res.bundle : null;
+}
+function activePolicies(bundle) {
+    return bundle.enabled ? bundle.policies : [];
+}
+function summaryFor(bundle) {
+    return {
+        ...scan_corporate_corporateOff(),
+        available: true,
+        enabled: bundle.enabled,
+        orgId: bundle.orgId,
+        bundleHash: bundle.bundleHash,
+        policyCount: activePolicies(bundle).length,
+    };
+}
+function enrich(f, p, file, now) {
+    const { status, blocking } = corporateStatusOf(p, now);
+    return {
+        source: 'corporate',
+        file,
+        filePath: f.filePath,
+        language: f.language,
+        startLine: f.startLine,
+        endLine: f.endLine,
+        anchorLine: f.anchorLine,
+        matchedBy: f.matchedBy,
+        policyKey: f.policyKey,
+        policyVersion: f.policyVersion,
+        tier: p.tier,
+        status,
+        blocking,
+        enforceFrom: p.enforceFrom,
+        fingerprint: f.fingerprint,
+        snippetHash: f.snippetHash,
+        snippet: f.snippet,
+        truncated: f.truncated,
+        rule: {
+            policyId: p.policyId,
+            policyKey: p.policyKey,
+            version: p.version,
+            title: p.title,
+            tier: p.tier,
+            message: f.message,
+            owningBoards: p.owningBoards.map((b) => ({ id: b.id, name: b.name })),
+            enforceFrom: p.enforceFrom,
+            activatedAt: p.activatedAt,
+            policyReference: `Corporate policy ${p.policyKey} v${p.version}: ${p.title}`,
+        },
+    };
+}
+async function evaluateBatches(batches, bundle, now, preSkipped = 0) {
+    const summary = summaryFor(bundle);
+    summary.skippedFileCount = preSkipped;
+    const policies = activePolicies(bundle);
+    if (policies.length === 0)
+        return { findings: [], summary };
+    const byKey = new Map(policies.map((p) => [p.policyKey, p]));
+    const inputs = policies.map((p) => ({ policyKey: p.policyKey, version: p.version, rule: p.rule }));
+    const findings = [];
+    for await (const batch of batches) {
+        const result = await evaluateCorporateRules(batch.files, inputs);
+        summary.scannedFileCount += result.scannedFileCount;
+        summary.skippedLongLines += result.skippedLongLines;
+        summary.skippedFileCount += result.skippedFiles.length;
+        for (const f of result.findings) {
+            const p = byKey.get(f.policyKey);
+            if (!p)
+                continue; // cannot happen: the matcher only reports the policies it was given
+            findings.push(enrich(f, p, batch.original.get(f.filePath) ?? f.filePath, now));
+        }
+    }
+    findings.sort((a, b) => (a.filePath !== b.filePath ? (a.filePath < b.filePath ? -1 : 1)
+        : a.startLine !== b.startLine ? a.startLine - b.startLine
+            : a.policyKey !== b.policyKey ? (a.policyKey < b.policyKey ? -1 : 1) : a.endLine - b.endLine));
+    return { findings, summary };
+}
+/** A predicate: is this repo-relative path in scope of at least one active policy? */
+function scopeOf(policies) {
+    const scopes = policies.map((p) => ({
+        include: compileGlobList(p.rule.files.include),
+        exclude: compileGlobList(p.rule.files.exclude),
+        languages: p.rule.files.languages ? new Set(p.rule.files.languages) : null,
+    }));
+    return (path) => scopes.some((s) => s.include(path) && !s.exclude(path) && (!s.languages || s.languages.has(languageOf(path))));
+}
+/**
+ * Evaluate the bundle's active policies over a repository on disk. Every
+ * file under `rootDir` is a candidate (dotfiles included, symlinks not
+ * followed) except `.git` and `node_modules`; only files in scope of some
+ * policy are read.
+ */
+async function runCorporateScanOnDisk(rootDir, bundle, options = {}) {
+    const now = options.now ?? new Date();
+    const root = (0,external_node_path_namespaceObject.resolve)(rootDir);
+    const policies = activePolicies(bundle);
+    if (policies.length === 0)
+        return evaluateBatches([], bundle, now);
+    const inScope = scopeOf(policies);
+    const paths = (await glob('**/*', {
+        cwd: root, dot: true, nodir: true, posix: true, follow: false,
+        ignore: ['**/.git/**', '**/node_modules/**'],
+    })).map((p) => glob_toPosixPath(p)).filter(inScope).sort();
+    let tooLarge = 0;
+    async function* batches() {
+        for (let i = 0; i < paths.length; i += READ_BATCH) {
+            const files = [];
+            const original = new Map();
+            for (const rel of paths.slice(i, i + READ_BATCH)) {
+                const abs = (0,external_node_path_namespaceObject.resolve)(root, rel);
+                // Skip a file over the size limit without reading it; the matcher would skip it anyway.
+                if ((await (0,promises_namespaceObject.stat)(abs)).size > MAX_CORPORATE_FILE_BYTES) {
+                    tooLarge++;
+                    continue;
+                }
+                files.push([rel, await (0,promises_namespaceObject.readFile)(abs, 'utf8')]);
+                original.set(rel, abs);
+            }
+            yield { files, original };
+        }
+    }
+    const outcome = await evaluateBatches(batches(), bundle, now);
+    outcome.summary.skippedFileCount += tooLarge;
+    return outcome;
+}
+/**
+ * Evaluate the bundle's active policies over in-memory files. Keys may be
+ * absolute (made relative to `rootDir`) or repository-relative; each
+ * finding's `file` is the key the caller used.
+ */
+async function scan_corporate_runCorporateScan(files, rootDir, bundle, options = {}) {
+    const root = resolve(rootDir);
+    const entries = [];
+    const original = new Map();
+    let outside = 0;
+    for (const [key, content] of files) {
+        const rel = toRepoRelative(isAbsolute(key) ? relative(root, key) : key);
+        if (rel === null) {
+            outside++;
+            continue;
+        }
+        entries.push([rel, content]);
+        original.set(rel, key);
+    }
+    return evaluateBatches([{ files: entries, original }], bundle, options.now ?? new Date(), outside);
+}
+/**
+ * The dashboard origin for an API URL, derived as the VS Code extension's
+ * "Open Dashboard" does: same origin, except the local development ports
+ * (3100 → 5173) and an `api.` host prefix. Undefined when it does not parse.
+ */
+function dashboardUrlFromApiUrl(apiUrl) {
+    try {
+        const u = new URL(apiUrl);
+        if (u.port === '3100')
+            u.port = '5173';
+        if (u.hostname.startsWith('api.'))
+            u.hostname = u.hostname.replace(/^api\./, '');
+        return u.origin;
+    }
+    catch {
+        return undefined;
+    }
+}
+//# sourceMappingURL=scan-corporate.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/scan.js
+
 
 
 
@@ -273809,6 +275233,13 @@ async function runScan(options) {
         config.nomus.api_url = options.apiUrl;
     if (options.jurisdictions)
         config.nomus.jurisdictions = options.jurisdictions;
+    // Corporate policies: the bundle's signatures are verified before any of
+    // its rules is used (a failure throws NomusApiError: fail closed), and the
+    // rules run on the repository's files, whatever .nomus.yml ignores (D14).
+    const bundle = await scan_corporate_resolveCorporateBundle(options.corporate, config.nomus.api_url, config.nomus.api_key);
+    const corporate = bundle
+        ? await runCorporateScanOnDisk(rootDir, bundle, { now: options.corporate?.now })
+        : { findings: [], summary: scan_corporate_corporateOff() };
     // Find source files
     const files = await glob(scan_SOURCE_PATTERNS, {
         cwd: rootDir,
@@ -273842,6 +275273,8 @@ async function runScan(options) {
             signals: [],
             status: 'pass',
             counts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+            corporateFindings: corporate.findings,
+            corporate: corporate.summary,
         };
     }
     // Merge signals from all detectors (priority + dedup, M2/M3)
@@ -273872,6 +275305,8 @@ async function runScan(options) {
         signals: allSignals,
         status: maxSeverity >= failThreshold ? 'fail' : 'pass',
         counts,
+        corporateFindings: corporate.findings,
+        corporate: corporate.summary,
     };
 }
 /**
@@ -273889,6 +275324,11 @@ async function runScanFromContents(files, options) {
         config.nomus.api_url = options.apiUrl;
     if (options.jurisdictions)
         config.nomus.jurisdictions = options.jurisdictions;
+    // Corporate policies, as in runScan, over the given files only.
+    const bundle = await resolveCorporateBundle(options.corporate, config.nomus.api_url, config.nomus.api_key);
+    const corporate = bundle
+        ? await runCorporateScan(files, rootDir, bundle, { now: options.corporate?.now })
+        : { findings: [], summary: corporateOff() };
     // Build detector registry
     const registry = buildRegistry(config, options.detectors);
     // Run all detectors with in-memory contents
@@ -273916,6 +275356,8 @@ async function runScanFromContents(files, options) {
             signals: [],
             status: 'pass',
             counts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+            corporateFindings: corporate.findings,
+            corporate: corporate.summary,
         };
     }
     // Same priority+dedup as runScan (M2/M3) — webhook path must not bypass it.
@@ -273941,9 +275383,13 @@ async function runScanFromContents(files, options) {
         signals: allSignals,
         status: maxSeverity >= failThreshold ? 'fail' : 'pass',
         counts,
+        corporateFindings: corporate.findings,
+        corporate: corporate.summary,
     };
 }
 // Re-export types for consumers
+
+
 
 
 // Re-export detector classes so engine + tests can import them directly

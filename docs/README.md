@@ -21,6 +21,7 @@
 
 - [Getting Started](user-guide/getting-started.md): install, first run, first scan
 - [MCP Server](user-guide/mcp-server.md): use Nomus tools from MCP clients such as Claude Code, VS Code and Cursor
+- [Corporate Policies in the CLI and VS Code](user-guide/corporate-policies.md): your organization's policy findings in the scanner CLI and the VS Code extension
 
 ### API reference
 

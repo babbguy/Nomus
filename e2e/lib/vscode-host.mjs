@@ -77,7 +77,8 @@ export function createHost({ settings, workspaceRoot }) {
       showInformationMessage: show('info'),
       showWarningMessage: show('warning'),
       showErrorMessage: show('error'),
-      showQuickPick: async (items) => { const a = state.quickPick.shift(); const list = await items; return a ? a(list) : undefined; },
+      // The queued answer gets the items and the options; with canPickMany it may return an array.
+      showQuickPick: async (items, options) => { const a = state.quickPick.shift(); const list = await items; return a ? a(list, options ?? {}) : undefined; },
       showInputBox: async () => state.inputBox.shift(),
       withProgress: async (_opts, task) => task({ report() {} }, { isCancellationRequested: false, onCancellationRequested: () => disposable() }),
       registerTreeDataProvider: (id, provider) => { state.trees.set(id, provider); return disposable(); },

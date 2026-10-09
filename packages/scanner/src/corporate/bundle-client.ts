@@ -18,7 +18,50 @@ import { canonicalJson } from './canonical.js';
 
 export type BundleFetchResult =
   | { available: false }
-  | { available: true; bundle: CorporateBundle; etag: string | null; notModified: boolean };
+  | {
+    available: true;
+    bundle: CorporateBundle;
+    etag: string | null;
+    notModified: boolean;
+    /** The instance key (base64 SPKI) the bundle was verified with, so a cached copy can be re-verified offline. */
+    publicKeySpki: string;
+  };
+
+/**
+ * Why fetching or verifying a bundle failed. `unreachable`: no answer;
+ * `http`: an unexpected status; `invalid`: an answer that does not match the
+ * contract or does not verify (never use it, and never use a cached copy in
+ * its place without re-verifying it).
+ */
+export type BundleFailure =
+  | { kind: 'unreachable' }
+  | { kind: 'http'; status: number }
+  | { kind: 'invalid' };
+
+/** A NomusApiError (same name, same fail-closed handling) that says why the bundle is unusable. */
+export class CorporateBundleError extends NomusApiError {
+  readonly failure: BundleFailure;
+
+  constructor(failure: BundleFailure, message: string, detail?: unknown) {
+    super(message, detail);
+    this.failure = failure;
+  }
+}
+
+/** The failure behind an error thrown by this module; anything unexpected counts as `invalid`. */
+export function bundleFailureOf(err: unknown): BundleFailure {
+  const f = (err as { failure?: BundleFailure } | null)?.failure;
+  if (f && typeof f === 'object' && (f.kind === 'unreachable' || f.kind === 'invalid' || (f.kind === 'http' && typeof f.status === 'number'))) return f;
+  return { kind: 'invalid' };
+}
+
+const unreachable = (message: string, detail?: unknown) => new CorporateBundleError({ kind: 'unreachable' }, message, detail);
+const invalid = (message: string, detail?: unknown) => new CorporateBundleError({ kind: 'invalid' }, message, detail);
+
+function httpError(what: string, status: number, detail?: unknown): CorporateBundleError {
+  const hint = status === 401 ? ': the API key was rejected (401)' : status === 403 ? ': the API key lacks the read:policies scope (403)' : '';
+  return new CorporateBundleError({ kind: 'http', status }, `${what} answered ${status}${hint}`, detail);
+}
 
 export interface FetchBundleOptions {
   apiUrl: string;
@@ -38,17 +81,17 @@ export async function fetchSigningKey(apiUrl: string, fetchImpl: typeof fetch = 
   try {
     res = await fetchImpl(`${apiUrl.replace(/\/+$/, '')}/.well-known/nomus-keys`, { signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
-    throw new NomusApiError('Could not reach the Nomus signing-key endpoint', err);
+    throw unreachable('Could not reach the Nomus signing-key endpoint', err);
   }
-  if (!res.ok) throw new NomusApiError(`The Nomus signing-key endpoint answered ${res.status}`, res.status);
+  if (!res.ok) throw httpError('The Nomus signing-key endpoint', res.status, res.status);
   let body: unknown;
   try {
     body = await res.json();
   } catch (err) {
-    throw new NomusApiError('The Nomus signing-key endpoint returned invalid JSON', err);
+    throw invalid('The Nomus signing-key endpoint returned invalid JSON', err);
   }
   const key = (body as { keys?: Array<{ spki?: unknown }> } | null)?.keys?.[0]?.spki;
-  if (typeof key !== 'string' || key.length === 0) throw new NomusApiError('The Nomus signing-key endpoint returned no key', body);
+  if (typeof key !== 'string' || key.length === 0) throw invalid('The Nomus signing-key endpoint returned no key', body);
   return key;
 }
 
@@ -68,25 +111,25 @@ function verifyEd25519(text: string, signatureB64: string, spkiB64: string): boo
  */
 export function verifyCorporateBundle(raw: unknown, spkiB64: string): CorporateBundle {
   const parsed = corporateBundleSchema.safeParse(raw);
-  if (!parsed.success) throw new NomusApiError('The corporate policy bundle does not match the contract', parsed.error.issues);
+  if (!parsed.success) throw invalid('The corporate policy bundle does not match the contract', parsed.error.issues);
   const bundle = parsed.data;
   if (!verifyEd25519(bundleSignedText(bundle), bundle.signature, spkiB64)) {
-    throw new NomusApiError('The corporate policy bundle signature does not verify');
+    throw invalid('The corporate policy bundle signature does not verify');
   }
   if (bundleHashOf(bundle.policies) !== bundle.bundleHash) {
-    throw new NomusApiError('The corporate policy bundle hash does not match its policies');
+    throw invalid('The corporate policy bundle hash does not match its policies');
   }
   if (!bundle.enabled && bundle.policies.length > 0) {
-    throw new NomusApiError('A disabled corporate policy bundle must not carry policies');
+    throw invalid('A disabled corporate policy bundle must not carry policies');
   }
   const keys = new Set<string>();
   for (const p of bundle.policies) {
-    if (keys.has(p.policyKey)) throw new NomusApiError(`The corporate policy bundle lists ${p.policyKey} twice`);
+    if (keys.has(p.policyKey)) throw invalid(`The corporate policy bundle lists ${p.policyKey} twice`);
     keys.add(p.policyKey);
-    if (ruleHashOf(p.rule) !== p.ruleHash) throw new NomusApiError(`The rule of ${p.policyKey} v${p.version} does not match its hash`);
+    if (ruleHashOf(p.rule) !== p.ruleHash) throw invalid(`The rule of ${p.policyKey} v${p.version} does not match its hash`);
     const payload = canonicalJson(policyActivationPayload(bundle.orgId, p));
     if (!verifyEd25519(payload, p.activationSignature, spkiB64)) {
-      throw new NomusApiError(`The activation signature of ${p.policyKey} v${p.version} does not verify`);
+      throw invalid(`The activation signature of ${p.policyKey} v${p.version} does not verify`);
     }
   }
   return bundle;
@@ -104,24 +147,24 @@ export async function fetchCorporateBundle(opts: FetchBundleOptions): Promise<Bu
   try {
     res = await fetchImpl(`${base}/api/v1/cpg/bundle`, { headers, signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
-    throw new NomusApiError('Could not reach the Nomus corporate policy bundle endpoint', err);
+    throw unreachable('Could not reach the Nomus corporate policy bundle endpoint', err);
   }
   if (res.status === 404) return { available: false };
   const spki = await fetchSigningKey(base, fetchImpl, timeoutMs);
   if (res.status === 304 && opts.cached) {
-    return { available: true, bundle: verifyCorporateBundle(opts.cached.bundle, spki), etag: opts.cached.etag, notModified: true };
+    return { available: true, bundle: verifyCorporateBundle(opts.cached.bundle, spki), etag: opts.cached.etag, notModified: true, publicKeySpki: spki };
   }
   if (res.status !== 200) {
     let detail: unknown = res.status;
     try { detail = await res.json(); } catch { /* keep the status */ }
-    throw new NomusApiError(`The Nomus corporate policy bundle endpoint answered ${res.status}`, detail);
+    throw httpError('The Nomus corporate policy bundle endpoint', res.status, detail);
   }
   let body: unknown;
   try {
     body = await res.json();
   } catch (err) {
-    throw new NomusApiError('The Nomus corporate policy bundle is not valid JSON', err);
+    throw invalid('The Nomus corporate policy bundle is not valid JSON', err);
   }
   const bundle = verifyCorporateBundle(body, spki);
-  return { available: true, bundle, etag: res.headers.get('etag'), notModified: false };
+  return { available: true, bundle, etag: res.headers.get('etag'), notModified: false, publicKeySpki: spki };
 }

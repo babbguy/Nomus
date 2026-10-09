@@ -5,14 +5,18 @@
 
 export const FAIL_ON_LEVELS = ['critical', 'high', 'medium', 'low'] as const;
 
-export const USAGE = `Usage: nomus-scan [path] [--json | --sarif] [--fail-on <critical|high|medium|low>]
+export const USAGE = `Usage: nomus-scan [path] [--json | --sarif] [--fail-on <critical|high|medium|low>] [--no-corporate]
 
   path           Directory to scan (default: current directory)
   --json         Print the report as JSON
   --sarif        Print the report as SARIF 2.1.0
   --fail-on X    Exit 1 when a finding is at or above severity X (default: critical)
+  --no-corporate Do not fetch or evaluate your organization's corporate policies
   --version      Print the version
   --help         Print this help
+
+Corporate policy findings (when your organization has them switched on) are
+reported in a separate section and never change the exit code.
 
 Exit codes: 0 pass, 1 findings at/above --fail-on, 2 usage or configuration error,
 3 Nomus API unreachable (status unknown, fails closed).`;
@@ -21,7 +25,7 @@ export type CliArgs =
   | { kind: 'help' }
   | { kind: 'version' }
   | { kind: 'error'; message: string }
-  | { kind: 'scan'; rootArg: string; failOn: string; outputFormat: 'console' | 'json' | 'sarif' };
+  | { kind: 'scan'; rootArg: string; failOn: string; outputFormat: 'console' | 'json' | 'sarif'; corporate: boolean };
 
 /**
  * Parse argv (without the node and script entries). Unknown flags are usage
@@ -31,6 +35,7 @@ export type CliArgs =
 export function parseCliArgs(args: string[]): CliArgs {
   let failOn = 'critical';
   let outputFormat: 'console' | 'json' | 'sarif' = 'console';
+  let corporate = true;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -44,7 +49,8 @@ export function parseCliArgs(args: string[]): CliArgs {
         return { kind: 'error', message: 'Use only one of --json and --sarif.' };
       }
       outputFormat = format;
-    } else if (a.startsWith('-')) return { kind: 'error', message: `Unknown option "${a}".` };
+    } else if (a === '--no-corporate') corporate = false;
+    else if (a.startsWith('-')) return { kind: 'error', message: `Unknown option "${a}".` };
     else positional.push(a);
   }
   if (!(FAIL_ON_LEVELS as readonly string[]).includes(failOn)) {
@@ -53,5 +59,5 @@ export function parseCliArgs(args: string[]): CliArgs {
   if (positional.length > 1) {
     return { kind: 'error', message: `Expected one path, got ${positional.length}: ${positional.join(' ')}.` };
   }
-  return { kind: 'scan', rootArg: positional[0] ?? '.', failOn, outputFormat };
+  return { kind: 'scan', rootArg: positional[0] ?? '.', failOn, outputFormat, corporate };
 }
