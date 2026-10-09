@@ -8,7 +8,7 @@ import { LANGUAGES, POLICY_KEY_RE, TIERS } from './vocab.js';
 /**
  * Client contracts shared by the engine, the VS Code extension and the
  * GitHub Action (design spec §8.6, §9.3): the bundle (Phase 2) and the
- * review-case contracts (Phase 4); the CI contracts arrive with Phase 6.
+ * review-case contracts (Phase 4) and the CI gate contracts (Phase 6).
  *
  * The signed payload builders live here too, so the server that signs and
  * the client that verifies build byte-identical canonical JSON.
@@ -178,6 +178,74 @@ export type FindingUpload = z.infer<typeof findingUploadSchema>;
 export type RequestReviewRequest = z.infer<typeof requestReviewRequestSchema>;
 export type FindingResolution = z.infer<typeof findingResolutionSchema>;
 export type CaseStatus = z.infer<typeof caseStatusSchema>;
+
+// ─── CI gate (§9.3, §11.2): evaluate a CI scan, close a case with its PR ──
+
+const sha = z.string().regex(/^[0-9a-f]{40}$/);
+const prNumber = z.number().int().positive();
+
+export const ciEvaluateRequestSchema = z.object({
+  repo,
+  branch,
+  prNumber: prNumber.nullable(),
+  headSha: sha,
+  eventName: z.string().max(50),
+  bundleHash: sha256,
+  scannedFileCount: z.number().int().min(0),
+  /** Send every finding's snippet: blocking tiers must (422 snippet_required), and a case revision stores them all. */
+  findings: z.array(findingUploadSchema).max(2000),
+}).strict();
+
+const ciCountsSchema = z.object({
+  blocking: z.number().int().min(0),
+  pending: z.number().int().min(0),
+  rejected: z.number().int().min(0),
+  approved: z.number().int().min(0),
+  excepted: z.number().int().min(0),
+  /** Advisory and grace-period findings. */
+  advisory: z.number().int().min(0),
+}).strict();
+
+export const CI_RUN_KIND = 'nomus.cpg-ci-run.v1';
+
+/** What the CI verdict signature covers: `signedPayload` is the canonical JSON of this object. */
+export const ciRunPayloadSchema = z.object({
+  kind: z.literal(CI_RUN_KIND),
+  runId: z.string().uuid(),
+  orgId: z.string().uuid(),
+  repo,
+  branch,
+  prNumber: prNumber.nullable(),
+  headSha: sha,
+  bundleHash: sha256,
+  verdict: z.enum(['pass', 'fail']),
+  counts: ciCountsSchema,
+  /** sha256 of the sorted uploaded fingerprints joined with newlines (§5.4). */
+  findingsDigest: sha256,
+  evaluatedAt: isoDate,
+}).strict();
+
+export const ciEvaluateResponseSchema = z.object({
+  runId: z.string().uuid(),
+  verdict: z.enum(['pass', 'fail']),
+  /** One line per blocking finding: `corp.x @ path:line: status`. */
+  reasons: z.array(z.string()),
+  caseId: z.string().uuid().nullable(),
+  caseUrl: z.string().url().nullable(),
+  findings: z.array(findingResolutionSchema.extend({ filePath: relPath, startLine: z.number().int(), endLine: z.number().int() }).strict()),
+  counts: ciCountsSchema,
+  evaluatedAt: isoDate,
+  signedPayload: z.string(),
+  signature: z.string(),
+}).strict();
+
+export const prClosedRequestSchema = z.object({ repo, branch, prNumber, merged: z.boolean(), mergeSha: sha.optional() }).strict();
+export const prClosedResponseSchema = z.object({ caseId: z.string().uuid().nullable(), closed: z.boolean() }).strict();
+
+export type CiEvaluateRequest = z.infer<typeof ciEvaluateRequestSchema>;
+export type CiEvaluateResponse = z.infer<typeof ciEvaluateResponseSchema>;
+export type CiRunPayload = z.infer<typeof ciRunPayloadSchema>;
+export type PrClosedRequest = z.infer<typeof prClosedRequestSchema>;
 
 /** The activation payload of a bundle policy, as the server signed it (§8.5). */
 export function policyActivationPayload(orgId: string, p: Omit<BundlePolicy, 'activationSignature' | 'rule'>): PolicyActivationPayload {

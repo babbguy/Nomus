@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bundleFailureOf, CorporateBundleError, fetchCorporateBundle, verifyCorporateBundle } from './bundle-client.js';
+import { bundleFailureOf, CorporateBundleError, fetchCorporateBundle, verifyCiVerdict, verifyCorporateBundle } from './bundle-client.js';
 import {
   bundleHashOf, bundleSignedText, policyActivationPayload, ruleHashOf, type BundlePolicy, type CorporateBundle,
 } from './contracts.js';
@@ -225,5 +225,29 @@ describe('scan-time purity (spec §8.3)', () => {
     for (const f of readdirSync(detectDir).filter((x) => x.endsWith('.ts') && !x.endsWith('.test.ts'))) {
       expect(NETWORK.test(readFileSync(join(detectDir, f), 'utf8')), f).toBe(false);
     }
+  });
+});
+
+describe('verifyCiVerdict', () => {
+  const scan = { orgId: ORG, repo: 'gate.example.org/team/app', branch: 'feat/x', prNumber: 4, headSha: 'a'.repeat(40), bundleHash: 'b'.repeat(64) };
+  const counts = { blocking: 1, pending: 0, rejected: 1, approved: 0, excepted: 0, advisory: 0 };
+  const runId = '2c4e6a8b-1d3f-4b5a-9c7e-0f1a2b3c4d5e';
+  const evaluatedAt = '2026-10-09T10:00:00.000Z';
+  function verdict(payloadOver: Record<string, unknown> = {}, over: Record<string, unknown> = {}) {
+    const signedPayload = canonicalJson({ kind: 'nomus.cpg-ci-run.v1', runId, ...scan, verdict: 'fail', counts, findingsDigest: 'c'.repeat(64), evaluatedAt, ...payloadOver });
+    return { runId, verdict: 'fail', reasons: ['corp.x @ a.ts:1: rejected'], caseId: null, caseUrl: null, findings: [], counts, evaluatedAt, signedPayload, signature: signText(signedPayload), ...over };
+  }
+
+  it('accepts a verdict signed for this scan', () => {
+    expect(verifyCiVerdict(verdict(), spki, scan).verdict).toBe('fail');
+  });
+
+  it('refuses another key, a response that differs from what was signed, and a verdict for another scan', () => {
+    expectApiError(() => verifyCiVerdict(verdict(), other, scan), /signature does not verify/);
+    expectApiError(() => verifyCiVerdict(verdict({}, { verdict: 'pass', counts: { ...counts, blocking: 0 } }), spki, scan), /\(verdict\)/);
+    expectApiError(() => verifyCiVerdict(verdict({ verdict: 'pass' }, { verdict: 'pass' }), spki, scan), /does not match the response$/); // a pass with a blocking finding
+    expectApiError(() => verifyCiVerdict(verdict(), spki, { ...scan, headSha: 'd'.repeat(40) }), /\(headSha\)/);
+    expectApiError(() => verifyCiVerdict(verdict({ prNumber: 5 }), spki, scan), /\(prNumber\)/);
+    expectApiError(() => verifyCiVerdict({ ...verdict(), extra: 1 }, spki, scan), /contract/);
   });
 });
