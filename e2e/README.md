@@ -105,9 +105,23 @@ Video Interview Act (820 ILCS 42), used for the manual-upload pipeline.
     once (both user-bound keys stay active; re-signing in replaces only that
     user's key) and a valid audit hash chain. `gate-health` never enables
     governance, so no earlier expectation changes.
-11. **Server logs.** No error-level log line, unhandled rejection, stack trace or
+11. **Corporate policy governance: dashboard** (`cpg-browser`). After
+    `cpg-rbac`, in Chromium, with the users' existing sessions (no extra
+    sign-ins): the Org Admin's `/governance`, `/governance/access` (must list
+    `dev@gate.example.org` and the other governance users), the role matrix,
+    `/governance/settings` (reviewer-context disclosure and switch state) and
+    `/governance/audit` (chain verified) render with no 4xx, console error or
+    broken value; the Org Admin creates a custom role and a team and grants the
+    role to dev@ per team and per repository through the Access page, and the
+    API confirms it; a Developer opening `/governance/access` or
+    `/governance/audit` is redirected to `/governance` with no 4xx and has no
+    Governance menu; the Auditor reads the audit page; and `/settings` hides
+    API-key management while the Developer role lacks `org.api_keys.manage`
+    (restored afterwards). Screenshots: `screenshots/cpg-*.png`. To debug it
+    alone use `--only=cpg-rbac,cpg-browser`.
+12. **Server logs.** No error-level log line, unhandled rejection, stack trace or
     5xx during the run (allow-list in `checks/server-logs.mjs`).
-12. **Resources.** Peak RSS of the engine stays under 512 MiB; idle CPU is
+13. **Resources.** Peak RSS of the engine stays under 512 MiB; idle CPU is
     recorded (and must stay under 20 % of one core).
 
 ## Output

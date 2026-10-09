@@ -8,7 +8,7 @@ This page covers the access model. For the endpoints, see the
 [Governance API reference](../api-reference/governance.md).
 
 > Corporate policy governance is **opt-in**. Until an Org Admin turns it on
-> (`PATCH /api/v1/cpg/settings {"enabled": true}`), an organization behaves exactly as it did in
+> (dashboard: **Governance, Settings**; API: `PATCH /api/v1/cpg/settings {"enabled": true}`), an organization behaves exactly as it did in
 > v1.1.0. Roles and permissions exist from the moment you upgrade, so you can set up access first
 > and enable governance later.
 
@@ -173,6 +173,47 @@ signing in to the same organization revoked the first developer's key.) Extensio
 before the upgrade are not bound to a user; they keep working for scanning, and governance
 endpoints refuse them with `403 user_identity_required`. Signing in again issues a user-bound key.
 
+## Managing access in the dashboard
+
+Org Admins manage access under **Governance, Access** (`/governance/access`). The page needs
+`org.members.read` plus at least one of `rbac.users.manage`, `rbac.roles.manage` and
+`rbac.teams.manage`; anyone else who opens it is sent to **Governance, Overview**, which names the
+missing permission. Each control appears only for the permission that allows it, and the engine
+checks every change again.
+
+**Users tab** (changes need `rbac.users.manage`)
+
+- **Invite user:** email, name and optional extra roles (granted org-wide; everyone also gets
+  Developer). The temporary password is shown once, with a copy button, and is also emailed when
+  email delivery is configured. The user must change it at first sign-in.
+- **Grant role:** pick a role and a scope: the whole organization, one team or one repository
+  (lowercase `owner/name`). A role that contains an org-only permission can only be granted to the
+  whole organization; the dialog says which permissions prevent a narrower scope. Granting a role
+  the user already holds with the same scope changes nothing.
+- **Revoke** (the × on a role): asks for a reason, which is recorded in the audit log. A revocation
+  cannot be undone; grant the role again instead. The last Org Admin grant cannot be revoked.
+- **Deactivate / Reactivate:** a deactivated user cannot sign in and their VS Code key stops
+  working; their grants are kept. You cannot deactivate yourself or the last Org Admin.
+- Each user shows **Active** or **Inactive**, and **Temporary password** until they have changed
+  it. Team- and repository-scoped grants show their scope next to the role name.
+
+**Roles tab** (changes need `rbac.roles.manage`)
+
+- A permission matrix shows every active role (columns) against every permission (rows, grouped
+  by area); permissions marked *org only* cannot be granted per team or repository.
+- **New role** creates a custom role (its key cannot be changed later). **Edit** changes a role's
+  name, description and permissions; the Org Admin role always keeps `rbac.users.manage` and
+  `rbac.roles.manage` (shown locked). **Archive** (custom roles only) removes the role's
+  permissions from everyone who holds it; it cannot be undone.
+
+**Teams tab** (changes need `rbac.teams.manage`)
+
+- Create a team with a key, a name and repository patterns, one per line (see
+  [Team repository patterns](#team-repository-patterns)). Edit the name and patterns, or archive a
+  team, which stops its grants from applying; **Restore** brings it back.
+
+Every change made on these tabs appears in **Governance, Audit log**.
+
 ## The audit log
 
 Every RBAC and settings change is written to the organization's governance audit log: role
@@ -185,6 +226,12 @@ any update or deletion of audit events.
 `chainValid`, the result of re-verifying the whole chain. `chainValid: false` means the log was
 altered outside Nomus, for example by editing the database file directly.
 
+In the dashboard, **Governance, Audit log** (`/governance/audit`, needs `audit.read`) shows the same
+events with a banner: **Chain verified**, or **Chain broken** in red when verification fails. You
+can filter by action and by UTC date range, load older events, and expand an event to see its
+details, actor id, exact UTC time and hashes. Users and roles are shown by name when you hold
+`org.members.read`, otherwise by id.
+
 ## Settings
 
 | Setting | Default | Meaning |
@@ -194,3 +241,10 @@ altered outside Nomus, for example by editing the database file directly.
 
 Read them with `GET /api/v1/cpg/settings` and change them with `PATCH /api/v1/cpg/settings`
 (Org Admin). Every change is audited.
+
+In the dashboard, **Governance, Settings** (`/governance/settings`) shows both settings to anyone
+with `policy.read` and lets Org Admins (`org.settings.manage`) change them. Turning governance on or
+off asks for confirmation. The reviewer-context switch sits next to a disclosure that states what
+leaves the instance: when it is on, snippets of flagged code are sent to the LLM provider configured
+for this instance. The page also says whether a provider is configured; without one, nothing is
+sent.

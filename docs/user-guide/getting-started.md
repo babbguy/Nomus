@@ -191,9 +191,23 @@ status, Scout feeds and review, the Modus integration, and the public Ledger.
   given set of capabilities and markets), Radar and Bill Tracker (pending legislation), Graph (the
   regulatory knowledge graph), AI-BOM, Posture, Templates.
 - **Scanner:** Scans (findings uploaded by scanners, by repository), Clause Map, Benchmarks.
+- **Governance:** shown when you hold a governance permission and corporate policy governance is
+  on, or you can turn it on (Org Admins). It lists only the pages your roles allow:
+  - **Overview** (`/governance`): whether governance is on, the governance pages you can open and
+    the permissions your roles give you. If you open a page you have no access to, you land here
+    with an explanation of the missing permission.
+  - **Access** (`/governance/access`, Org Admins): users and their roles, the role permission
+    matrix, and teams. See [Roles and permissions](../admin-guide/roles-and-permissions.md#managing-access-in-the-dashboard).
+  - **Audit log** (`/governance/audit`, Org Admins and Auditors): every access and settings change,
+    newest first, with the result of verifying the hash chain.
+  - **Settings** (`/governance/settings`): turn governance on and choose whether reviewer context
+    is generated. Everyone with `policy.read` can view it; only Org Admins can change it.
 - **Account:** Feedback, Audit Log export, Badge, Team, Profile, Settings (organization details, API
   keys, diagnostics), and the public Ledger. Team is a read-only list of your organization's
-  users; platform administrators add and change users under Admin, Users.
+  users; platform administrators add and change users under Admin, Users, and Org Admins manage
+  their organization's users and roles under Governance, Access. Settings shows API keys only to
+  users whose roles include `org.api_keys.manage`, and the organization details can be saved only
+  with `org.profile.update` (both are part of Developer unless an Org Admin removed them).
 
 Public pages that need no login: `/ledger`, `/transparency` and `/verify/:verifyId`.
 

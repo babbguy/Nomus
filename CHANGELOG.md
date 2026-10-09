@@ -15,6 +15,15 @@ All notable changes to this project are documented here. The format follows
   `/users`, `/grants/:id/revoke`, `/teams`, `/settings`, `/audit`) and
   `POST /api/v1/tenants/:id/org-admins` for platform administrators to restore an Org Admin. See
   `docs/admin-guide/roles-and-permissions.md` and `docs/api-reference/governance.md`.
+- Corporate policy governance, phase 1 (dashboard): a **Governance** sidebar group with
+  Overview (`/governance`: status, your permissions, why a page was not available), Access
+  (`/governance/access`: invite users, grant roles org-wide or per team or repository, revoke with
+  a reason, deactivate; a role permission matrix with a role editor; teams and their repository
+  patterns), Audit log (`/governance/audit`: filterable, with the hash-chain verification result)
+  and Settings (`/governance/settings`: turn governance on, and reviewer-context generation with a
+  disclosure that flagged snippets are sent to the configured LLM provider). Pages and menu items
+  follow the user's permissions from `GET /api/v1/cpg/me`, so they never call an endpoint the
+  user may not use. Every governance response is validated against its contract in the browser.
 - Numbered, checksummed database migrations for the new tables, with foreign keys, CHECK
   constraints and triggers that refuse updates and deletes on append-only tables. An edited
   migration stops the engine at startup instead of drifting.
@@ -23,6 +32,8 @@ All notable changes to this project are documented here. The format follows
 - On upgrade, each organization's earliest member becomes Org Admin and every member becomes
   Developer; platform administrators get no organization role. Developer keeps the v1.1.0 member
   abilities (`PATCH /org`, organization API keys) as grants an Org Admin can remove.
+- Settings shows API-key management only to users with `org.api_keys.manage`, and saves the
+  organization profile only with `org.profile.update`, instead of failing with 403.
 - `PATCH /api/v1/org`, `/api/v1/org/api-keys` and `GET /api/v1/org/members` now check the
   `org.profile.update`, `org.api_keys.manage` and `org.members.read` permissions. Members keep
   access through Developer, and platform administrator sessions keep v1.1.0 access.
