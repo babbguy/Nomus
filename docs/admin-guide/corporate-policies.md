@@ -78,8 +78,8 @@ The first version is created automatically with these defaults:
 | Setting | Default | Meaning |
 |---------|---------|---------|
 | `tiers.advisory` | `{ "blocking": false }` | Advisory findings never block and need no review (fixed) |
-| `tiers.review-required.snippet` / `.bulk` | 1 approval from any owning board; expiry up to 180 days, default 90 | Used by review cases (later release) |
-| `tiers.review-required.standing` | 1 approval, any owning board, an Exception Approver; up to 90 days, default 30 | Standing exceptions (later release) |
+| `tiers.review-required.snippet` / `.bulk` | 1 approval from any owning board; expiry up to 180 days, default 90 | Decisions on review-case findings |
+| `tiers.review-required.standing` | 1 approval, any owning board, an Exception Approver; up to 90 days, default 30 | [Standing exceptions](#standing-exceptions-and-revocation) |
 | `tiers.prohibited.snippet` | 2 approvals, one from each owning board; up to 90 days, default 30 | |
 | `tiers.prohibited.bulk` | not allowed | Fixed: bulk decisions are never allowed on prohibited policies |
 | `tiers.prohibited.standing` | 2 approvals, each owning board, an Exception Approver; up to 90 days, default 30 | |
@@ -256,6 +256,33 @@ describes it. Points for admins:
   it off in Governance > Settings.
 - **Closed cases** cannot change. The case page verifies the signed closure record on every load
   and shows **Signature does not verify** if the stored history no longer matches it.
+
+## Standing exceptions and revocation
+
+A standing exception lets code that matches a pattern pass without a decision per finding, for
+example a legacy directory that is being retired. Anyone with `exception.propose` (Case Reviewers
+and Exception Approvers) proposes one with `POST /api/v1/cpg/proposals` (see the
+[API reference](../api-reference/approvals.md#standing-exceptions)); the dashboard pages arrive in
+the next release.
+
+- **What it covers:** repositories (or teams, whose repositories are looked up each time a finding
+  is checked), path globs with exclusions, one policy version, and optional conditions (branches,
+  languages, a maximum finding size, a pattern the snippet must contain).
+- **Who approves:** by default the same boards as the policy's snippet decisions, and at least one
+  approver with `exception.approve` (the Exception Approver role); for prohibited policies, two
+  approvals covering every owning board. Nobody involved in a case the exception covers can vote.
+- **How long:** an expiry is required, at most `standingExceptions.maxExpiryDays` (90 days by
+  default). A new version of the policy ends the exception early.
+- **Precedence:** a rejection of a finding always wins over an exception; an unexpired approval is
+  reported instead of the exception; an expired approval falls back to a matching exception.
+
+Revoking (`decision.revoke`, held by Exception Approvers) ends a decision or exception at once and
+is recorded as a signed, append-only revocation with its reason. It cannot be undone: propose
+again to restore it. Affected findings return to review and their cases are re-evaluated.
+
+A daily sweep at 03:30 UTC records an audit event when an approval or exception is 7 days and 1
+day from expiry and when it has expired, once each, and moves any case whose approvals expired out
+of `decided`. Email and webhook notices for these events come with integrations.
 
 ## Audit and export
 

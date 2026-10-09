@@ -27,7 +27,25 @@ export function formatDay(iso: string): string {
   return Number.isNaN(t) ? 'an unknown date' : new Date(t).toISOString().slice(0, 10);
 }
 
-export function statusText(f: Pick<CorporateFinding, 'status' | 'enforceFrom'>): string {
+/** A finding's server resolution (E53 / the case's resolutions), matched by fingerprint. */
+export type Resolution = CaseStatus['resolutions'][number];
+
+/** The server's decision, when it says more than the local scan (§10.4); `undefined` otherwise. */
+function decisionText(r: Resolution | undefined): string | undefined {
+  switch (r?.status) {
+    case 'approved': return `approved until ${formatDay(r.expiresAt ?? '')}`;
+    case 'excepted': return `excepted (standing exception) until ${formatDay(r.expiresAt ?? '')}`;
+    case 'rejected': return 'rejected';
+    case 'pending': return 'decision pending';
+    case 'changes_requested': return 'changes requested';
+    case 'expired': return 'approval expired; needs review';
+    default: return undefined;
+  }
+}
+
+export function statusText(f: Pick<CorporateFinding, 'status' | 'enforceFrom'>, r?: Resolution): string {
+  const decided = decisionText(r);
+  if (decided) return decided;
   switch (f.status) {
     case 'needs_review': return 'needs review';
     case 'grace': return `advisory; enforced from ${formatDay(f.enforceFrom)}`;
@@ -35,16 +53,22 @@ export function statusText(f: Pick<CorporateFinding, 'status' | 'enforceFrom'>):
   }
 }
 
-/** Blocking prohibited → Error; blocking review-required → Warning; advisory and grace → Information. */
-export function corporateSeverity(f: Pick<CorporateFinding, 'blocking' | 'tier'>): CorporateSeverity {
+/**
+ * Approved or excepted → Hint; rejected → Error. Otherwise blocking
+ * prohibited → Error, blocking review-required → Warning, advisory and grace
+ * → Information.
+ */
+export function corporateSeverity(f: Pick<CorporateFinding, 'blocking' | 'tier'>, r?: Resolution): CorporateSeverity {
+  if (r?.status === 'approved' || r?.status === 'excepted') return 'hint';
+  if (r?.status === 'rejected') return 'error';
   if (!f.blocking) return 'information';
   return f.tier === 'prohibited' ? 'error' : 'warning';
 }
 
 /** `[Policy · PROHIBITED] corp.no-direct-openai v2: <message> Status: needs review.` */
-export function corporateMessage(f: CorporateFinding): string {
+export function corporateMessage(f: CorporateFinding, r?: Resolution): string {
   const message = f.rule.message.trim().replace(/[.!?]*$/, '.');
-  return `[Policy · ${f.tier.toUpperCase()}] ${f.policyKey} v${f.policyVersion}: ${message} Status: ${statusText(f)}.`;
+  return `[Policy · ${f.tier.toUpperCase()}] ${f.policyKey} v${f.policyVersion}: ${message} Status: ${statusText(f, r)}.`;
 }
 
 export function ownersText(f: Pick<CorporateFinding, 'rule'>): string {
@@ -69,18 +93,20 @@ export function bundleStatusText(state: BundleState): string {
 }
 
 export interface FindingGroup {
-  id: 'blocking' | 'advisory';
+  id: 'blocking' | 'decided' | 'advisory';
   label: string;
   findings: CorporateFinding[];
 }
 
-/** Findings grouped for the view; Phase 3 findings are blocking or advisory/grace (no decisions yet). */
-export function groupFindings(findings: readonly CorporateFinding[]): FindingGroup[] {
-  const blocking = findings.filter((f) => f.blocking);
-  const advisory = findings.filter((f) => !f.blocking);
+const passes = (r: Resolution | undefined) => r?.status === 'approved' || r?.status === 'excepted';
+
+/** Findings grouped for the view: blocking, approved or excepted by the server, and advisory/grace. */
+export function groupFindings(findings: readonly CorporateFinding[], resolutionOf: (fingerprint: string) => Resolution | undefined = () => undefined): FindingGroup[] {
+  const decided = findings.filter((f) => f.blocking && passes(resolutionOf(f.fingerprint)));
   return [
-    { id: 'blocking' as const, label: 'Blocking: needs review', findings: blocking },
-    { id: 'advisory' as const, label: 'Advisory / grace period', findings: advisory },
+    { id: 'blocking' as const, label: 'Blocking: needs review', findings: findings.filter((f) => f.blocking && !decided.includes(f)) },
+    { id: 'decided' as const, label: 'Approved or excepted', findings: decided },
+    { id: 'advisory' as const, label: 'Advisory / grace period', findings: findings.filter((f) => !f.blocking) },
   ].filter((g) => g.findings.length > 0);
 }
 

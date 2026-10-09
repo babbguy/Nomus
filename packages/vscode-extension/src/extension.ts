@@ -51,7 +51,10 @@ export function activate(context: vscode.ExtensionContext) {
   // The branch's review case (polled; shown in the same view).
   const cpgClient = new CpgClient(() => authManager.getApiKey());
   cases = new CaseTracker(context, cpgClient);
-  context.subscriptions.push(cases.onDidChange((view) => corporateView.setCase(view)));
+  context.subscriptions.push(cases.onDidChange((view) => {
+    corporateView.setCase(view);
+    diagnosticsProvider.setResolutions(view?.kind === 'case' ? view.status.resolutions : []);
+  }));
   const caseDeps: CaseCommandDeps = { context, client: cpgClient, corporate, cases };
 
   // Register URI handler for auth callbacks

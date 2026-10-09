@@ -49,7 +49,9 @@ export function requirementFor(config: QuorumConfig, target: DecisionTarget, act
   if (boardIds.length === 0) throw new CpgError(409, 'no_active_owning_board', 'No active board owns this policy');
   return {
     approvals: rule.approvals, boardCoverage: rule.boardCoverage, boardIds, requiredPermission: rule.requiredPermission,
-    maxExpiryDays: rule.maxExpiryDays, defaultExpiryDays: rule.defaultExpiryDays,
+    // §7.5: a standing exception is also bounded by the org-wide maximum, whatever an override says.
+    maxExpiryDays: target.scope === 'standing' ? Math.min(rule.maxExpiryDays, config.standingExceptions.maxExpiryDays) : rule.maxExpiryDays,
+    defaultExpiryDays: rule.defaultExpiryDays,
   };
 }
 

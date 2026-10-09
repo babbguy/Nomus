@@ -87,3 +87,40 @@ describe('DiagnosticsProvider: corporate findings (design spec §10.2)', () => {
     expect(stored(p, uri)).toBeUndefined();
   });
 });
+
+describe('DiagnosticsProvider: server decisions (design spec §10.4)', () => {
+  const FP = corporateFinding().fingerprint;
+  const resolution = (status: string, expiresAt: string | null = null) => ({
+    fingerprint: FP, status, blocking: status !== 'approved' && status !== 'excepted', tier: 'prohibited', enforceFrom: '2026-10-01T09:00:00.000Z',
+    decisionId: null, exceptionDecisionId: null, expiresAt,
+  }) as never;
+  const cases: Array<[string, string | null, DiagnosticSeverity, string]> = [
+    ['approved', '2026-11-08T00:00:00.000Z', DiagnosticSeverity.Hint, 'approved until 2026-11-08'],
+    ['excepted', '2026-11-08T00:00:00.000Z', DiagnosticSeverity.Hint, 'excepted (standing exception) until 2026-11-08'],
+    ['rejected', null, DiagnosticSeverity.Error, 'rejected'],
+    ['pending', null, DiagnosticSeverity.Error, 'decision pending'],
+    ['changes_requested', null, DiagnosticSeverity.Error, 'changes requested'],
+    ['expired', '2026-10-01T00:00:00.000Z', DiagnosticSeverity.Error, 'approval expired; needs review'],
+    ['needs_review', null, DiagnosticSeverity.Error, 'needs review'],
+  ];
+  it.each(cases)('%s: severity and status text', (status, expiresAt, severity, text) => {
+    const uri = Uri.file('/project/src/chat.ts');
+    const p = new DiagnosticsProvider(link);
+    p.setFindings(uri, [REG], [corporateFinding()]);
+    p.setResolutions([resolution(status, expiresAt)]);
+    const [reg, d] = stored(p, uri)!;
+    expect([reg.source, d.severity, d.message.endsWith(`Status: ${text}.`)]).toEqual(['Nomus', severity, true]);
+  });
+
+  it('a review-required finding stays a Warning until decided; resolutions of other fingerprints do not apply; clearing restores the scan status', () => {
+    const uri = Uri.file('/project/a.ts');
+    const p = new DiagnosticsProvider(link);
+    p.setCorporateFindings(uri, [corporateFinding({ tier: 'review-required' })]);
+    p.setResolutions([{ ...resolution('approved', '2026-11-08T00:00:00.000Z'), fingerprint: `${'b'.repeat(64)}:corp.other:1` }]);
+    expect(stored(p, uri)![0].severity).toBe(DiagnosticSeverity.Warning);
+    p.setResolutions([resolution('approved', '2026-11-08T00:00:00.000Z')]);
+    expect(stored(p, uri)![0].severity).toBe(DiagnosticSeverity.Hint);
+    p.setResolutions([]);
+    expect([stored(p, uri)![0].severity, stored(p, uri)![0].message.endsWith('Status: needs review.')]).toEqual([DiagnosticSeverity.Warning, true]);
+  });
+});

@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 5 (standing exceptions and revocation, engine): an Exception
+  Approver or Case Reviewer proposes a standing exception (repositories or teams, path globs, one
+  policy version, optional branch, language, size and snippet conditions, a required expiry within
+  the configured maximum), approved under the quorum's standing rules; matching findings report
+  `excepted`, after any rejection or unexpired approval. Teams are resolved when a finding is
+  checked, and a new policy version ends the exception. Decisions and exceptions can be revoked
+  once, with a signed, append-only record, and their findings return to review. A daily sweep
+  records expiry notices (7 days, 1 day, expired) and moves cases out of `decided` when an approval
+  expires. In VS Code, approved and excepted findings show as hints and rejected ones as errors,
+  and the Corporate Policies view shows each finding's decision. Adds `GET /api/v1/cpg/exceptions`
+  and `POST /api/v1/cpg/decisions/:id/revoke`.
 - Corporate policy governance, phase 5 (approvals, engine): reviewers propose snippet and bulk
   decisions on a case's blocking findings and vote on them under the configured quorum (approvals per
   tier and scope, per-policy overrides, required boards, an optional required permission). One

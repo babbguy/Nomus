@@ -91,6 +91,30 @@ describe('Corporate Policies view (design spec §10.2, §10.5)', () => {
   });
 });
 
+describe('Corporate Policies view: server decisions (§10.4)', () => {
+  it('approved and excepted findings move to their own group; every finding shows its decision status', () => {
+    const resolution = (f: (typeof findings)[number], status: string, expiresAt: string | null) =>
+      ({ fingerprint: f.fingerprint, status, blocking: status === 'rejected', tier: f.tier, enforceFrom: f.enforceFrom, decisionId: null, exceptionDecisionId: null, expiresAt });
+    const chat = corporateFinding({ fingerprint: `${'c'.repeat(64)}:corp.no-direct-openai:2` });
+    const pii = { ...findings[1], fingerprint: `${'d'.repeat(64)}:corp.no-pii-to-ai:2` };
+    const p = new CorporateViewProvider();
+    p.setState({ kind: 'bundle', bundle: verified, findings: [chat, pii, findings[2]], checked: true, repository: null });
+    p.setCase({
+      kind: 'case', asOf: '2026-10-09T12:00:00.000Z', offline: false,
+      status: { lanes: [], openChangeRequests: [], resolutions: [resolution(chat, 'excepted', '2026-11-08T00:00:00.000Z'), resolution(pii, 'rejected', null)] } as never,
+    });
+    const rows = render(p).filter((r) => !r.label.startsWith('Case ') && r.label !== 'Open in dashboard');
+    expect(rows.slice(0, 6).map((r) => `${r.label} | ${r.description}`)).toEqual([
+      'Blocking: needs review (1) | ',
+      'corp.no-pii-to-ai · app/summarize.py:8 | review-required · rejected',
+      'Approved or excepted (1) | ',
+      'corp.no-direct-openai · src/chat.ts:7-10 | prohibited · excepted (standing exception) until 2026-11-08',
+      'Advisory / grace period (1) | ',
+      'corp.no-gpt-4-32k · src/models.ts:3 | review-required · advisory; enforced from 2026-10-23',
+    ]);
+  });
+});
+
 describe('corporate text (design spec §10.2)', () => {
   it('message, status and severity table', () => {
     expect(corporateMessage(corporateFinding())).toBe('[Policy · PROHIBITED] corp.no-direct-openai v2: Call OpenAI only through the approved LLM gateway. Status: needs review.');

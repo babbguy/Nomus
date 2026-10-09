@@ -1,13 +1,14 @@
-// CPG Phase 5a.1: snippet and bulk approvals, design spec §16.5 release-gate
-// checks 1, 2, 3, 4, 5, 7 and 8, over HTTP against the built engine.
+// CPG Phase 5a: approvals, standing exceptions and revocation, design spec
+// §16.5 release-gate checks 1 to 10, over HTTP against the built engine.
 //
 // dev@ requests review on a new branch for the corporate findings the real
 // CLI reports on the policy-repo fixture. ai-reviewer@ (AI Review Board) and
-// legal-reviewer@ (Legal Board) then propose and vote. Decision signatures are
-// verified offline against the published instance key. Runs after every other
-// cpg-* area, because decisions bind (repo, fingerprint) across branches.
-// Governance is switched on for this area and off again at the end, and the
-// grant given to dev@ for the self-approval check is revoked.
+// legal-reviewer@ (Legal Board) then propose and vote; exceptions@ proposes
+// and revokes a standing exception. Decision signatures are verified offline
+// against the published instance key. Runs after every other cpg-* area,
+// because decisions bind (repo, fingerprint) across branches. Governance is
+// switched on for this area and off again at the end, and the grants given to
+// dev@ (self-approval check) and legal-reviewer@ (exception.approve) are revoked.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -61,6 +62,7 @@ export async function cpgApprovalsChecks(ctx) {
   if (!gate.check('governance on, an org key for the CLI, and dev@ granted Case Reviewer (so the self-approval refusal is not a missing permission)',
     enable.status === 200 && typeof keyRes.json?.key === 'string' && devGrant.status === 201, '200, key, 201', `${enable.status} ${keyRes.status} ${devGrant.status}`)) return;
 
+  let legalGrant = null;
   try {
     const repo = preparePolicyRepo(ctx, path.join(work, 'policy-repo'));
     const cli = path.join(repoRoot, 'packages', 'scanner', 'dist', 'index.js');
@@ -70,6 +72,7 @@ export async function cpgApprovalsChecks(ctx) {
     const fp = (key, file) => blocking.find((f) => f.policyKey === key && f.file === file)?.fingerprint;
     const chat = fp('corp.no-direct-openai', 'src/chat.ts');
     const legacy = fp('corp.no-direct-openai', 'src/legacy/old_chat.ts');
+    const legacyVersion = blocking.find((f) => f.fingerprint === legacy)?.policyVersion;
     const pii = fp('corp.no-pii-to-ai', 'app/summarize.py');
     const opened = await dev.post('/api/v1/cpg/cases/request-review', {
       repo: REPO, branch: BRANCH, headSha: null, bundleHash: data.cpg.scanner.bundleHash, findings: uploads(repo, findings),
@@ -138,8 +141,51 @@ export async function cpgApprovalsChecks(ctx) {
     gate.check('ai-reviewer@ proposes approving the legacy finding and legal-reviewer@ votes reject: vetoed, no decision, the finding still needs review',
       toVeto.status === 201 && veto.status === 201 && veto.json?.proposalStatus === 'vetoed' && veto.json?.decisionIds?.length === 0 && afterVeto?.status === 'needs_review',
       'vetoed, 0 decisions, needs_review', `${toVeto.status} ${veto.status} ${veto.json?.proposalStatus} ${veto.json?.decisionIds?.length} ${afterVeto?.status}`);
+
+    // ── 6. standing exception for src/legacy/**: the expiry bound, the quorum, then excepted ──
+    const exceptionRole = (await owner.client.get('/api/v1/cpg/roles')).json?.items?.find((r) => r.key === 'exception_approver')?.id;
+    legalGrant = await owner.client.post(`/api/v1/cpg/users/${users['legal-reviewer'].id}/grants`, { roleId: exceptionRole, scopeType: 'org' });
+    gate.equal('legal-reviewer@ granted Exception Approver, so the Legal vote can carry exception.approve', legalGrant.status, 201);
+    const exceptions = users.exceptions.client;
+    const standing = (days) => exceptions.post('/api/v1/cpg/proposals', {
+      scope: 'standing', caseId, expiresAt: inDays(days), rationale: RATIONALE,
+      pattern: { repos: [REPO], paths: ['src/legacy/**'], policyKey: 'corp.no-direct-openai', policyVersion: legacyVersion },
+    });
+    const tooLong = await standing(120);
+    const se = await standing(30);
+    const sp = se.json;
+    const firstVote = await ai.post(`/api/v1/cpg/proposals/${sp?.id}/votes`, { vote: 'approve' });
+    const lastVote = await legal.post(`/api/v1/cpg/proposals/${sp?.id}/votes`, { vote: 'approve' });
+    const excepted = await status(legacy);
+    gate.check('exceptions@ proposes a standing exception for src/legacy/**: 120 days is 422 expiry_out_of_range; 30 days needs 2 approvals covering both boards plus exception.approve, and after the AI and Legal votes the legacy finding is excepted',
+      tooLong.status === 422 && tooLong.json?.code === 'expiry_out_of_range' && se.status === 201 && sp?.status === 'pending' && sp.votes?.length === 0
+        && sp.required?.approvals === 2 && sp.required?.boardCoverage === 'all_owning' && sp.required?.requiredPermission === 'exception.approve'
+        && firstVote.json?.proposalStatus === 'pending' && lastVote.json?.proposalStatus === 'finalized'
+        && excepted?.status === 'excepted' && excepted.blocking === false && excepted.exceptionDecisionId === lastVote.json?.decisionIds?.[0],
+      '422; pending 0/2 all_owning exception.approve; pending; finalized; excepted',
+      `${tooLong.status} ${tooLong.json?.code}; ${sp?.status} ${sp?.votes?.length}/${sp?.required?.approvals} ${sp?.required?.requiredPermission}; ${firstVote.json?.proposalStatus}; ${lastVote.json?.proposalStatus}; ${excepted?.status}`);
+
+    // ── 10. every blocking finding is resolved (approved, rejected, excepted) → the case is decided ──
+    const caseState = async () => (await dev.get(`/api/v1/cpg/cases/${caseId}`)).json?.case?.state;
+    const decided = await caseState();
+    gate.equal('with every blocking finding approved, rejected or excepted, the case state is decided', decided, 'decided');
+
+    // ── 9. revocation: the finding returns to needs_review, and a second revocation is 409 ──
+    const exceptionId = lastVote.json?.decisionIds?.[0];
+    const revoked = await exceptions.post(`/api/v1/cpg/decisions/${exceptionId}/revoke`, { reason: 'Gate: the legacy client is being removed.' });
+    const afterRevoke = await status(legacy);
+    const reopened = await caseState();
+    const again = await exceptions.post(`/api/v1/cpg/decisions/${exceptionId}/revoke`, { reason: 'Gate: the legacy client is being removed.' });
+    gate.check('exceptions@ revokes the standing exception: 201 signed, the legacy finding returns to needs_review and the case leaves decided; a second revocation is 409 already_revoked',
+      revoked.status === 201 && revoked.json?.decisionId === exceptionId && afterRevoke?.status === 'needs_review' && reopened === 'in_review'
+        && again.status === 409 && again.json?.code === 'already_revoked',
+      '201, needs_review, in_review, 409 already_revoked', `${revoked.status} ${afterRevoke?.status} ${reopened} ${again.status} ${again.json?.code}`);
   } finally {
     const revoke = await owner.client.post(`/api/v1/cpg/grants/${devGrant.json?.id}/revoke`, { reason: 'Gate: self-approval check done' });
+    if (legalGrant) {
+      const revokeLegal = await owner.client.post(`/api/v1/cpg/grants/${legalGrant.json?.id}/revoke`, { reason: 'Gate: standing exception check done' });
+      gate.equal("legal-reviewer@'s Exception Approver grant revoked", revokeLegal.status, 200);
+    }
     const restore = await owner.client.patch('/api/v1/cpg/settings', { enabled: false, reviewerContextLlm: before.json?.reviewerContextLlm ?? false });
     gate.check('dev@\'s Case Reviewer grant revoked and governance switched off again', revoke.status === 200 && restore.status === 200 && restore.json?.enabled === false,
       '200, 200 enabled false', `${revoke.status} ${restore.status} ${restore.json?.enabled}`);

@@ -5,7 +5,7 @@ import { cpgRoles, cpgTeamRepos, cpgUserRoles } from '../db/schema-cpg.js';
 import { PERMISSION_KEYS } from './rbac/catalog.js';
 import { rolePermissionKeys, type GrantRow, type RoleRow } from './rbac/grants.js';
 import {
-  CANONICAL_REPO_RE, FINGERPRINT_RE, TIERS, caseStatusSchema, corporateRuleSchema, requestReviewRequestSchema,
+  CANONICAL_REPO_RE, FINGERPRINT_RE, LANGUAGES, POLICY_KEY_RE, TIERS, caseStatusSchema, corporateRuleSchema, requestReviewRequestSchema,
 } from '@nomus/scanner/corporate';
 import { quorumConfigSchema } from './quorum/schema.js';
 import { requirementSchema } from './quorum/evaluate.js';
@@ -649,7 +649,26 @@ const outcomeSchema = z.enum(['approve', 'reject']);
 const decisionScopeSchema = z.enum(['snippet', 'bulk', 'standing']);
 export const proposalStatusSchema = z.enum(['pending', 'finalized', 'vetoed', 'invalidated', 'void', 'lapsed']);
 
-export const proposalCreateRequestSchema = z.object({
+const globList = (min: number, max: number) => z.array(z.string().min(1).max(200)).min(min).max(max);
+
+/** A standing exception's pattern (§7.2); globs and the regex are checked on write (422 invalid_glob / invalid_regex). */
+export const standingPatternSchema = z.object({
+  repos: globList(0, 50).default([]),
+  teamIds: z.array(uuid).max(20).default([]),
+  paths: globList(1, 50),
+  excludePaths: globList(0, 50).default([]),
+  policyKey: z.string().regex(POLICY_KEY_RE),
+  policyVersion: z.number().int().min(1),
+  conditions: z.object({
+    branches: globList(1, 20).optional(),
+    languages: z.array(z.enum(LANGUAGES)).min(1).optional(),
+    snippetMustMatch: z.object({ source: z.string().min(1).max(200), flags: z.enum(['', 'i']) }).strict().optional(),
+    maxLinesPerFinding: z.number().int().min(1).max(400).optional(),
+  }).strict().default({}),
+}).strict().refine((p) => p.repos.length + p.teamIds.length > 0, { message: 'at least one repo pattern or team is required', path: ['repos'] });
+export type StandingPattern = z.infer<typeof standingPatternSchema>;
+
+const decisionProposalSchema = z.object({
   caseId: uuid,
   scope: z.enum(['snippet', 'bulk']),
   outcome: outcomeSchema,
@@ -662,9 +681,20 @@ export const proposalCreateRequestSchema = z.object({
   .refine((b) => (b.scope === 'snippet') === (b.fingerprints.length === 1), { message: 'a snippet proposal decides one finding, a bulk proposal 2 to 500', path: ['fingerprints'] })
   .refine((b) => (b.outcome === 'approve') === (b.expiresAt !== undefined), { message: 'an approval needs expiresAt; a rejection has none', path: ['expiresAt'] });
 
+/** A standing exception is always an approval, and always expires (§7.5). */
+export const standingProposalSchema = z.object({
+  scope: z.literal('standing'),
+  caseId: uuid.optional(),
+  pattern: standingPatternSchema,
+  expiresAt: isoDate,
+  rationale: z.string().trim().min(20).max(4000),
+}).strict();
+
+export const proposalCreateRequestSchema = z.union([decisionProposalSchema, standingProposalSchema]);
+
 export const proposalListQuerySchema = z.object({
   caseId: uuid,
-  scope: z.enum(['snippet', 'bulk']).optional(),
+  scope: decisionScopeSchema.optional(),
   status: proposalStatusSchema.optional(),
 }).strict();
 
@@ -679,7 +709,7 @@ export const proposalVoteSchema = z.object({
 export const proposalDetailResponseSchema = z.object({
   id: uuid, caseId: uuid.nullable(), scope: decisionScopeSchema, outcome: outcomeSchema, status: proposalStatusSchema,
   policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(), tier: z.enum(TIERS),
-  fingerprints: z.array(fingerprintSchema), requestedExpiresAt: isoDate.nullable(), rationale: z.string(),
+  fingerprints: z.array(fingerprintSchema), pattern: standingPatternSchema.nullable(), requestedExpiresAt: isoDate.nullable(), rationale: z.string(),
   /** The requirement computed at creation; finalization re-evaluates it under the config then in force. */
   required: requirementSchema, quorumConfigVersionAtCreation: z.number().int(),
   proposer: z.object({ userId: uuid, name: z.string() }).strict(),
@@ -703,6 +733,28 @@ export const decisionResponseSchema = z.object({
   signedPayload: z.string(), signature: z.string(), signatureValid: z.boolean(),
 }).strict();
 
+export const exceptionListQuerySchema = z.object({
+  active: z.enum(['true', 'false']).optional(),
+  repo: z.string().regex(CANONICAL_REPO_RE).optional(),
+  policyKey: z.string().regex(POLICY_KEY_RE).optional(),
+}).strict();
+
+export const revocationResponseSchema = z.object({
+  id: uuid, decisionId: uuid, revokedByUserId: uuid, reason: z.string(), revokedAt: isoDate, signedPayload: z.string(), signature: z.string(),
+}).strict();
+
+/** E58: a finalized standing exception; `active` until it expires or is revoked. */
+export const standingExceptionSchema = z.object({
+  id: uuid, proposalId: uuid, caseId: uuid.nullable(), policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(),
+  pattern: standingPatternSchema, expiresAt: isoDate, finalizedAt: isoDate, approverUserIds: z.array(uuid),
+  status: z.enum(['active', 'expired', 'revoked']), revocation: revocationResponseSchema.nullable(),
+}).strict();
+export const exceptionListResponseSchema = z.object({ items: z.array(standingExceptionSchema) }).strict();
+
+export const revokeRequestSchema = z.object({ reason: z.string().trim().min(10).max(2000) }).strict();
+
 export type ProposalDetailResponse = z.infer<typeof proposalDetailResponseSchema>;
 export type ProposalVoteResponse = z.infer<typeof proposalVoteSchema>;
 export type DecisionResponse = z.infer<typeof decisionResponseSchema>;
+export type RevocationResponse = z.infer<typeof revocationResponseSchema>;
+export type StandingException = z.infer<typeof standingExceptionSchema>;

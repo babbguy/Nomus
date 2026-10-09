@@ -1,13 +1,15 @@
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
-  decisionResponseSchema, proposalDetailResponseSchema, type DecisionResponse, type ProposalDetailResponse, type ProposalVoteResponse,
+  decisionResponseSchema, proposalDetailResponseSchema, standingExceptionSchema,
+  type DecisionResponse, type ProposalDetailResponse, type ProposalVoteResponse, type RevocationResponse, type StandingException,
 } from '../contracts.js';
-import { getCase } from '../cases/service.js';
 import { CpgError } from '../errors.js';
 import { userNames } from '../policies/service.js';
 import { cpgVerify } from '../policies/signing.js';
 import type { CpgActor } from '../rbac/can.js';
 import type { DecisionRow } from './resolve.js';
+import type { RevocationRow } from './revoke.js';
+import type { StandingException as Exception } from './standing.js';
 import { fingerprintsOf, requiredOf, type ProposalView, type VoteRow } from './status.js';
 import { eligibleBallot } from './votes.js';
 
@@ -28,7 +30,7 @@ function viewerOf(db: Db, view: ProposalView, actor: CpgActor): ProposalDetailRe
   if (view.status !== 'pending') return refuse('proposal_not_pending');
   if (view.votes.some((v) => v.voterUserId === actor.userId)) return refuse('already_voted');
   try {
-    eligibleBallot(db, actor, getCase(db, actor.orgId, view.proposal.caseId!), requiredOf(view.proposal));
+    eligibleBallot(db, actor, view.proposal, requiredOf(view.proposal));
     return { canVote: true, reason: null };
   } catch (err) {
     if (err instanceof CpgError) return refuse(err.code);
@@ -43,7 +45,7 @@ export function proposalDetails(db: Db, views: ProposalView[], actor: CpgActor):
     return proposalDetailResponseSchema.parse({
       id: p.id, caseId: p.caseId, scope: p.scope, outcome: p.outcome, status: view.status,
       policyId: p.policyId, policyKey: p.policyKey, policyVersion: p.policyVersion, tier: p.tier,
-      fingerprints: fingerprintsOf(p), requestedExpiresAt: p.requestedExpiresAt, rationale: p.rationale,
+      fingerprints: fingerprintsOf(p), pattern: p.pattern === null ? null : JSON.parse(p.pattern), requestedExpiresAt: p.requestedExpiresAt, rationale: p.rationale,
       required: requiredOf(p), quorumConfigVersionAtCreation: p.quorumConfigVersionAtCreation,
       proposer: { userId: p.proposerUserId, name: names.get(p.proposerUserId) ?? '' },
       createdAt: p.createdAt, lapsesAt: p.lapsesAt,
@@ -59,5 +61,19 @@ export function decisionOf(d: DecisionRow): DecisionResponse {
     batchId: d.batchId, policyId: d.policyId, policyKey: d.policyKey, policyVersion: d.policyVersion, expiresAt: d.expiresAt,
     approverUserIds: JSON.parse(d.approverUserIds) as string[], quorumConfigVersion: d.quorumConfigVersion, quorumConfigHash: d.quorumConfigHash,
     finalizedAt: d.finalizedAt, signedPayload: d.signedPayload, signature: d.signature, signatureValid: cpgVerify(d.signedPayload, d.signature),
+  });
+}
+
+export function revocationOf(r: RevocationRow): RevocationResponse {
+  return { id: r.id, decisionId: r.decisionId, revokedByUserId: r.revokedByUserId, reason: r.reason, revokedAt: r.revokedAt, signedPayload: r.signedPayload, signature: r.signature };
+}
+
+export function exceptionOf(x: Exception, now: string): StandingException {
+  const d = x.decision;
+  const revoked = x.revocation !== null && x.revocation.revokedAt <= now;
+  return standingExceptionSchema.parse({
+    id: d.id, proposalId: d.proposalId, caseId: d.caseId, policyId: d.policyId, policyKey: d.policyKey, policyVersion: d.policyVersion,
+    pattern: x.pattern, expiresAt: d.expiresAt, finalizedAt: d.finalizedAt, approverUserIds: JSON.parse(d.approverUserIds) as string[],
+    status: revoked ? 'revoked' : d.expiresAt! > now ? 'active' : 'expired', revocation: x.revocation && revocationOf(x.revocation),
   });
 }
