@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 4 (review cases, engine core): the review case store, with
+  one open case per organization, repository and branch, and revisions that snapshot the branch's
+  corporate findings (no new revision when nothing changed; new, carried and resolved counts). The
+  derived case state follows the review state machine, and findings split into one lane per owning
+  board. A closed case and everything attached to it can no longer be changed, which the database
+  enforces. No API or UI yet.
 - Corporate policy governance, phase 3 (scanner CLI and VS Code): corporate policy findings where
   developers work. The CLI fetches the organization's signed policy bundle, verifies every signature
   and hash before using any rule, and evaluates the rules locally and deterministically (no LLM, no
