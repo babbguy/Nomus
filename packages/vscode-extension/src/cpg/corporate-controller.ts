@@ -34,6 +34,9 @@ export interface CorporateControllerOptions {
   now?: () => Date;
 }
 
+/** The sentence with its first letter capitalized. */
+export const sentenceCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 const ERROR_KINDS = new Set<BundleState['kind']>(['unavailable', 'expired', 'rejected', 'denied']);
 
 export class CorporateController {
@@ -52,6 +55,8 @@ export class CorporateController {
   private repository: GitContext | null = null;
   private lastNotified: string | null = null;
   private unavailableShown = false;
+  /** While held (a scan in progress), error notices wait here for the scan to report them in one message. */
+  private held: string[] | null = null;
 
   constructor(opts: CorporateControllerOptions) {
     this.context = opts.context;
@@ -103,33 +108,67 @@ export class CorporateController {
     });
   }
 
+  /** An error notice (a sentence without the "Nomus: " prefix): shown now, or held for the scan's one message. */
+  private report(text: string): void {
+    if (this.held) this.held.push(text);
+    else void vscode.window.showErrorMessage(`Nomus: ${text}`);
+  }
+
+  /**
+   * Hold error notices until `releaseNotices()`: a scan then reports them
+   * together with its own result in one notification. The caller must
+   * release them (in a `finally`), so nothing is ever dropped.
+   */
+  holdNotices(): void {
+    this.held ??= [];
+  }
+
+  /** The held notices, oldest first; notices are shown immediately again. */
+  releaseNotices(): string[] {
+    const notices = this.held ?? [];
+    this.held = null;
+    return notices;
+  }
+
+  /** When the findings shown come from a cached bundle (offline): one sentence saying so, else null. */
+  cachedNote(): string | null {
+    return this.state?.kind === 'offline' ? `Corporate policy findings are shown from the policy bundle cached ${formatUtc(this.state.fetchedAt)}.` : null;
+  }
+
+  /** One notice per load: a discarded cache and the state it left are reported together. */
   private notify(state: BundleState, discarded: string | null): void {
-    if (discarded) {
-      void vscode.window.showErrorMessage(`Nomus: the cached corporate policy bundle failed verification and was discarded (${discarded}).${state.kind === 'verified' ? ' A fresh bundle was downloaded and verified.' : ''}`);
-    }
+    const discardedText = discarded ? `the cached corporate policy bundle failed verification and was discarded (${discarded}).` : null;
     const key = state.kind;
+    let stateText: string | null = null;
     if (!ERROR_KINDS.has(key)) {
       this.lastNotified = null;
-      return;
+    } else if (this.lastNotified !== key || discardedText) {
+      this.lastNotified = key;
+      switch (state.kind) {
+        case 'unavailable':
+          // Once per session (§10.5), unless it explains a discarded cache.
+          if (this.unavailableShown && !discardedText) break;
+          this.unavailableShown = true;
+          stateText = discardedText
+            ? `No fresh bundle could be downloaded (${state.reason}), so corporate policy findings cannot be shown.`
+            : `the corporate policy bundle is unavailable (${state.reason}). Corporate policy findings cannot be shown.`;
+          break;
+        case 'expired':
+          stateText = `the cached corporate policy bundle (from ${formatUtc(state.fetchedAt)}) is too old to use offline. Corporate policy findings are hidden until it can be refreshed.`;
+          break;
+        case 'rejected':
+          stateText = `the corporate policy bundle was rejected (${state.reason}). Corporate policy findings are not shown.`;
+          break;
+        case 'denied':
+          stateText = `the server refused the corporate policy bundle (HTTP ${state.status}). Sign in again to see corporate policy findings.`;
+          break;
+      }
     }
-    if (this.lastNotified === key) return;
-    this.lastNotified = key;
-    switch (state.kind) {
-      case 'unavailable':
-        // Once per session (§10.5).
-        if (this.unavailableShown) return;
-        this.unavailableShown = true;
-        void vscode.window.showErrorMessage(`Nomus: the corporate policy bundle is unavailable (${state.reason}). Corporate policy findings cannot be shown.`);
-        return;
-      case 'expired':
-        void vscode.window.showErrorMessage(`Nomus: the cached corporate policy bundle (from ${formatUtc(state.fetchedAt)}) is too old to use offline. Corporate policy findings are hidden until it can be refreshed.`);
-        return;
-      case 'rejected':
-        void vscode.window.showErrorMessage(`Nomus: the corporate policy bundle was rejected (${state.reason}). Corporate policy findings are not shown.`);
-        return;
-      case 'denied':
-        void vscode.window.showErrorMessage(`Nomus: the server refused the corporate policy bundle (HTTP ${state.status}). Sign in again to see corporate policy findings.`);
-        return;
+    if (discardedText) {
+      const after = state.kind === 'verified' ? 'A fresh bundle was downloaded and verified.' : stateText && sentenceCase(stateText);
+      this.report(after ? `${discardedText} ${after}` : discardedText);
+    } else if (stateText) {
+      this.report(stateText);
     }
   }
 
@@ -183,7 +222,7 @@ export class CorporateController {
       // Not a bundle problem (those are states): surface it, and show nothing stale.
       this.findings.delete(document.uri.toString());
       this.render();
-      void vscode.window.showErrorMessage(`Nomus: corporate policy check failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.report(`corporate policy check failed: ${err instanceof Error ? err.message : String(err)}`);
       return [];
     }
   }
@@ -195,7 +234,7 @@ export class CorporateController {
     } catch (err) {
       this.clearFindings();
       this.render();
-      void vscode.window.showErrorMessage(`Nomus: corporate policy check failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.report(`corporate policy check failed: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
   }

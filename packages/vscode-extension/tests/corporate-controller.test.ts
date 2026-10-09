@@ -90,6 +90,42 @@ describe('CorporateController (Phase 3: findings only)', () => {
     expect(errors).toEqual(['Nomus: the cached corporate policy bundle failed verification and was discarded (The corporate policy bundle hash does not match its policies). A fresh bundle was downloaded and verified.']);
   });
 
+  it('a discarded cache with no fresh bundle (offline) is one notice, not two', async () => {
+    const { controller } = setup();
+    loads = [{ state: { kind: 'unavailable', reason: 'Could not reach the endpoint' }, discardedCache: 'The corporate policy bundle hash does not match its policies' }];
+    await controller.evaluateDocument(doc('a.ts', 'x'));
+    expect(errors).toEqual(['Nomus: the cached corporate policy bundle failed verification and was discarded (The corporate policy bundle hash does not match its policies). '
+      + 'No fresh bundle could be downloaded (Could not reach the endpoint), so corporate policy findings cannot be shown.']);
+  });
+
+  it('held notices wait for the scan and come back in order; nothing is shown or dropped meanwhile', async () => {
+    const { controller } = setup();
+    loads = [
+      { state: { kind: 'expired', fetchedAt: '2026-10-01T00:00:00.000Z', reason: 'x' }, discardedCache: null },
+      { state: { kind: 'denied', status: 401, reason: 'x' }, discardedCache: null },
+    ];
+    controller.holdNotices();
+    await controller.evaluateDocument(doc('a.ts', 'x'));
+    await controller.evaluateDocument(doc('a.ts', 'x'));
+    expect(errors).toEqual([]);
+    expect(controller.releaseNotices()).toEqual([
+      'the cached corporate policy bundle (from 2026-10-01 00:00 UTC) is too old to use offline. Corporate policy findings are hidden until it can be refreshed.',
+      'the server refused the corporate policy bundle (HTTP 401). Sign in again to see corporate policy findings.',
+    ]);
+    loads = [{ state: { kind: 'rejected', reason: 'bad signature' }, discardedCache: null }];
+    await controller.evaluateDocument(doc('a.ts', 'x'));
+    expect(errors).toEqual(['Nomus: the corporate policy bundle was rejected (bad signature). Corporate policy findings are not shown.']);
+  });
+
+  it('cachedNote says when the findings come from the offline cache, and only then', async () => {
+    const { controller } = setup();
+    await controller.evaluateDocument(doc('a.ts', 'x'));
+    expect(controller.cachedNote()).toBeNull();
+    loads = [{ state: { kind: 'offline', bundle: BUNDLE, fetchedAt: '2026-10-09T09:41:00.000Z', reason: 'Could not reach' }, discardedCache: null }];
+    await controller.evaluateDocument(doc('a.ts', 'x'));
+    expect(controller.cachedNote()).toBe('Corporate policy findings are shown from the policy bundle cached 2026-10-09 09:41 UTC.');
+  });
+
   it('unavailable is reported once per session; expired and denied each say what to do', async () => {
     const { controller } = setup();
     loads = [
