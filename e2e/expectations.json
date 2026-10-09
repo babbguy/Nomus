@@ -153,6 +153,32 @@
       "org_admin",
       "policy_approver",
       "policy_author"
-    ]
+    ],
+    "scanner": {
+      "byFile": {
+        "app/summarize.py": [
+          "corp.no-pii-to-ai"
+        ],
+        "src/chat.ts": [
+          "corp.no-direct-openai"
+        ],
+        "src/legacy/old_chat.ts": [
+          "corp.no-direct-openai"
+        ],
+        "src/models.ts": [
+          "corp.no-gpt-4-32k"
+        ]
+      },
+      "statuses": {
+        "corp.no-pii-to-ai@app/summarize.py": "needs_review/blocking",
+        "corp.no-direct-openai@src/chat.ts": "needs_review/blocking",
+        "corp.no-direct-openai@src/legacy/old_chat.ts": "needs_review/blocking",
+        "corp.no-gpt-4-32k@src/models.ts": "grace/non-blocking"
+      },
+      "chatRange": [
+        7,
+        10
+      ]
+    }
   }
 }

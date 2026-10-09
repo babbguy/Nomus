@@ -43,6 +43,8 @@ import { resourceChecks, readProbe } from './checks/resources.mjs';
 import { cpgSetup } from './checks/cpg-setup.mjs';
 import { cpgRbacChecks } from './checks/cpg-rbac.mjs';
 import { cpgPolicyChecks } from './checks/cpg-policy.mjs';
+import { cpgScannerChecks } from './checks/cpg-scanner.mjs';
+import { cpgVscodeChecks } from './checks/cpg-vscode.mjs';
 import { cpgBrowserChecks } from './checks/cpg-browser.mjs';
 
 const gateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -149,6 +151,8 @@ async function main() {
       // second org created by cpg-setup.mjs, so no existing expectation changes.
       ['cpg-rbac', cpgRbacChecks],
       ['cpg-policy', cpgPolicyChecks],
+      ['cpg-scanner', cpgScannerChecks],
+      ['cpg-vscode', cpgVscodeChecks],
       ['cpg-browser', cpgBrowserChecks],
     ];
     for (const [area, fn] of areas) {
