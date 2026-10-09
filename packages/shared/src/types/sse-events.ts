@@ -58,8 +58,16 @@ export type OperationalSSEEventType =
   | 'forge.stopping'
   | 'forge.escalation';
 
+/**
+ * Corporate Policy Governance events. They are org-private: always broadcast
+ * with `orgId`, so only that org's clients receive them, and never stored in
+ * policy_events (no SSE id, no replay).
+ */
+export type CpgSSEEventType =
+  | 'cpg.bundle.changed';
+
 /** Every event-type name that may be broadcast to SSE clients. */
-export type BroadcastEventType = SSEEventType | OperationalSSEEventType;
+export type BroadcastEventType = SSEEventType | OperationalSSEEventType | CpgSSEEventType;
 
 /**
  * Wire envelope broadcast to subscribed SSE clients by the engine's
@@ -77,4 +85,10 @@ export interface BroadcastEvent {
   type: BroadcastEventType;
   data: unknown;
   jurisdiction: string;
+  /**
+   * When set, the event is private to this organization: only its clients
+   * receive it, whatever their jurisdiction subscription. Events without an
+   * orgId (the regulatory corpus and pipeline events) are unchanged.
+   */
+  orgId?: string;
 }

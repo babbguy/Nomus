@@ -54,6 +54,32 @@ function insertUser(org: string): string {
   return id;
 }
 
+const H = 'a'.repeat(64);
+const registry = { boardId: '', policyId: '', compileId: '', versionId: '', authorId: '', approverId: '', memberId: '' };
+
+/** One row in every Phase 2 table (cpg_0002), written with raw SQL. */
+function seedRegistry(): void {
+  registry.authorId = insertUser(orgId);
+  registry.approverId = insertUser(orgId);
+  registry.boardId = randomUUID();
+  run("INSERT INTO cpg_boards (id, org_id, key, name, kind, created_by, created_at) VALUES (?, ?, 'ai', 'AI Review Board', 'ai', 'test', ?)", registry.boardId, orgId, NOW);
+  registry.memberId = randomUUID();
+  run("INSERT INTO cpg_board_members (id, board_id, org_id, user_id, added_by, added_at) VALUES (?, ?, ?, ?, 'test', ?)", registry.memberId, registry.boardId, orgId, registry.approverId, NOW);
+  run("INSERT INTO cpg_quorum_config_versions (id, org_id, version, config, config_hash, change_note, created_by, created_at, signature) VALUES (?, ?, 1, '{}', ?, 'seed', 'system:seed', ?, 'sig')", randomUUID(), orgId, H, NOW);
+  registry.policyId = randomUUID();
+  run("INSERT INTO cpg_policies (id, org_id, policy_key, created_by, created_at) VALUES (?, ?, 'corp.no-direct-openai', ?, ?)", registry.policyId, orgId, `user:${registry.authorId}`, NOW);
+  registry.compileId = randomUUID();
+  run(`INSERT INTO cpg_compile_records (id, org_id, requested_by, input_text, input_hash, examples, prompt_version, status, compiled_rule, compiled_rule_hash, created_at)
+       VALUES (?, ?, ?, 'Do not call OpenAI directly from code.', ?, '{}', 1, 'compiled', '{}', ?, ?)`, registry.compileId, orgId, `user:${registry.authorId}`, H, H, NOW);
+  registry.versionId = randomUUID();
+  run(`INSERT INTO cpg_policy_versions (id, policy_id, org_id, version, kind, title, plain_text, tier, owning_board_ids, rule, rule_hash, compile_record_id, edited_from_compile, created_by, created_at)
+       VALUES (?, ?, ?, 1, 'define', 'No direct OpenAI', 'text', 'prohibited', ?, '{}', ?, ?, 0, ?, ?)`,
+  registry.versionId, registry.policyId, orgId, JSON.stringify([registry.boardId]), H, registry.compileId, `user:${registry.authorId}`, NOW);
+  run("INSERT INTO cpg_policy_version_events (id, version_id, org_id, event, actor, details, created_at) VALUES (?, ?, ?, 'proposed', 'test', '{}', ?)", randomUUID(), registry.versionId, orgId, NOW);
+  run("INSERT INTO cpg_policy_approvals (id, version_id, org_id, voter_user_id, vote, quorum_config_version, created_at) VALUES (?, ?, ?, ?, 'approve', 1, ?)", randomUUID(), registry.versionId, orgId, registry.approverId, NOW);
+  run("INSERT INTO cpg_policy_heads (policy_id, org_id, state, pending_version_id, updated_at) VALUES (?, ?, 'proposed', ?, ?)", registry.policyId, orgId, registry.versionId, NOW);
+}
+
 beforeAll(() => {
   runMigrations(db);
   orgId = insertOrg();
@@ -62,6 +88,7 @@ beforeAll(() => {
   // Seed both orgs (system roles, settings) the way startup does.
   runMigrations(db);
   appendAuditEvent(db, { orgId, actor: 'test', action: 'test.event', targetType: 'test', targetId: null, payload: { a: 1 } });
+  seedRegistry();
 });
 
 describe('strictly append-only tables refuse UPDATE and DELETE', () => {
@@ -69,6 +96,12 @@ describe('strictly append-only tables refuse UPDATE and DELETE', () => {
     schema_migrations: 'SELECT rowid FROM schema_migrations LIMIT 1',
     cpg_permissions: 'SELECT rowid FROM cpg_permissions LIMIT 1',
     cpg_audit_events: 'SELECT rowid FROM cpg_audit_events LIMIT 1',
+    cpg_quorum_config_versions: 'SELECT rowid FROM cpg_quorum_config_versions LIMIT 1',
+    cpg_policies: 'SELECT rowid FROM cpg_policies LIMIT 1',
+    cpg_compile_records: 'SELECT rowid FROM cpg_compile_records LIMIT 1',
+    cpg_policy_versions: 'SELECT rowid FROM cpg_policy_versions LIMIT 1',
+    cpg_policy_version_events: 'SELECT rowid FROM cpg_policy_version_events LIMIT 1',
+    cpg_policy_approvals: 'SELECT rowid FROM cpg_policy_approvals LIMIT 1',
   };
 
   for (const { table } of APPEND_ONLY_TABLES) {
@@ -210,7 +243,91 @@ describe('projection guards', () => {
   });
 
   it('is listed as projections', () => {
-    expect(PROJECTION_TABLES.map((t) => t.table).sort()).toEqual(['cpg_org_settings', 'cpg_roles', 'cpg_teams']);
+    expect(PROJECTION_TABLES.map((t) => t.table).sort()).toEqual(['cpg_boards', 'cpg_org_settings', 'cpg_policy_heads', 'cpg_roles', 'cpg_teams']);
+  });
+
+  it('cpg_boards: name and description change; identity and kind do not; archiving is final; no delete', () => {
+    const id = registry.boardId;
+    expect(triggerError(() => run("UPDATE cpg_boards SET name = 'AI Board', description = 'd' WHERE id = ?", id))).toBeNull();
+    for (const sql of ["UPDATE cpg_boards SET key = 'other' WHERE id = ?", "UPDATE cpg_boards SET kind = 'legal' WHERE id = ?", `UPDATE cpg_boards SET org_id = '${otherOrgId}' WHERE id = ?`]) {
+      expect(triggerError(() => run(sql, id)), sql).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    }
+    const spare = randomUUID();
+    run("INSERT INTO cpg_boards (id, org_id, key, name, kind, created_by, created_at) VALUES (?, ?, 'spare', 'Spare', 'custom', 'test', ?)", spare, orgId, NOW);
+    expect(triggerError(() => run("UPDATE cpg_boards SET archived_at = ?, archived_by = 'test' WHERE id = ?", NOW, spare))).toBeNull();
+    expect(triggerError(() => run('UPDATE cpg_boards SET archived_at = NULL, archived_by = NULL WHERE id = ?', spare))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run('DELETE FROM cpg_boards WHERE id = ?', id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run("INSERT INTO cpg_boards (id, org_id, key, name, kind, created_by, created_at) VALUES (?, ?, 'x1', 'X', 'finance', 't', ?)", randomUUID(), orgId, NOW))).toBe('SQLITE_CONSTRAINT_CHECK');
+  });
+
+  it('cpg_policy_heads: identity columns are fixed; no delete; an active head must carry its activation data', () => {
+    expect(triggerError(() => run(`UPDATE cpg_policy_heads SET org_id = '${otherOrgId}' WHERE policy_id = ?`, registry.policyId))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run("UPDATE cpg_policy_heads SET state = 'active' WHERE policy_id = ?", registry.policyId))).toBe('SQLITE_CONSTRAINT_CHECK');
+    expect(triggerError(() => run('DELETE FROM cpg_policy_heads WHERE policy_id = ?', registry.policyId))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+  });
+});
+
+describe('cpg_board_members: removal is written once, nothing else changes, nothing is deleted', () => {
+  it('allows one removal, then refuses a second and any other change', () => {
+    const user = insertUser(orgId);
+    const id = randomUUID();
+    run("INSERT INTO cpg_board_members (id, board_id, org_id, user_id, added_by, added_at) VALUES (?, ?, ?, ?, 'test', ?)", id, registry.boardId, orgId, user, NOW);
+    expect(triggerError(() => run("INSERT INTO cpg_board_members (id, board_id, org_id, user_id, added_by, added_at) VALUES (?, ?, ?, ?, 'test', ?)", randomUUID(), registry.boardId, orgId, user, NOW))).toBe('SQLITE_CONSTRAINT_UNIQUE');
+    expect(triggerError(() => run('UPDATE cpg_board_members SET user_id = ? WHERE id = ?', userId, id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run("UPDATE cpg_board_members SET removed_at = ?, removed_by = 'test' WHERE id = ?", NOW, id))).toBeNull();
+    expect(triggerError(() => run("UPDATE cpg_board_members SET removed_at = ?, removed_by = 'x' WHERE id = ?", '2026-10-09T12:00:00.000Z', id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(() => run('DELETE FROM cpg_board_members WHERE id = ?', id))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(WRITE_ONCE_TABLES.map((t) => t.table)).toContain('cpg_board_members');
+  });
+
+  it('refuses a member from another org', () => {
+    const outsider = insertUser(otherOrgId);
+    expect(triggerError(() => run("INSERT INTO cpg_board_members (id, board_id, org_id, user_id, added_by, added_at) VALUES (?, ?, ?, ?, 'test', ?)", randomUUID(), registry.boardId, orgId, outsider, NOW))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+  });
+});
+
+describe('cpg_policy_approvals: four-eyes is enforced by the database', () => {
+  const vote = (versionId: string, voter: string) => () => run(
+    "INSERT INTO cpg_policy_approvals (id, version_id, org_id, voter_user_id, vote, quorum_config_version, created_at) VALUES (?, ?, ?, ?, 'approve', 1, ?)",
+    randomUUID(), versionId, orgId, voter, NOW,
+  );
+
+  it('refuses a vote by the version author', () => {
+    expect(triggerError(vote(registry.versionId, registry.authorId))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+  });
+
+  it('refuses a vote by the compile requester even when someone else authored the version', () => {
+    const requester = insertUser(orgId);
+    const author = insertUser(orgId);
+    const compileId = randomUUID();
+    run(`INSERT INTO cpg_compile_records (id, org_id, requested_by, input_text, input_hash, examples, prompt_version, status, compiled_rule, compiled_rule_hash, created_at)
+         VALUES (?, ?, ?, 'Never put card numbers in source code.', ?, '{}', 1, 'compiled', '{}', ?, ?)`, compileId, orgId, `user:${requester}`, H, H, NOW);
+    const versionId = randomUUID();
+    run(`INSERT INTO cpg_policy_versions (id, policy_id, org_id, version, kind, title, plain_text, tier, owning_board_ids, rule, rule_hash, compile_record_id, edited_from_compile, created_by, created_at)
+         VALUES (?, ?, ?, 2, 'define', 'No cards', 't', 'advisory', ?, '{}', ?, ?, 0, ?, ?)`, versionId, registry.policyId, orgId, JSON.stringify([registry.boardId]), H, compileId, `user:${author}`, NOW);
+    expect(triggerError(vote(versionId, requester))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(vote(versionId, author))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+    expect(triggerError(vote(versionId, insertUser(orgId)))).toBeNull();
+  });
+
+  it('refuses a second vote by the same user and a voter from another org', () => {
+    expect(triggerError(vote(registry.versionId, registry.approverId))).toBe('SQLITE_CONSTRAINT_UNIQUE');
+    expect(triggerError(vote(registry.versionId, insertUser(otherOrgId)))).toBe('SQLITE_CONSTRAINT_TRIGGER');
+  });
+});
+
+describe('policy registry CHECK constraints', () => {
+  it('policy keys are corp.* without a colon; compile status and rule agree; retire versions carry no rule; titles are one line', () => {
+    for (const key of ['corp.Upper', 'other.key', 'corp.a:b', 'corp.']) {
+      expect(triggerError(() => run("INSERT INTO cpg_policies (id, org_id, policy_key, created_by, created_at) VALUES (?, ?, ?, 'user:x', ?)", randomUUID(), orgId, key, NOW)), key).toBe('SQLITE_CONSTRAINT_CHECK');
+    }
+    expect(triggerError(() => run(`INSERT INTO cpg_compile_records (id, org_id, requested_by, input_text, input_hash, examples, prompt_version, status, created_at)
+      VALUES (?, ?, 'user:x', 'Policy text that is long enough.', ?, '{}', 1, 'compiled', ?)`, randomUUID(), orgId, H, NOW))).toBe('SQLITE_CONSTRAINT_CHECK');
+    expect(triggerError(() => run(`INSERT INTO cpg_policy_versions (id, policy_id, org_id, version, kind, title, plain_text, tier, owning_board_ids, rule, rule_hash, edited_from_compile, created_by, created_at)
+      VALUES (?, ?, ?, 9, 'retire', 'Retire it', 'r', 'advisory', ?, '{}', ?, 0, 'user:x', ?)`, randomUUID(), registry.policyId, orgId, JSON.stringify([registry.boardId]), H, NOW))).toBe('SQLITE_CONSTRAINT_CHECK');
+    expect(triggerError(() => run(`INSERT INTO cpg_policy_versions (id, policy_id, org_id, version, kind, title, plain_text, tier, owning_board_ids, rule, rule_hash, compile_record_id, edited_from_compile, created_by, created_at)
+      VALUES (?, ?, ?, 9, 'define', ?, 't', 'advisory', ?, '{}', ?, ?, 0, 'user:x', ?)`, randomUUID(), registry.policyId, orgId, 'Two\nlines', JSON.stringify([registry.boardId]), H, registry.compileId, NOW))).toBe('SQLITE_CONSTRAINT_CHECK');
+    expect(triggerError(() => run("INSERT INTO cpg_quorum_config_versions (id, org_id, version, config, config_hash, change_note, created_by, created_at, signature) VALUES (?, ?, 2, '{}', ?, 'n', 'system:seed', ?, 's')", randomUUID(), orgId, H, NOW))).toBe('SQLITE_CONSTRAINT_CHECK');
   });
 });
 

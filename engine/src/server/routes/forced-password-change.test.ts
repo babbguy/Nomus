@@ -142,6 +142,12 @@ describe('temporary-password session on the CPG routes (/api/v1/cpg/*)', () => {
     ['GET', '/api/v1/cpg/settings', undefined], // settings.ts
     ['PATCH', '/api/v1/cpg/settings', { enabled: true }], // settings.ts (write)
     ['GET', '/api/v1/cpg/audit', undefined], // audit.ts
+    ['GET', '/api/v1/cpg/boards', undefined], // boards.ts
+    ['POST', '/api/v1/cpg/boards', { key: 'blocked', name: 'Blocked', kind: 'custom' }], // boards.ts (write)
+    ['GET', '/api/v1/cpg/quorum', undefined], // quorum.ts
+    ['GET', '/api/v1/cpg/policies', undefined], // policies.ts
+    ['POST', '/api/v1/cpg/compile', { plainText: 'Blocked before any permission check.', examples: { violating: [{ path: 'a.ts', code: 'x' }] } }], // policies.ts (write)
+    ['GET', '/api/v1/cpg/bundle', undefined], // bundle.ts
   ];
 
   for (const [method, path, body] of cpgRoutes) {

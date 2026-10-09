@@ -11,6 +11,12 @@ export const APPEND_ONLY_TABLES = [
   { table: 'schema_migrations', drizzleName: 'schemaMigrations' },
   { table: 'cpg_permissions', drizzleName: 'cpgPermissions' },
   { table: 'cpg_audit_events', drizzleName: 'cpgAuditEvents' },
+  { table: 'cpg_quorum_config_versions', drizzleName: 'cpgQuorumConfigVersions' },
+  { table: 'cpg_policies', drizzleName: 'cpgPolicies' },
+  { table: 'cpg_compile_records', drizzleName: 'cpgCompileRecords' },
+  { table: 'cpg_policy_versions', drizzleName: 'cpgPolicyVersions' },
+  { table: 'cpg_policy_version_events', drizzleName: 'cpgPolicyVersionEvents' },
+  { table: 'cpg_policy_approvals', drizzleName: 'cpgPolicyApprovals' },
 ] as const;
 
 /**
@@ -19,6 +25,7 @@ export const APPEND_ONLY_TABLES = [
  */
 export const WRITE_ONCE_TABLES = [
   { table: 'cpg_user_roles', drizzleName: 'cpgUserRoles' },
+  { table: 'cpg_board_members', drizzleName: 'cpgBoardMembers' },
 ] as const;
 
 /**
@@ -29,4 +36,6 @@ export const PROJECTION_TABLES = [
   { table: 'cpg_roles', drizzleName: 'cpgRoles' },
   { table: 'cpg_teams', drizzleName: 'cpgTeams' },
   { table: 'cpg_org_settings', drizzleName: 'cpgOrgSettings' },
+  { table: 'cpg_boards', drizzleName: 'cpgBoards' },
+  { table: 'cpg_policy_heads', drizzleName: 'cpgPolicyHeads' },
 ] as const;
