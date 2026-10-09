@@ -8,6 +8,7 @@ import {
   complianceScores, policyRules, scanFindings,
   aiBomSystems, benchmarkRuns, organizations,
 } from '../../db/schema.js';
+import { scoreCache, invalidateComplianceScore, invalidateAllComplianceScores } from '../../core/compliance-score-cache.js';
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 
@@ -16,16 +17,9 @@ export const compliancePostureRoutes = new Hono<AppEnv>();
 compliancePostureRoutes.use('*', requireSessionOrApiKey('read:policies'));
 
 // 30-second score cache to avoid recomputing on rapid dashboard calls
-const scoreCache = new Map<string, { result: ReturnType<typeof calculateScore>; computedAt: string; expiresAt: number }>();
-
-/**
- * Drop an org's cached score after an input to it changes (e.g. scan findings
- * uploaded or dismissed), so the next read is not up to 30 s stale. The GitHub
- * Action reads the score immediately after uploading findings.
- */
-export function invalidateComplianceScore(orgId: string): void {
-  scoreCache.delete(orgId);
-}
+// (store and invalidation live in core/compliance-score-cache.ts so that the
+// rule-write paths can invalidate without importing a route module)
+export { invalidateComplianceScore, invalidateAllComplianceScores };
 
 interface ScoreFactor {
   category: string;
@@ -303,7 +297,7 @@ function calculateScore(orgId: string): {
  */
 export function getComplianceScore(orgId: string): { result: ReturnType<typeof calculateScore>; computedAt: string } {
   const now = Date.now();
-  let entry = scoreCache.get(orgId);
+  let entry = scoreCache.get(orgId) as { result: ReturnType<typeof calculateScore>; computedAt: string; expiresAt: number } | undefined;
   if (!entry || entry.expiresAt <= now) {
     entry = { result: calculateScore(orgId), computedAt: new Date(now).toISOString(), expiresAt: now + 30_000 };
     scoreCache.set(orgId, entry);

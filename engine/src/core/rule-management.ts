@@ -16,6 +16,7 @@ import { policyEvents, policyRules, regulatorySources } from '../db/schema.js';
 import { signRule, verifyRuleSignature } from './rule-signing.js';
 import { sameJson } from './json-equal.js';
 import { policyBundleCache } from './policy-cache.js';
+import { invalidateAllComplianceScores } from './compliance-score-cache.js';
 import { broadcastEvent } from '../sse/manager.js';
 import { logger } from '../logger.js';
 
@@ -115,6 +116,9 @@ function writeEvent(
  * that wrote `events` has committed.
  */
 export function publishRuleEvents(events: PendingRuleEvent[]): void {
+  // Rules are global: any change moves every org's cached compliance score.
+  // Runs after commit (callers pass events only once the transaction is done).
+  invalidateAllComplianceScores();
   if (events.length === 0) return;
   policyBundleCache.invalidate();
   for (const e of events) {

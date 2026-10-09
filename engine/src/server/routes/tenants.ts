@@ -8,6 +8,7 @@ import { organizations } from '../../db/schema.js';
 import { createOrgSchema, createApiKeySchema } from '@nomus/shared';
 import { createApiKey, listApiKeys, revokeApiKey } from '../../tenant/api-keys.js';
 import { logger } from '../../logger.js';
+import { invalidateComplianceScore } from '../../core/compliance-score-cache.js';
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { safeParseInt, safeJson, actorOf } from '../utils.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
@@ -78,6 +79,7 @@ tenantRoutes.post('/', async (c) => {
     db.insert(organizations).values(org).run();
     ensureOrgRbac(db, org.id);
   })();
+  invalidateComplianceScore(org.id);
 
   return c.json({
     id: org.id,
@@ -123,6 +125,8 @@ tenantRoutes.patch('/:id', async (c) => {
     .run();
 
   if (result.changes === 0) return c.json({ error: 'Organization not found' }, 404);
+  // Jurisdiction access feeds the score's applicable-rule count.
+  invalidateComplianceScore(c.req.param('id'));
   return c.json({ message: 'Organization updated' });
 });
 
