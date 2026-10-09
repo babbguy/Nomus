@@ -9,6 +9,7 @@ import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeJson, safeParseInt } from '../utils.js';
+import { invalidateComplianceScore } from '../../core/compliance-score-cache.js';
 
 const startBenchmarkSchema = z.object({
   modelName: z.string().min(1),
@@ -91,6 +92,7 @@ benchmarkRoutes.post('/run', async (c) => {
     completedAt: null,
     createdAt: now,
   }).run();
+  invalidateComplianceScore(orgId);
 
   return c.json({ id, status: 'pending', benchmarksTotal: totalBenchmarks }, 201);
 });
@@ -198,6 +200,8 @@ benchmarkRoutes.patch('/runs/:id/results', async (c) => {
     durationMs: durationMs ?? null,
     completedAt: now,
   }).where(eq(benchmarkRuns.id, id)).run();
+  // The latest completed benchmark feeds the score.
+  invalidateComplianceScore(orgId);
 
   return c.json({ message: 'Benchmark results uploaded', status: 'completed' });
 });
