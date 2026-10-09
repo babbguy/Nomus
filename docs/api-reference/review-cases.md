@@ -55,6 +55,21 @@ snippet; a snippet may be left out only when the organization already stores it.
 `{ "created": true, "revisionCreated": true, "case": CaseStatus }`. Re-sending the same findings
 adds no revision, and re-sending an unchanged justification adds nothing.
 
+`GET /api/v1/cpg/cases` items also carry `openedBy` (`{ "actor": "user:<id>", "name" }`; `name`
+is `null` for a non-user actor) and the case's `lanes`. The list is paged before cases in
+repositories the caller cannot read are left out, so a page can hold fewer than `limit` items (even
+none) while `nextCursor` is set; keep paging until `nextCursor` is `null`.
+
+`GET /api/v1/cpg/cases/:id` answers `{ "case": CaseStatus, "openedAt", "openedBy", "closure",
+"viewer", "revisions", "justifications", "comments" }`. `viewer` is
+`{ "comment", "review", "close", "withdraw" }`: what the caller's permissions allow on the case's
+repository (request changes also needs membership of the lane's board). `closure` is `null` until
+the case closes, then `{ "reason", "note", "closedAt", "closedBy", "record", "signature",
+"signatureValid" }`, where `record` is the signed closure record and `signatureValid` the result of
+verifying it against the stored rows on this request. Each finding of
+`GET /api/v1/cpg/cases/:id/revisions/:revision` also carries `policyId`, `policyTitle` and
+`owningBoardIds` (the lanes it belongs to).
+
 `CaseStatus` carries the state (`open`, `in_review`, `changes_requested`, `decided`, `closed`), one
 lane per owning board, the open change requests, and a resolution per finding (`advisory`, `grace`,
 `needs_review`, `changes_requested`, or `expired` when the finding's policy version is no longer

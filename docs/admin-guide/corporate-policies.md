@@ -10,8 +10,9 @@ period, and what a corporate policy can and cannot express. Roles and permission
 [policy registry API reference](../api-reference/policy-registry.md).
 
 > Phase note: this release builds the policy registry, the signed bundle and their dashboard
-> pages (Governance > Policies, Boards and Quorum). Showing corporate findings in scans, the editor
-> and CI, and review cases, arrive in the following releases.
+> pages (Governance > Policies, Boards and Quorum), corporate findings in the CLI and VS Code, and
+> review cases (requested from VS Code, shown in Governance > Cases). Reviewers' decisions and the
+> CI gate arrive in the following releases.
 
 ## How it fits together
 
@@ -236,6 +237,25 @@ The repository's `.nomus.yml` ignore list and detector switches do not affect co
 developer cannot hide a violation by editing a file they own. Only the rule's own file scope
 applies, plus fixed exclusions: `.git` and `node_modules` directories, files over 2 MB and binary
 files.
+
+## Review cases in the dashboard
+
+**Governance > Cases** shows every review case of the repositories a user can read (`case.read`,
+including team- and repository-scoped grants). The case page shows lanes, revisions, findings with
+their snippets and justifications, reviewer context, change requests and comments; the user guide
+describes it. Points for admins:
+
+- **Who can do what.** Commenting needs `case.comment`; requesting changes needs `case.review` and
+  membership of the lane's board (add reviewers to boards on the Boards page); closing needs
+  `case.close`; the developer who opened a case can always withdraw it. The server decides these
+  per repository, and re-checks every action.
+- **Governance off.** While governance is switched off, the case list is empty and cases cannot be
+  changed; open cases stay readable by their link.
+- **Reviewer context** is generated only when someone selects **Show reviewer context**, once per
+  snippet and policy version, so viewing a case sends nothing to the LLM provider by itself. Switch
+  it off in Governance > Settings.
+- **Closed cases** cannot change. The case page verifies the signed closure record on every load
+  and shows **Signature does not verify** if the stored history no longer matches it.
 
 ## Audit and export
 
