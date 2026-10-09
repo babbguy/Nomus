@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- The database migrator never created the indexes declared in the schema, so rule-key uniqueness was
+  enforced only in application code and every lookup index was missing. It now creates every declared
+  `index()` / `uniqueIndex()` on fresh and existing databases, deriving them from the schema. Before
+  building a unique index it checks for existing duplicate keys and, if any exist, stops startup with an
+  error naming the table, index and keys; no data is changed or dropped.
 - The compliance score was served from a 30 s cache that only scan uploads cleared, so for up to
   30 s after a rule was created, edited, retired, approved or rejected, an AI system or benchmark
   changed, an organization's jurisdictions changed, or GitHub App findings landed, Posture, the
