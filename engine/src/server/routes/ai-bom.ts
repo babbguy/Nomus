@@ -7,6 +7,7 @@ import { aiBomSystems, aiBomSnapshots, scanFindings, policyRules, organizations 
 import { requireSessionOrApiKey } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { safeJson } from '../utils.js';
+import { invalidateComplianceScore } from '../../core/compliance-score-cache.js';
 
 export const aiBomRoutes = new Hono<AppEnv>();
 
@@ -371,6 +372,9 @@ aiBomRoutes.post('/generate', (c) => {
   let created = 0;
   let updated = 0;
 
+  // Systems are written one at a time (not in a transaction), so a failure
+  // part way through still leaves committed rows: invalidate whatever happens.
+  try {
   for (const { repo, provider, findings: groupFindings } of groups.values()) {
     const ruleKeys = [...new Set(groupFindings.map((f) => f.ruleKey))];
     const sdks = [...new Set(groupFindings.map((f) => f.capabilityDetected))].sort();
@@ -467,6 +471,9 @@ aiBomRoutes.post('/generate', (c) => {
     }).run();
 
     created++;
+  }
+  } finally {
+    invalidateComplianceScore(orgId);
   }
 
   return c.json({ created, updated, totalGroups: groups.size }, 201);
@@ -589,6 +596,7 @@ aiBomRoutes.post('/', async (c) => {
     createdAt: now,
     updatedAt: now,
   }).run();
+  invalidateComplianceScore(orgId);
 
   const created = db.select().from(aiBomSystems)
     .where(eq(aiBomSystems.id, id))
@@ -696,6 +704,7 @@ aiBomRoutes.patch('/:id', async (c) => {
     .set(updates)
     .where(and(eq(aiBomSystems.id, id), eq(aiBomSystems.orgId, orgId)))
     .run();
+  invalidateComplianceScore(orgId);
 
   const updated = db.select().from(aiBomSystems)
     .where(eq(aiBomSystems.id, id))
@@ -717,6 +726,7 @@ aiBomRoutes.delete('/:id', (c) => {
     .run();
 
   if (result.changes === 0) return c.json({ error: 'AI system not found' }, 404);
+  invalidateComplianceScore(orgId);
 
   return c.json({ message: 'AI system deactivated' });
 });

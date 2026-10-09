@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- The compliance score was served from a 30 s cache that only scan uploads cleared, so for up to
+  30 s after a rule was created, edited, retired, approved or rejected, an AI system or benchmark
+  changed, an organization's jurisdictions changed, or GitHub App findings landed, Posture, the
+  dashboard, the public badge, the GitHub Action and the VS Code extension showed the old numbers
+  as current. Every runtime write to those inputs now clears the cache after it commits, and a test
+  fails if a new write path skips it.
+
 ## [1.1.0] - 2026-10-08
 
 ### Security
