@@ -3,7 +3,10 @@ import type { z } from 'zod';
 import type { AppEnv } from '../../app.js';
 import { safeJson } from '../../utils.js';
 import { CpgError, cpgErrorResponse, invalidInput } from '../../../cpg/errors.js';
-import type { CpgActor } from '../../../cpg/rbac/can.js';
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { can, type CpgActor } from '../../../cpg/rbac/can.js';
+import type { PermissionKey } from '../../../cpg/rbac/catalog.js';
+import { getOrgSettings } from '../../../cpg/rbac/seed.js';
 
 /** Parse a JSON body with a strict zod schema; throws CpgError (400 invalid_json / invalid_input). */
 export async function parseBody<S extends z.ZodTypeAny>(c: Context<AppEnv>, schema: S): Promise<z.infer<S>> {
@@ -50,4 +53,14 @@ export function pathParam(c: Context<AppEnv>, name: string): string {
   const value = c.req.param(name);
   if (!value) throw new CpgError(404, 'not_found', 'Not found');
   return value;
+}
+
+/** 403 forbidden unless the actor holds `permission` (on `repo`, when given, so scoped grants count). */
+export function requirePermission(actor: CpgActor, permission: PermissionKey, repo?: string): void {
+  if (!can(actor, permission, repo ? { repo } : undefined)) throw new CpgError(403, 'forbidden', `Missing permission ${permission}`, { permission });
+}
+
+/** Writes need corporate policies enabled for the org (403 cpg_disabled). */
+export function requireEnabled(db: BetterSQLite3Database<any>, orgId: string): void {
+  if (!getOrgSettings(db, orgId)?.enabled) throw new CpgError(403, 'cpg_disabled', 'Corporate policies are not enabled for this organization');
 }
