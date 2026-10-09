@@ -86,3 +86,13 @@ export function RejectionReasons({ record }: { record: CompileRecord }) {
 export function Mono({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <span className={`font-mono text-xs break-all ${className}`}>{children}</span>;
 }
+
+/** A labelled value in a page's summary grid. */
+export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-text-muted mb-1">{label}</p>
+      <div className="text-text-primary">{children}</div>
+    </div>
+  );
+}
