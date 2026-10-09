@@ -2,7 +2,9 @@
 
 Endpoints for corporate policy governance (CPG) access control in your organization. For the
 model behind them (roles, permissions, scopes, who gets what on upgrade) read
-[Roles and permissions](../admin-guide/roles-and-permissions.md) first.
+[Roles and permissions](../admin-guide/roles-and-permissions.md) first. Boards, the approval
+quorum, the policy log and the signed policy bundle are on the
+[policy registry](./policy-registry.md) page.
 
 Every route acts on the organization of the caller. There is no organization id in the path, and
 an id that belongs to another organization always answers `404`, never `403`.
@@ -12,7 +14,7 @@ an id that belongs to another organization always answers `404`, never `403`.
 | Credential | Accepted by |
 |------------|-------------|
 | Session cookie (`nomus_session`) | every endpoint on this page |
-| User-bound API key (the key the VS Code extension receives at sign-in) | `GET /cpg/me` and `GET /cpg/settings` only; it acts as its user |
+| User-bound API key (the key the VS Code extension receives at sign-in) | `GET /cpg/me` and `GET /cpg/settings` on this page (and the registry reads listed on the [policy registry](./policy-registry.md) page); it acts as its user |
 | Organization API key (created under `/api/v1/org/api-keys` or by an administrator) | none: `403 user_identity_required`, because the key carries no user |
 
 A session or user-bound key whose user still has a temporary password gets
@@ -86,10 +88,12 @@ are the usual per-organization limits (`NOMUS_RATE_LIMIT_RPM`).
     { "key": "case.read", "scope": "org", "scopeId": null },
     { "key": "case.review", "scope": "repo", "scopeId": "acme/payments-api" }
   ],
-  "boards": [],
+  "boards": [{ "id": "1a2b…", "name": "AI Review Board" }],
   "identity": "session"
 }
 ```
+
+`boards` lists the active review boards the user is a member of.
 
 `identity` is `session` or `user_key`. A platform administrator gets `200` with
 `"isPlatformAdmin": true` and no permissions. A team- or repository-scoped grant lists only its
@@ -154,7 +158,7 @@ archived role returns it unchanged. System roles answer `403` (`details.reason: 
       "revokedAt": null, "revokedBy": null, "revokeReason": null
     }
   ],
-  "boards": []
+  "boards": [{ "id": "1a2b…", "name": "AI Review Board" }]
 }
 ```
 
@@ -257,7 +261,11 @@ from 64 zeros. `chainValid` re-verifies the whole chain on every call.
 Actions recorded in this release: `settings.initialized`, `rbac.roles_seeded`, `rbac.migrated`,
 `role.created`, `role.updated`, `role.permissions_changed`, `role.archived`, `user.invited`,
 `user.updated`, `grant.created`, `grant.revoked`, `team.created`, `team.updated`,
-`settings.updated`.
+`settings.updated`; and, for the policy registry, `board.created`, `board.updated`,
+`board.archived`, `board.member_added`, `board.member_removed`, `quorum.version_created`,
+`policy.version_proposed`, `policy.retirement_proposed`, `policy.vote_cast`, `policy.activated`,
+`policy.retired`, `policy.version_rejected`, `policy.version_withdrawn` and
+`policy.proposal_expired`. Payloads carry identifiers, hashes and settings, never source code.
 
 ### POST /api/v1/tenants/:id/org-admins
 
