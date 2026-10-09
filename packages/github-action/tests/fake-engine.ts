@@ -20,6 +20,7 @@ import {
 
 export const ORG = '6f1c2a4e-9b7d-4c3e-8a21-0d5e6f7a8b9c';
 export const CASE = '3d6c0b9a-8f7e-4d5c-9b4a-3c2d1e0f9a8b';
+export const CASE_REF = 'CPG-3D6C0B9A';
 export const POLICY_KEY = 'corp.no-direct-openai';
 
 type Status = 'approved' | 'excepted' | 'rejected' | 'needs_review' | 'pending' | 'advisory';
@@ -99,7 +100,7 @@ export async function startFakeEngine(): Promise<FakeEngine> {
     const hasCase = findings.length > 0;
     return {
       runId, verdict: v, reasons: findings.filter((f) => f.blocking).map((f) => `${POLICY_KEY} @ ${f.filePath}:${f.startLine}: ${f.status}`),
-      caseId: hasCase ? CASE : null, caseUrl: hasCase ? `https://gate.example.org/governance/cases/${CASE}` : null,
+      caseId: hasCase ? CASE : null, caseRef: hasCase ? CASE_REF : null, caseUrl: hasCase ? `https://gate.example.org/governance/cases/${CASE}` : null,
       findings, counts, evaluatedAt, signedPayload, signature: signText(signedPayload),
     };
   }

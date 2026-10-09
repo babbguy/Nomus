@@ -250,6 +250,8 @@ export const ciEvaluateResponseSchema = z.object({
   /** One line per blocking finding: `corp.x @ path:line: status`. */
   reasons: z.array(z.string()),
   caseId: z.string().uuid().nullable(),
+  /** The case's `CPG-…` reference. Display only: like `caseId`, it is outside the signed payload. */
+  caseRef: z.string().nullable(),
   caseUrl: z.string().url().nullable(),
   findings: z.array(findingResolutionSchema.extend({ filePath: relPath, startLine: z.number().int(), endLine: z.number().int() }).strict()),
   counts: ciCountsSchema,

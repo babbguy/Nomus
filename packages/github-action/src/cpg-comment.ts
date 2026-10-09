@@ -22,7 +22,7 @@ export function corporateCommentBody(v: CiEvaluateResponse): string {
     CORPORATE_COMMENT_MARKER,
     `## Nomus Corporate Policy Gate: ${v.verdict === 'pass' ? 'passed' : 'failed'}`,
     '',
-    v.caseUrl ? `**Review case:** [${v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
+    v.caseUrl ? `**Review case:** [${v.caseRef ?? v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
     '',
     '| Blocking | Pending | Rejected | Approved | Excepted | Advisory |',
     '|---|---|---|---|---|---|',

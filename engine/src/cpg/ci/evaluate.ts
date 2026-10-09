@@ -105,7 +105,7 @@ export function evaluateCi(db: Db, caller: CiCaller, req: CiEvaluateRequest, ori
     });
     return {
       runId, verdict, reasons: findings.flatMap((f, i) => (f.blocking ? [`${located[i].policyKey} @ ${f.filePath}:${f.startLine}: ${f.status}`] : [])),
-      caseId: kase?.id ?? null, caseUrl: kase ? caseUrl(origin, kase.id) : null,
+      caseId: kase?.id ?? null, caseRef: kase?.ref ?? null, caseUrl: kase ? caseUrl(origin, kase.id) : null,
       findings, counts, evaluatedAt: now, signedPayload, signature,
     };
   }).immediate();
