@@ -23,7 +23,7 @@ import { addComment, requestChanges, resubmit, type CommentRow } from '../../../
 import { closeCase } from '../../../cpg/cases/close.js';
 import { reviewerContext } from '../../../cpg/cases/context.js';
 import {
-  caseDetail, caseStatus, caseSummary, commentOf, findingsStatus, justificationOf, reviewerContextOf, revisionDetail,
+  caseDetail, caseStatus, caseSummaries, commentOf, findingsStatus, justificationOf, reviewerContextOf, revisionDetail,
 } from '../../../cpg/cases/serialize.js';
 import { userNames } from '../../../cpg/policies/service.js';
 import {
@@ -148,7 +148,7 @@ cpgCaseRoutes.get('/cases', ...auth(true), handle((c) => {
   const page = rows.slice(0, q.limit);
   const last = page[page.length - 1];
   return c.json(caseListResponseSchema.parse({
-    items: page.filter((r) => can(actor, 'case.read', { repo: r.repo })).map(caseSummary),
+    items: caseSummaries(db, actor.orgId, page.filter((r) => can(actor, 'case.read', { repo: r.repo }))),
     nextCursor: rows.length > q.limit ? Buffer.from(`${last.openedAt}|${last.id}`).toString('base64url') : null,
   }));
 }));
@@ -176,8 +176,8 @@ cpgCaseRoutes.post('/findings/status', ...readAuth, handle(async (c) => {
 
 // E43
 cpgCaseRoutes.get('/cases/:id', ...auth(true), handle((c) => {
-  const { db, kase } = caseFor(c, 'case.read');
-  return c.json(caseDetail(db, kase, origin(c)));
+  const { db, actor, kase } = caseFor(c, 'case.read');
+  return c.json(caseDetail(db, kase, origin(c), actor));
 }));
 
 // E44
