@@ -1,12 +1,14 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { cpgDecisions } from '../../db/schema-cpg.js';
+import { matchesStanding, snippetReader, standingExceptions, type LocatedFinding } from './standing.js';
 
 /**
- * The snippet and bulk decisions that apply to findings (design spec §7.4
- * step 2). Decisions are bound to (org, repo, fingerprint), so they carry
+ * What settles a blocking finding (design spec §7.4 steps 2 and 3). Snippet
+ * and bulk decisions are bound to (org, repo, fingerprint), so they carry
  * across revisions and branches; the latest one not revoked wins, and only a
- * later approval lifts a rejection.
+ * later approval lifts a rejection. Standing exceptions cover what no current
+ * snippet decision settles.
  */
 
 type Db = BetterSQLite3Database<any>;
@@ -23,7 +25,42 @@ export function latestDecisions(db: Db, orgId: string, repo: string, fingerprint
   return new Map(rows.map((d) => [d.fingerprint!, d]));
 }
 
-/** A finding is settled by a rejection (never expires) or by an approval that has not expired. */
-export function settles(d: DecisionRow | undefined, now: string): d is DecisionRow {
-  return d !== undefined && (d.outcome === 'reject' || d.expiresAt! > now);
+export interface Cover {
+  /** null: nothing settles the finding and no decision was ever made. */
+  status: 'rejected' | 'approved' | 'excepted' | 'expired' | null;
+  decision?: DecisionRow;
+  exception?: DecisionRow;
+}
+
+/**
+ * §7.4 for one blocking finding: a rejection blocks (it never expires and
+ * beats any exception); an unexpired approval passes; an expired one counts
+ * as absent, so a matching unexpired standing exception passes (the one that
+ * expires last, ties to the lowest id); otherwise the finding is undecided.
+ */
+export function precedence(decision: DecisionRow | undefined, exceptions: readonly DecisionRow[], now: string): Cover {
+  if (decision?.outcome === 'reject') return { status: 'rejected', decision };
+  if (decision && decision.expiresAt! > now) return { status: 'approved', decision };
+  const exception = exceptions.filter((x) => x.expiresAt! > now)
+    .sort((a, b) => b.expiresAt!.localeCompare(a.expiresAt!) || a.id.localeCompare(b.id))[0];
+  if (exception) return { status: 'excepted', decision, exception };
+  return { status: decision ? 'expired' : null, decision };
+}
+
+export const settled = (c: Cover | undefined) => c?.status === 'rejected' || c?.status === 'approved' || c?.status === 'excepted';
+
+/**
+ * The cover of each fingerprint in `repo` at `now`. A standing exception
+ * covers a fingerprint only when it matches every occurrence given; a
+ * fingerprint with no located occurrence is never excepted (fail closed).
+ */
+export function coverFindings(db: Db, orgId: string, fingerprints: readonly string[], occurrences: readonly (LocatedFinding & { fingerprint: string })[], repo: string, now: string): Map<string, Cover> {
+  const decisions = latestDecisions(db, orgId, repo, fingerprints, now);
+  const exceptions = standingExceptions(db, orgId).filter((x) => x.revocation === null || x.revocation.revokedAt > now);
+  const snippetOf = snippetReader(db, orgId);
+  return new Map([...new Set(fingerprints)].map((fp) => {
+    const located = occurrences.filter((o) => o.fingerprint === fp);
+    const matching = located.length === 0 ? [] : exceptions.filter((x) => located.every((o) => matchesStanding(o, x, snippetOf))).map((x) => x.decision);
+    return [fp, precedence(decisions.get(fp), matching, now)];
+  }));
 }

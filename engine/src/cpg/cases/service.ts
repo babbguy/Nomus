@@ -7,7 +7,7 @@ import {
   cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgJustifications, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions,
   cpgSnippets,
 } from '../../db/schema-cpg.js';
-import { latestDecisions, settles } from '../decisions/resolve.js';
+import { coverFindings, settled, type Cover } from '../decisions/resolve.js';
 import { CpgError, notFound } from '../errors.js';
 import { assertTransition, deriveCaseState, type CaseFacts } from './state.js';
 
@@ -219,7 +219,7 @@ function storeSnippet(db: Db, orgId: string, hash: string, f: RevisionFinding, n
 }
 
 /** The org's version `version` of policy `policyKey`, which must be the policy's active version. */
-function activeVersion(db: Db, orgId: string, policyKey: string, version: number) {
+export function activeVersion(db: Db, orgId: string, policyKey: string, version: number) {
   const row = db.select({
     id: cpgPolicyVersions.id, policyId: cpgPolicyVersions.policyId, tier: cpgPolicyVersions.tier,
     state: cpgPolicyHeads.state, activeVersionId: cpgPolicyHeads.activeVersionId, enforceFrom: cpgPolicyHeads.enforceFrom,
@@ -260,11 +260,17 @@ export function openChangeRequests(db: Db, caseId: string): Map<string, { resolv
   return open;
 }
 
-/** The blocking fingerprints of the latest revision that no current decision settles (§5.2). */
-export function undecidedBlocking(db: Db, c: Pick<CaseRow, 'id' | 'orgId' | 'repo'>, now: string): Set<string> {
-  const blocking = [...new Set(latestFindings(db, c.id).filter(isBlocking).map((f) => f.fingerprint))];
-  const decisions = latestDecisions(db, c.orgId, c.repo, blocking, now);
-  return new Set(blocking.filter((fp) => !settles(decisions.get(fp), now)));
+/** The §7.4 cover of each fingerprint of the case's latest revision, located by its findings there. */
+export function caseCover(db: Db, c: Pick<CaseRow, 'orgId' | 'repo' | 'branch'>, findings: readonly CaseFindingRow[], now: string): Map<string, Cover> {
+  const located = findings.map((f) => ({ ...f, repo: c.repo, branch: c.branch }));
+  return coverFindings(db, c.orgId, findings.map((f) => f.fingerprint), located, c.repo, now);
+}
+
+/** The blocking fingerprints of the latest revision that no current decision or standing exception settles (§5.2). */
+export function undecidedBlocking(db: Db, c: Pick<CaseRow, 'id' | 'orgId' | 'repo' | 'branch'>, now: string): Set<string> {
+  const blocking = latestFindings(db, c.id).filter(isBlocking);
+  const cover = caseCover(db, c, blocking, now);
+  return new Set(blocking.map((f) => f.fingerprint).filter((fp) => !settled(cover.get(fp))));
 }
 
 /** The facts of §5.2 over the latest revision. */
@@ -296,11 +302,26 @@ export function attachPullRequest(db: Db, orgId: string, caseId: string, prNumbe
   }).immediate();
 }
 
-/** Re-derive the projected state (§5.2) and record the move, refusing any §5.3 forbids. */
-export function refreshCaseState(db: Db, c: CaseRow, actor: string, now: string): void {
+/** Re-derive the projected state (§5.2) and record the move, refusing any §5.3 forbids. True when the state moved. */
+export function refreshCaseState(db: Db, c: CaseRow, actor: string, now: string): boolean {
   const to = deriveCaseState(caseFacts(db, c, now));
-  if (to === c.state) return;
+  if (to === c.state) return false;
   assertTransition(c.state, to);
   db.update(cpgCases).set({ state: to, updatedAt: now }).where(eq(cpgCases.id, c.id)).run();
   addCaseEvent(db, c, 'state_changed', actor, { from: c.state, to }, now);
+  return true;
+}
+
+/**
+ * Re-derive every open case a decision change can affect: those of `orgId`
+ * (every org when null) whose latest revision has a finding of
+ * `policyVersionId` (any when omitted). Returns how many moved.
+ */
+export function refreshOpenCases(db: Db, orgId: string | null, actor: string, now: string, policyVersionId?: string): number {
+  const rows = db.selectDistinct({ kase: cpgCases }).from(cpgCases)
+    .innerJoin(cpgCaseRevisions, and(eq(cpgCaseRevisions.caseId, cpgCases.id), eq(cpgCaseRevisions.revision, cpgCases.latestRevision)))
+    .innerJoin(cpgCaseFindings, eq(cpgCaseFindings.revisionId, cpgCaseRevisions.id))
+    .where(and(isNull(cpgCases.closedAt), orgId ? eq(cpgCases.orgId, orgId) : undefined,
+      policyVersionId ? eq(cpgCaseFindings.policyVersionId, policyVersionId) : undefined)).all();
+  return rows.filter(({ kase }) => refreshCaseState(db, kase, actor, now)).length;
 }

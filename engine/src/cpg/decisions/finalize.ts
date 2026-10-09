@@ -5,7 +5,7 @@ import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
 import { cpgDecisions, cpgProposalEvents, cpgVotes } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
 import { listBoards } from '../boards/service.js';
-import { addCaseEvent, refreshCaseState, type CaseRow } from '../cases/service.js';
+import { addCaseEvent, getCase, refreshOpenCases } from '../cases/service.js';
 import { CpgError } from '../errors.js';
 import { boardIdsOf, getHead, getVersion } from '../policies/service.js';
 import { cpgSign } from '../policies/signing.js';
@@ -57,7 +57,7 @@ export function currentRequirement(db: Db, p: ProposalRow, quorum: QuorumVersion
 export type SettleResult = Tally['state'] | 'invalidated';
 
 /** Evaluate a pending proposal after a vote, inside the vote's transaction. */
-export function settle(db: Db, p: ProposalRow, c: CaseRow, actor: string, now: string): SettleResult {
+export function settle(db: Db, p: ProposalRow, actor: string, now: string): SettleResult {
   const quorum = currentQuorum(db, p.orgId);
   let req: Requirement;
   try {
@@ -81,7 +81,7 @@ export function settle(db: Db, p: ProposalRow, c: CaseRow, actor: string, now: s
   if (head.activeVersionId !== p.policyVersionId || !head.activationSignature) {
     return invalidate(db, p, 'policy_version_not_active', quorum, actor, now);
   }
-  writeDecisions(db, p, c, result.deciders, quorum, sha256Hex(head.activationSignature), actor, now);
+  writeDecisions(db, p, result.deciders, quorum, sha256Hex(head.activationSignature), actor, now);
   return 'reached';
 }
 
@@ -92,17 +92,26 @@ function invalidate(db: Db, p: ProposalRow, reason: string, quorum: QuorumVersio
   return 'invalidated';
 }
 
-function writeDecisions(db: Db, p: ProposalRow, c: CaseRow, deciders: string[], quorum: QuorumVersion, activationSha: string, actor: string, finalizedAt: string): void {
-  const decisionIds = fingerprintsOf(p).map((fingerprint) => {
+/**
+ * One decision per finding, or one for a standing exception (no repo and no
+ * fingerprint; its pattern is signed in the payload). Every open case the
+ * policy version reaches is then re-derived: decisions bind (repo,
+ * fingerprint) across branches, and exceptions reach any repository.
+ */
+function writeDecisions(db: Db, p: ProposalRow, deciders: string[], quorum: QuorumVersion, activationSha: string, actor: string, finalizedAt: string): void {
+  const c = p.caseId === null ? null : getCase(db, p.orgId, p.caseId);
+  const repo = p.scope === 'standing' ? null : c!.repo;
+  const targets: Array<string | null> = p.scope === 'standing' ? [null] : fingerprintsOf(p);
+  const decisionIds = targets.map((fingerprint) => {
     const payload: DecisionPayload = {
-      kind: DECISION_KIND, id: randomUUID(), orgId: p.orgId, proposalId: p.id, caseId: c.id, scope: p.scope, outcome: p.outcome,
-      repo: c.repo, fingerprint, pattern: null, policyKey: p.policyKey, policyVersion: p.policyVersion,
+      kind: DECISION_KIND, id: randomUUID(), orgId: p.orgId, proposalId: p.id, caseId: p.caseId, scope: p.scope, outcome: p.outcome,
+      repo, fingerprint, pattern: p.pattern === null ? null : JSON.parse(p.pattern), policyKey: p.policyKey, policyVersion: p.policyVersion,
       policyActivationSignatureSha256: activationSha, expiresAt: p.requestedExpiresAt, approverUserIds: deciders,
       quorumConfigVersion: quorum.version, quorumConfigHash: quorum.configHash, finalizedAt,
     };
     const signedPayload = canonicalJson(payload);
     db.insert(cpgDecisions).values({
-      id: payload.id, orgId: p.orgId, proposalId: p.id, caseId: c.id, scope: p.scope, outcome: p.outcome, repo: c.repo, fingerprint,
+      id: payload.id, orgId: p.orgId, proposalId: p.id, caseId: p.caseId, scope: p.scope, outcome: p.outcome, repo, fingerprint,
       batchId: p.scope === 'bulk' ? p.id : null, policyId: p.policyId, policyVersionId: p.policyVersionId, policyKey: p.policyKey,
       policyVersion: p.policyVersion, expiresAt: p.requestedExpiresAt, approverUserIds: JSON.stringify(deciders),
       quorumConfigVersion: quorum.version, quorumConfigHash: quorum.configHash, finalizedAt, signedPayload, signature: cpgSign(signedPayload),
@@ -110,10 +119,10 @@ function writeDecisions(db: Db, p: ProposalRow, c: CaseRow, deciders: string[], 
     // A bulk decision is still recorded per finding in the audit trail (brief §3).
     appendAuditEvent(db, {
       orgId: p.orgId, actor, action: 'decision.recorded', targetType: 'decision', targetId: payload.id,
-      payload: { proposalId: p.id, caseId: c.id, scope: p.scope, outcome: p.outcome, fingerprint, expiresAt: p.requestedExpiresAt, quorumConfigVersion: quorum.version },
+      payload: { proposalId: p.id, caseId: p.caseId, scope: p.scope, outcome: p.outcome, fingerprint, expiresAt: p.requestedExpiresAt, quorumConfigVersion: quorum.version },
     });
     return payload.id;
   });
-  addCaseEvent(db, c, 'decision_recorded', actor, { proposalId: p.id, outcome: p.outcome, decisionIds }, finalizedAt);
-  refreshCaseState(db, c, actor, finalizedAt);
+  if (c) addCaseEvent(db, c, 'decision_recorded', actor, { proposalId: p.id, outcome: p.outcome, decisionIds }, finalizedAt);
+  refreshOpenCases(db, p.orgId, actor, finalizedAt, p.policyVersionId);
 }

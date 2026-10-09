@@ -9,7 +9,7 @@ import {
   caseDetailResponseSchema, revisionDetailResponseSchema, reviewerContextResponseSchema,
   type CaseSummaryResponse, type CommentResponse, type JustificationResponse, type ReviewerContextResponse,
 } from '../contracts.js';
-import { latestDecisions, settles, type DecisionRow } from '../decisions/resolve.js';
+import { coverFindings, settled, type Cover } from '../decisions/resolve.js';
 import { pendingFingerprints } from '../decisions/status.js';
 import { CpgError, notFound } from '../errors.js';
 import { boardIdsOf, userNames } from '../policies/service.js';
@@ -18,7 +18,7 @@ import { listComments, type CommentRow } from './comments.js';
 import { latestAttempt, type ReviewerContextRow } from './context.js';
 import { currentJustifications, type JustificationRow } from './justifications.js';
 import { caseLanes } from './lanes.js';
-import { isBlocking, latestFindings, openChangeRequests, type CaseFindingRow, type CaseRow, type RevisionRow } from './service.js';
+import { caseCover, isBlocking, latestFindings, openChangeRequests, type CaseFindingRow, type CaseRow, type RevisionRow } from './service.js';
 
 /** Response builders for the review-case routes; each output is parsed with its contract. */
 
@@ -68,30 +68,33 @@ interface ResolutionFacts {
   head: Pick<PolicyHead, 'state' | 'enforceFrom'>;
 }
 
-/** What else decides a finding's resolution: its decision, a pending proposal, a change request. */
+/** What else decides a finding's resolution: its §7.4 cover, a pending proposal, a change request. */
 interface ResolutionContext {
-  decisions: ReadonlyMap<string, DecisionRow>;
+  cover: ReadonlyMap<string, Cover>;
   pending: ReadonlySet<string>;
   changeRequested: ReadonlySet<string>;
   now: string;
 }
 
 /**
- * One finding's resolution (§7.4; standing exceptions are not resolved yet).
- * A finding raised against a version that is no longer active is `expired`:
- * it blocks (rescan) unless the policy is retired. A non-blocking finding is
- * `advisory` or `grace`. Otherwise a rejection blocks, an unexpired approval
- * passes, and an expired one counts as absent: `pending` when a proposal
- * covers the finding, else `expired`, `changes_requested` or `needs_review`.
+ * One finding's resolution (§7.4). A finding raised against a version that
+ * is no longer active is `expired`: it blocks (rescan) unless the policy is
+ * retired. A non-blocking finding is `advisory` or `grace`. Otherwise its
+ * cover decides (rejected, approved, excepted); an undecided finding is
+ * `pending` when a proposal covers it, else `expired` (its approval lapsed),
+ * `changes_requested` or `needs_review`.
  */
 function resolutionOf(f: ResolutionFacts, ctx: ResolutionContext): FindingResolution {
   const base = { fingerprint: f.fingerprint, tier: f.tier, enforceFrom: f.head.enforceFrom, decisionId: null, exceptionDecisionId: null, expiresAt: null };
   if (!f.current) return { ...base, status: 'expired', blocking: f.head.state === 'active' };
   if (!isBlocking(f)) return { ...base, status: f.tier === 'advisory' ? 'advisory' : 'grace', blocking: false };
-  const d = ctx.decisions.get(f.fingerprint);
-  const decided = d ? { decisionId: d.id, expiresAt: d.expiresAt } : {};
-  if (settles(d, ctx.now)) return { ...base, ...decided, status: d.outcome === 'reject' ? 'rejected' : 'approved', blocking: d.outcome === 'reject' };
-  const status = ctx.pending.has(f.fingerprint) ? 'pending' : d ? 'expired' : ctx.changeRequested.has(f.fingerprint) ? 'changes_requested' : 'needs_review';
+  const cover = ctx.cover.get(f.fingerprint) ?? { status: null };
+  const decided = {
+    decisionId: cover.decision?.id ?? null, exceptionDecisionId: cover.exception?.id ?? null,
+    expiresAt: (cover.exception ?? cover.decision)?.expiresAt ?? null,
+  };
+  if (settled(cover)) return { ...base, ...decided, status: cover.status!, blocking: cover.status === 'rejected' };
+  const status = ctx.pending.has(f.fingerprint) ? 'pending' : cover.status === 'expired' ? 'expired' : ctx.changeRequested.has(f.fingerprint) ? 'changes_requested' : 'needs_review';
   return { ...base, ...decided, status, blocking: true };
 }
 
@@ -106,9 +109,7 @@ const requestedFingerprints = (requests: CommentRow[]) => new Set(requests.flatM
 /** The resolution of each latest-revision finding of case `c`, by fingerprint. */
 function resolutions(db: Db, c: CaseRow, findings: CaseFindingRow[], changeRequested: Set<string>): FindingResolution[] {
   const now = new Date().toISOString();
-  const ctx: ResolutionContext = {
-    decisions: latestDecisions(db, c.orgId, c.repo, findings.map((f) => f.fingerprint), now), pending: pendingFingerprints(db, c.id, now), changeRequested, now,
-  };
+  const ctx: ResolutionContext = { cover: caseCover(db, c, findings, now), pending: pendingFingerprints(db, c.id, now), changeRequested, now };
   const policyIds = [...new Set(findings.map((f) => f.policyId))];
   const heads = new Map(policyIds.length === 0 ? [] : db.select().from(cpgPolicyHeads).where(inArray(cpgPolicyHeads.policyId, policyIds)).all().map((h) => [h.policyId, h]));
   const byFingerprint = new Map(findings.map((f) => [f.fingerprint, f]));
@@ -121,8 +122,9 @@ function resolutions(db: Db, c: CaseRow, findings: CaseFindingRow[], changeReque
 /**
  * E53: the resolution of fingerprints a scanner found on a branch, before or
  * after review was requested. Each must name a version of one of the org's
- * policies (422 unknown_policy otherwise); change requests come from the
- * branch's open case, if any.
+ * policies (422 unknown_policy otherwise). Change requests, and the file
+ * locations a standing exception is matched against, come from the branch's
+ * open case: a fingerprint it does not hold is never excepted.
  */
 export function findingsStatus(db: Db, orgId: string, branch: { repo: string; branch: string }, fingerprints: readonly string[], now: string): FindingResolution[] {
   const parsed = [...new Set(fingerprints)].map((fingerprint) => ({ fingerprint, ...parseFingerprint(fingerprint)! }));
@@ -137,10 +139,10 @@ export function findingsStatus(db: Db, orgId: string, branch: { repo: string; br
     .map((v) => [`${v.policyKey}:${v.version}`, v]));
   const unknown = parsed.filter((p) => !versions.has(`${p.policyKey}:${p.policyVersion}`)).map((p) => p.fingerprint);
   if (unknown.length > 0) throw new CpgError(422, 'unknown_policy', 'A fingerprint names a policy version this organization does not have', { fingerprints: unknown });
-  const kase = db.select({ id: cpgCases.id }).from(cpgCases)
+  const kase = db.select().from(cpgCases)
     .where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, branch.repo), eq(cpgCases.branch, branch.branch), isNull(cpgCases.closedAt))).get();
   const ctx: ResolutionContext = {
-    decisions: latestDecisions(db, orgId, branch.repo, parsed.map((p) => p.fingerprint), now),
+    cover: coverFindings(db, orgId, parsed.map((p) => p.fingerprint), (kase ? latestFindings(db, kase.id) : []).map((f) => ({ ...f, ...branch })), branch.repo, now),
     pending: kase ? pendingFingerprints(db, kase.id, now) : new Set(),
     changeRequested: kase ? requestedFingerprints(unresolvedRequests(db, kase.id)) : new Set(),
     now,
