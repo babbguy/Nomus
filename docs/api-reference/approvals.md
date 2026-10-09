@@ -102,7 +102,7 @@ exception no longer matches and has to be proposed again.
   "scope": "standing",
   "caseId": "<uuid, optional: the case it was proposed from>",
   "pattern": {
-    "repos": ["github.com/gate-org/policy-repo"],
+    "repos": ["gate-org/policy-repo"],
     "teamIds": [],
     "paths": ["src/legacy/**"],
     "excludePaths": [],
@@ -126,8 +126,12 @@ exception no longer matches and has to be proposed again.
 - Nobody may vote who opened, justified or revised the case the exception was proposed from, or
   any open case whose findings the pattern covers (`403 self_approval_forbidden`).
 - Globs follow the corporate rule syntax (`*`, `?`, `**`, `{a,b}`; no character classes). Repository
-  patterns are lowercase; a wildcard in the host part (`*`, `**`, `*/*`) is organization-wide and
-  is refused unless `standingExceptions.allowOrgWideRepoPatterns` is on.
+  patterns are lowercase and match canonical repository ids (see
+  [Repository identity](./review-cases.md)): a leading `github.com/` host is dropped, so
+  `github.com/acme/*` is stored as `acme/*`, and a `github.com/` pattern that is not followed by
+  exactly an owner and a name (`github.com/*`, `github.com/**`) is refused (`400 invalid_input`),
+  since it could never match. A wildcard in the host part (`*`, `**`, `*/*`) is organization-wide
+  and is refused unless `standingExceptions.allowOrgWideRepoPatterns` is on.
 
 A finding is **excepted** when every occurrence of it on the branch matches the pattern: the
 repository (or a repository of a listed team, resolved when the finding is checked), a `paths` glob

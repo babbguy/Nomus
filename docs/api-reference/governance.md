@@ -190,7 +190,7 @@ deactivate yourself (`409 cannot_deactivate_self`), the last active Org Admin
 |-------|------|-------|
 | `roleId` | UUID | a non-archived role of your organization |
 | `scopeType` | `org`, `team` or `repo` | |
-| `scopeId` | string | omit for `org`; a team id for `team`; a canonical repository id such as `acme/api` for `repo` |
+| `scopeId` | string | omit for `org`; a team id for `team`; a canonical repository id such as `acme/api` for `repo` (`github.com/acme/api` is stored as `acme/api`) |
 
 Returns the grant with `201`. If the user already holds the same role with the same scope, the
 existing grant is returned with `200` instead of creating a duplicate.

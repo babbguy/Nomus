@@ -19,7 +19,9 @@ import { createHost, loadExtension, renderTree } from '../lib/vscode-host.mjs';
 import { preparePolicyRepo } from './cpg-scanner.mjs';
 import { writeGitDir } from './cpg-vscode.mjs';
 
-const REPO = 'github.com/gate-org/policy-repo';
+// The HTTP checks use their own repository (given with the github.com host): the VS Code checks
+// open the case of gate-org/policy-repo @ feat/policy-demo, and both forms name one repository.
+const REPO = 'github.com/gate-org/policy-repo-api';
 const JUSTIFICATION = 'Needed for the support chat until the gateway client supports streaming responses.';
 const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
 

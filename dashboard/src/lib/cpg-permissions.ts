@@ -142,8 +142,9 @@ export function describeScope(grant: Pick<Grant, 'scopeType' | 'scopeId'>, teams
 
 /**
  * Canonical repository id, as the engine requires for repo-scoped grants
- * (mirrors CANONICAL_REPO_RE in engine/src/cpg/rbac/grants.ts). A hint for
- * the form only; the server re-validates (422 invalid_repo).
+ * (mirrors CANONICAL_REPO_RE in packages/scanner/src/corporate/repo.ts). A
+ * hint for the form only; the server drops a leading `github.com/` host and
+ * re-validates (422 invalid_repo).
  */
 export function isCanonicalRepo(value: string): boolean {
   return value.length <= 200 && /^[a-z0-9.-]+(\/[a-z0-9._-]+){1,2}$/.test(value)

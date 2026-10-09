@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { canonicalJson, sha256Hex } from './canonical.js';
 import { corporateRuleSchema } from './rule-schema.js';
 import { FINGERPRINT_RE } from './fingerprint.js';
-import { CANONICAL_REPO_RE } from './repo.js';
+import { CANONICAL_REPO_RE, canonicalRepo, canonicalRepoPattern } from './repo.js';
 import { LANGUAGES, POLICY_KEY_RE, TIERS } from './vocab.js';
 
 /**
@@ -95,6 +95,25 @@ export interface PolicyActivationPayload {
 // ─── Review cases (§9.3): request review, case status, finding resolutions ──
 
 const repo = z.string().regex(CANONICAL_REPO_RE);
+
+/**
+ * A repository named in a request: any reference canonicalRepo() accepts
+ * (`owner/name`, `github.com/owner/name`, a remote URL, any case), replaced by
+ * its canonical id. The engine stores and compares only that id, so one
+ * repository has one identity for its cases, decisions, exceptions and CI runs.
+ */
+export const repoInputSchema = z.string().transform((s, ctx) => {
+  const id = canonicalRepo(s);
+  if (id === null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'not a repository: expected owner/name, host/owner/name or a git remote URL' });
+  return id ?? z.NEVER;
+});
+
+/** A repository pattern in a request, canonicalised by canonicalRepoPattern() (a leading `github.com/` host is dropped). */
+export const repoPatternInputSchema = z.string().min(1).max(200).transform((s, ctx) => {
+  const pattern = canonicalRepoPattern(s);
+  if (pattern === null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'a github.com pattern names owner/name after the host, e.g. github.com/owner/*' });
+  return pattern ?? z.NEVER;
+});
 const branch = z.string().min(1).max(255).refine((b) => !b.startsWith('refs/') && !/[\u0000-\u001f]/.test(b), 'a branch name without refs/ or control characters');
 const fingerprint = z.string().regex(FINGERPRINT_RE);
 const relPath = z.string().min(1).max(500).refine((p) => !p.startsWith('/') && !p.includes('..') && !p.includes('\\'), 'a repo-relative path');
@@ -114,7 +133,7 @@ export const findingUploadSchema = z.object({
 export const justificationInputSchema = z.object({ fingerprint, body: z.string().trim().min(20).max(4000) }).strict();
 
 export const requestReviewRequestSchema = z.object({
-  repo,
+  repo: repoInputSchema,
   branch,
   headSha: z.string().regex(/^[0-9a-f]{40}$/).nullable(),
   bundleHash: sha256,
@@ -171,7 +190,7 @@ export const requestReviewResponseSchema = z.object({
 
 export const caseByBranchResponseSchema = z.object({ case: caseStatusSchema.nullable() }).strict();
 
-export const findingsStatusRequestSchema = z.object({ repo, branch, fingerprints: z.array(fingerprint).min(1).max(1000) }).strict();
+export const findingsStatusRequestSchema = z.object({ repo: repoInputSchema, branch, fingerprints: z.array(fingerprint).min(1).max(1000) }).strict();
 export const findingsStatusResponseSchema = z.object({ items: z.array(findingResolutionSchema), evaluatedAt: isoDate }).strict();
 
 export type FindingUpload = z.infer<typeof findingUploadSchema>;
@@ -185,7 +204,7 @@ const sha = z.string().regex(/^[0-9a-f]{40}$/);
 const prNumber = z.number().int().positive();
 
 export const ciEvaluateRequestSchema = z.object({
-  repo,
+  repo: repoInputSchema,
   branch,
   prNumber: prNumber.nullable(),
   headSha: sha,
@@ -239,7 +258,7 @@ export const ciEvaluateResponseSchema = z.object({
   signature: z.string(),
 }).strict();
 
-export const prClosedRequestSchema = z.object({ repo, branch, prNumber, merged: z.boolean(), mergeSha: sha.optional() }).strict();
+export const prClosedRequestSchema = z.object({ repo: repoInputSchema, branch, prNumber, merged: z.boolean(), mergeSha: sha.optional() }).strict();
 export const prClosedResponseSchema = z.object({ caseId: z.string().uuid().nullable(), closed: z.boolean() }).strict();
 
 export type CiEvaluateRequest = z.infer<typeof ciEvaluateRequestSchema>;

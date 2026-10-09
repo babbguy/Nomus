@@ -197,6 +197,12 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 - A second developer signing in to VS Code in the same organization revoked the first
   developer's key. Signing in now replaces only your own extension key.
+- Corporate policy governance: a repository named as `github.com/owner/name` and as `owner/name`
+  had two identities, so cases, decisions, standing exceptions and CI runs recorded under one form
+  did not apply under the other. Every repository input (review requests, case and run filters,
+  findings status, CI evaluate and pr-closed) is now canonicalised, so every form names one
+  repository; team and standing-exception repository patterns and repository-scoped grants drop a
+  leading `github.com/` host.
 ### Fixed
 - Scanner: two scans of the same repository could list findings in a different order, because the
   file walk returns files in no guaranteed order. Files are now sorted before detection, so the

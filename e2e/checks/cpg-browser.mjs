@@ -449,7 +449,7 @@ async function caseChecks(ctx, browser) {
   const enable = await owner.client.patch('/api/v1/cpg/settings', { enabled: true, reviewerContextLlm: true });
   try {
     // The cases cpg-cases opened over HTTP (its repository is given with the github.com host).
-    const branchCase = async (branch) => (await owner.client.get(`/api/v1/cpg/cases/by-branch?repo=github.com/gate-org/policy-repo&branch=${branch}`)).json?.case;
+    const branchCase = async (branch) => (await owner.client.get(`/api/v1/cpg/cases/by-branch?repo=github.com/gate-org/policy-repo-api&branch=${branch}`)).json?.case;
     const demo = await branchCase('feat/policy-demo');
     const parallel = await branchCase('feat/policy-parallel');
     if (enable.status !== 200 || !demo || !parallel) {

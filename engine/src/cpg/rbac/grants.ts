@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { canonicalRepoPattern, isCanonicalRepo } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgRolePermissions, cpgRoles, cpgTeams, cpgUserRoles } from '../../db/schema-cpg.js';
 import { users } from '../../db/schema.js';
@@ -20,14 +21,6 @@ type Db = BetterSQLite3Database<any>;
 export type ScopeType = 'org' | 'team' | 'repo';
 export type GrantRow = typeof cpgUserRoles.$inferSelect;
 export type RoleRow = typeof cpgRoles.$inferSelect;
-
-/** Canonical repository id (§2.2 / §9.3): `owner/name` or `host/owner/name`, lowercase. */
-export const CANONICAL_REPO_RE = /^[a-z0-9.-]+(\/[a-z0-9._-]+){1,2}$/;
-
-/** CANONICAL_REPO_RE, minus `.` / `..` segments (never a real owner or repo name). */
-export function isCanonicalRepo(repo: string): boolean {
-  return repo.length <= 200 && CANONICAL_REPO_RE.test(repo) && !repo.split('/').some((s) => s === '.' || s === '..');
-}
 
 export function getRole(db: Db, orgId: string, roleId: string): RoleRow | undefined {
   return db.select().from(cpgRoles).where(and(eq(cpgRoles.id, roleId), eq(cpgRoles.orgId, orgId))).get();
@@ -155,10 +148,12 @@ export function createGrant(db: Db, input: CreateGrantInput): { grant: GrantRow;
         if (team.archivedAt) throw new CpgError(409, 'team_archived', 'Archived teams cannot scope a grant');
         scopeId = team.id;
       } else {
-        if (!isCanonicalRepo(input.scopeId)) {
+        // A literal pattern: `github.com/owner/name` is the repository `owner/name` (§2.2).
+        const repo = canonicalRepoPattern(input.scopeId);
+        if (repo === null || !isCanonicalRepo(repo)) {
           throw new CpgError(422, 'invalid_repo', 'scopeId must be a canonical lowercase repository id such as owner/name');
         }
-        scopeId = input.scopeId;
+        scopeId = repo;
       }
     }
 

@@ -5,8 +5,8 @@ import { cpgRoles, cpgTeamRepos, cpgUserRoles } from '../db/schema-cpg.js';
 import { PERMISSION_KEYS } from './rbac/catalog.js';
 import { rolePermissionKeys, type GrantRow, type RoleRow } from './rbac/grants.js';
 import {
-  CANONICAL_REPO_RE, FINGERPRINT_RE, LANGUAGES, POLICY_KEY_RE, TIERS, caseStatusSchema, ciEvaluateResponseSchema, corporateRuleSchema, findingResolutionSchema,
-  requestReviewRequestSchema,
+  FINGERPRINT_RE, LANGUAGES, POLICY_KEY_RE, TIERS, caseStatusSchema, ciEvaluateResponseSchema, corporateRuleSchema, findingResolutionSchema,
+  repoInputSchema, repoPatternInputSchema, requestReviewRequestSchema,
 } from '@nomus/scanner/corporate';
 import { quorumConfigSchema } from './quorum/schema.js';
 import { requirementSchema } from './quorum/evaluate.js';
@@ -181,7 +181,7 @@ export const revokeGrantRequestSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 }).strict();
 
-const repoPatternList = z.array(z.string().min(1).max(200)).max(50)
+const repoPatternList = z.array(repoPatternInputSchema).max(50)
   .refine((ps) => new Set(ps).size === ps.length, 'repoPatterns must not repeat');
 
 export const createTeamRequestSchema = z.object({
@@ -617,7 +617,7 @@ export const reviewerContextResponseSchema = z.object({
 
 export const caseListQuerySchema = z.object({
   state: caseStateSchema.optional(),
-  repo: z.string().regex(CANONICAL_REPO_RE).optional(),
+  repo: repoInputSchema.optional(),
   /** Cases with a lane for this board (a latest-revision finding the board owns). */
   boardId: uuid.optional(),
   mine: z.enum(['true', 'false']).optional(),
@@ -658,7 +658,7 @@ const globList = (min: number, max: number) => z.array(z.string().min(1).max(200
 
 /** A standing exception's pattern (§7.2); globs and the regex are checked on write (422 invalid_glob / invalid_regex). */
 export const standingPatternSchema = z.object({
-  repos: globList(0, 50).default([]),
+  repos: z.array(repoPatternInputSchema).max(50).default([]),
   teamIds: z.array(uuid).max(20).default([]),
   paths: globList(1, 50),
   excludePaths: globList(0, 50).default([]),
@@ -743,7 +743,7 @@ export const decisionResponseSchema = z.object({
 
 export const exceptionListQuerySchema = z.object({
   active: z.enum(['true', 'false']).optional(),
-  repo: z.string().regex(CANONICAL_REPO_RE).optional(),
+  repo: repoInputSchema.optional(),
   policyKey: z.string().regex(POLICY_KEY_RE).optional(),
 }).strict();
 
@@ -773,7 +773,7 @@ export type StandingException = z.infer<typeof standingExceptionSchema>;
 // ─── Phase 6: CI runs (E63) ─────────────────────────────────────────────
 
 export const ciRunListQuerySchema = z.object({
-  repo: z.string().regex(CANONICAL_REPO_RE).optional(),
+  repo: repoInputSchema.optional(),
   sha: z.string().regex(/^[0-9a-f]{40}$/).optional(),
   caseId: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
