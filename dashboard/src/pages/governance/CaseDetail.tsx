@@ -16,7 +16,7 @@ import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import { SOURCE_LABEL, actorLabel, caseActions, closeReasonLabel, type CaseActions } from '../../lib/cpg-cases';
 import GovernanceHeader from './GovernanceHeader';
 import { Field, Mono } from './policies/parts';
-import { CaseStateBadge, LaneList, PullRequest, RepoBranch } from './cases/parts';
+import { CaseStateBadge, LaneList, Path, PullRequest, RepoBranch } from './cases/parts';
 import { FindingList } from './cases/Findings';
 import { Blocked, Discussion, RequestChangesForm } from './cases/Discussion';
 
@@ -105,7 +105,7 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
       <GovernanceHeader
         icon={FolderGit2}
         title={c.ref}
-        subtitle={`${c.repo} @ ${c.branch}`}
+        subtitle={<><Path value={c.repo} /> @ <Path value={c.branch} /></>}
         actions={!actions.readOnly && actions.end ? (
           <Button size="sm" variant="danger" onClick={() => setEnding(true)}>{actions.end === 'withdraw' ? 'Withdraw case' : 'Close case'}</Button>
         ) : undefined}
@@ -166,7 +166,7 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
                 <td className="px-4 py-2 text-xs">{r.addedCount}</td>
                 <td className="px-4 py-2 text-xs">{r.carriedCount}</td>
                 <td className="px-4 py-2 text-xs">{r.resolvedCount}</td>
-                <td className="px-4 py-2">{r.headSha ? <Mono>{r.headSha}</Mono> : <span className="text-xs text-text-muted">Not recorded</span>}</td>
+                <td className="px-4 py-2">{r.headSha ? <span className="block max-w-[10rem] truncate font-mono text-xs" title={r.headSha}>{r.headSha}</span> : <span className="text-xs text-text-muted">Not recorded</span>}</td>
                 <td className="px-4 py-2 text-xs text-text-secondary whitespace-nowrap">{formatUtc(r.createdAt)}</td>
               </tr>
             ))}
@@ -181,7 +181,7 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
         {revision < 1 ? <p className="text-sm text-text-muted">No revision has been submitted yet.</p>
           : findingsError ? <ErrorState compact message={findingsError} onRetry={() => setRetryKey((k) => k + 1)} />
             : !findings ? <div className="flex justify-center py-6"><Spinner /></div>
-              : <FindingList caseId={c.id} findings={findings.findings} resolutions={resolutions} />}
+              : <FindingList caseId={c.id} findings={findings.findings} resolutions={resolutions} closed={closed} />}
       </Card>
 
       <Discussion detail={detail} actions={actions} onPosted={onChanged} />

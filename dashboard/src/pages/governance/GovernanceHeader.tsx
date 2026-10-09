@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 export default function GovernanceHeader({ icon: Icon, title, subtitle, actions }: {
   icon: LucideIcon;
   title: string;
-  subtitle: string;
+  subtitle: React.ReactNode;
   actions?: React.ReactNode;
 }) {
   return (

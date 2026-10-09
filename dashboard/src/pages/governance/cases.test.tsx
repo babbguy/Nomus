@@ -6,11 +6,11 @@ import { CaseView } from './CaseDetail';
 import { FindingList } from './cases/Findings';
 import * as fx from '../../test/cpg-fixtures';
 import { caseDetailSchema, caseSummarySchema, revisionDetailSchema, type CaseDetail, type CpgMe } from '../../api/cpg';
-import { caseActions, pageNote, pullRequestUrl, threadsOf } from '../../lib/cpg-cases';
+import { asSentence, breakablePath, caseActions, pageNote, pullRequestUrl, threadsOf } from '../../lib/cpg-cases';
 import { missingPermissions } from '../../lib/cpg-permissions';
 
 const text = (node: React.ReactElement) => renderToStaticMarkup(<MemoryRouter>{node}</MemoryRouter>)
-  .replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+  .replace(/<\/span><wbr\/><span class="whitespace-nowrap">/g, '').replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const expectClean = (t: string) => { for (const re of fx.BROKEN) expect(t).not.toMatch(re); };
 
 const CASE_ID = '6f1c2d3e-4a5b-4c6d-8e7f-901234567890';
@@ -63,7 +63,7 @@ const revision = revisionDetailSchema.parse({
   findings: [{
     id: '99999999-9999-4999-8999-999999999999', fingerprint: FP, policyId: POLICY_ID, policyKey: 'corp.no-direct-openai', policyTitle: 'No direct OpenAI calls',
     policyVersion: 1, tier: 'prohibited', blocking: true, owningBoardIds: [AI, LEGAL], statusAtRevision: 'new', filePath: 'src/chat.ts', startLine: 3, endLine: 4,
-    language: 'typescript', snippet: 'const r = await openai.chat.completions.create({\n  model });', justification: detail.justifications[0],
+    language: 'typescript', snippet: 'const r = await openai.chat.completions.create({\n  model });', justification: detail.justifications[0], contextStatus: 'none',
   }],
 });
 const meAs = (userId: string, keys: string[], boards: Array<{ id: string; name: string }> = [], over: Partial<CpgMe> = {}) => fx.me({
@@ -84,6 +84,16 @@ describe('case pages: rules', () => {
   it('links a pull request only for GitHub repositories (owner/name)', () => {
     expect(pullRequestUrl('example-org/app', 7)).toBe('https://github.com/example-org/app/pull/7');
     expect([pullRequestUrl('git.example.org/team/app', 7), pullRequestUrl('example-org/app', null)]).toEqual([null, null]);
+  });
+
+  it('adds a full stop only when the text has no closing mark', () => {
+    expect([asSentence('Connection error.'), asSentence('Connection error'), asSentence('Timed out?'), asSentence('Failed! ')])
+      .toEqual(['Connection error.', 'Connection error.', 'Timed out?', 'Failed!']);
+  });
+
+  it('repository paths and branches wrap only after / and .', () => {
+    expect(breakablePath('git.example.org/example-org/billing')).toEqual(['git.', 'example.', 'org/', 'example-org/', 'billing']);
+    expect(breakablePath('feat/chat-gateway')).toEqual(['feat/', 'chat-gateway']);
   });
 
   it('groups replies under their thread', () => {
@@ -135,6 +145,15 @@ describe('case pages: rendering', () => {
     for (const s of ['Close case', 'Add a comment', 'Reply', 'Needs review']) expect(t).not.toContain(s);
     const bad = text(<CaseView detail={{ ...closedDetail, closure: { ...closedDetail.closure!, signatureValid: false } }} me={reviewer} notice={null} onChanged={() => {}} fetchedAt={T} />);
     expect(bad).toContain('Signature does not verify');
+  });
+
+  it('a closed case never offers to generate reviewer context; stored context stays viewable', () => {
+    const f = revision.findings[0];
+    const closedList = (contextStatus: 'none' | 'generated' | 'failed') => text(<FindingList caseId={CASE_ID} findings={[{ ...f, contextStatus }]} resolutions={null} closed />);
+    expect(closedList('none')).toContain('No reviewer context was generated before the case closed.');
+    expect(closedList('none')).not.toContain('Show reviewer context');
+    expect(closedList('failed')).toContain('Generating reviewer context failed before the case closed.');
+    expect(closedList('generated')).toContain('Show reviewer context');
   });
 
   it('a finding links its policy and shows the location, the snippet as code, the justification and the context button', () => {

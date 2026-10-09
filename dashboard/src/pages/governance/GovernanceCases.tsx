@@ -147,14 +147,14 @@ export function CaseTable({ items }: { items: CaseSummary[] }) {
                 <Link to={`/governance/cases/${c.id}`} className="font-mono text-text-primary font-medium hover:text-accent">{c.ref}</Link>
                 <p className="text-xs text-text-muted">{c.latestRevision === 0 ? 'no revision yet' : `revision ${c.latestRevision}`}</p>
               </td>
-              <td className="px-4 py-3 min-w-[12rem]"><RepoBranch repo={c.repo} branch={c.branch} /></td>
+              <td className="px-4 py-3"><RepoBranch repo={c.repo} branch={c.branch} /></td>
               <td className="px-4 py-3"><CaseStateBadge state={c.state} closeReason={c.closeReason} /></td>
               <td className="px-4 py-3">{c.state === 'closed' ? <span className="text-xs text-text-muted">—</span> : <LaneList lanes={c.lanes} compact />}</td>
-              <td className="px-4 py-3 text-xs text-text-secondary whitespace-nowrap">
+              <td className="px-4 py-3 text-xs text-text-secondary">
                 <p>{actorLabel(c.openedBy)}</p>
                 <p className="text-text-muted">{formatUtc(c.openedAt)}</p>
               </td>
-              <td className="px-4 py-3 text-xs text-text-secondary whitespace-nowrap">{formatUtc(c.updatedAt)}</td>
+              <td className="px-4 py-3 text-xs text-text-secondary">{formatUtc(c.updatedAt)}</td>
               <td className="px-4 py-3 text-xs whitespace-nowrap"><PullRequest repo={c.repo} prNumber={c.prNumber} closed={c.state === 'closed'} /></td>
             </tr>
           ))}

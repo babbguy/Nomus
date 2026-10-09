@@ -24,7 +24,7 @@ export function Discussion({ detail, actions, onPosted }: { detail: CaseDetail; 
     <Card>
       <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-3"><MessagesSquare size={16} className="text-accent" /> Change requests and comments</h2>
       {threads.length === 0 ? (
-        <p className="text-sm text-text-muted mb-3">No change requests or comments yet.</p>
+        <p className="text-sm text-text-muted mb-3">No change requests or comments{detail.case.state === 'closed' ? '.' : ' yet.'}</p>
       ) : (
         <ul className="space-y-3 mb-4" data-testid="case-threads">
           {threads.map(({ root, replies }) => (

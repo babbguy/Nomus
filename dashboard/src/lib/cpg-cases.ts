@@ -33,6 +33,15 @@ export const SOURCE_LABEL = { vscode: 'VS Code', ci: 'CI', dashboard: 'Dashboard
 
 export const actorLabel = (ref: ActorRef) => ref.name || formatActor(ref.actor);
 
+/** Text ending in exactly one sentence mark: a full stop is added only when none is there. */
+export const asSentence = (text: string) => (/[.!?]$/.test(text.trimEnd()) ? text.trimEnd() : `${text.trimEnd()}.`);
+
+/**
+ * A repository path or branch split after each `/` and `.`: the only places
+ * it may wrap, never mid-name.
+ */
+export const breakablePath = (path: string) => path.split(/(?<=[/.])/);
+
 /**
  * A pull request link. Canonical repositories drop the github.com host
  * (owner/name), so only those are known to be on GitHub; another host gets

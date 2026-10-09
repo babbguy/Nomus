@@ -1,7 +1,8 @@
+import { Fragment } from 'react';
 import { ExternalLink } from 'lucide-react';
 import Badge from '../../../components/ui/Badge';
 import type { CaseLane, CaseState } from '../../../api/cpg';
-import { CASE_STATE_LABEL, CASE_STATE_VARIANT, LANE_STATE_LABEL, LANE_STATE_VARIANT, closeReasonLabel, pullRequestUrl } from '../../../lib/cpg-cases';
+import { CASE_STATE_LABEL, CASE_STATE_VARIANT, LANE_STATE_LABEL, LANE_STATE_VARIANT, breakablePath, closeReasonLabel, pullRequestUrl } from '../../../lib/cpg-cases';
 
 /** Building blocks shared by the case list and the case detail. */
 
@@ -16,11 +17,16 @@ export function CaseStateBadge({ state, closeReason }: { state: CaseState; close
 
 export function RepoBranch({ repo, branch }: { repo: string; branch: string }) {
   return (
-    <span className="font-mono text-xs break-all">
-      <span className="block text-text-primary">{repo}</span>
-      <span className="block text-text-secondary"><span className="text-text-muted">@ </span>{branch}</span>
+    <span className="font-mono text-xs" title={`${repo} @ ${branch}`}>
+      <span className="block text-text-primary"><Path value={repo} /></span>
+      <span className="block text-text-secondary"><span className="text-text-muted">@ </span><Path value={branch} /></span>
     </span>
   );
+}
+
+/** A path that wraps only after `/` and `.` (each part is unbreakable, hyphens included). */
+export function Path({ value }: { value: string }) {
+  return <>{breakablePath(value).map((part, i) => <Fragment key={i}>{i > 0 && <wbr />}<span className="whitespace-nowrap">{part}</span></Fragment>)}</>;
 }
 
 export function PullRequest({ repo, prNumber, closed = false }: { repo: string; prNumber: number | null; closed?: boolean }) {

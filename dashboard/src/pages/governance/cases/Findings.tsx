@@ -7,7 +7,7 @@ import Spinner from '../../../components/ui/Spinner';
 import ErrorState from '../../../components/ui/ErrorState';
 import { getReviewerContext, type CaseFinding, type FindingResolution, type ReviewerContext } from '../../../api/cpg';
 import { formatUtc, policyErrorMessage } from '../../../lib/cpg-policy';
-import { RESOLUTION_LABEL, RESOLUTION_VARIANT } from '../../../lib/cpg-cases';
+import { RESOLUTION_LABEL, RESOLUTION_VARIANT, asSentence } from '../../../lib/cpg-cases';
 import { GeneratedNotice, TierBadge } from '../policies/parts';
 
 /** The engine tries reviewer context at most this many times (MAX_CONTEXT_ATTEMPTS). */
@@ -19,10 +19,12 @@ const MAX_CONTEXT_ATTEMPTS = 5;
  * the generated reviewer context. `resolutions` are the latest revision's
  * (null when an older revision is shown).
  */
-export function FindingList({ caseId, findings, resolutions }: {
+export function FindingList({ caseId, findings, resolutions, closed = false }: {
   caseId: string;
   findings: CaseFinding[];
   resolutions: Map<string, FindingResolution> | null;
+  /** A closed case shows stored context only; it never generates any. */
+  closed?: boolean;
 }) {
   if (findings.length === 0) return <p className="text-sm text-text-muted">This revision has no findings: every earlier finding was fixed.</p>;
   return (
@@ -58,7 +60,7 @@ export function FindingList({ caseId, findings, resolutions }: {
                 <p className="text-text-muted text-xs">{f.blocking ? 'None yet. The developer justifies blocking findings when requesting review.' : 'None: this finding does not block, so it needs no review.'}</p>
               )}
             </div>
-            <ContextPanel caseId={caseId} findingId={f.id} />
+            <ContextPanel caseId={caseId} finding={f} closed={closed} />
           </li>
         );
       })}
@@ -73,7 +75,8 @@ type ContextState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'error'; te
  * first request generates it when the organization allows it, and the
  * result is stored, so later requests are free. Always labelled as generated.
  */
-function ContextPanel({ caseId, findingId }: { caseId: string; findingId: string }) {
+function ContextPanel({ caseId, finding, closed }: { caseId: string; finding: CaseFinding; closed: boolean }) {
+  const findingId = finding.id;
   const [state, setState] = useState<ContextState>({ kind: 'idle' });
 
   async function load(retry: boolean) {
@@ -92,6 +95,11 @@ function ContextPanel({ caseId, findingId }: { caseId: string; findingId: string
     </div>
   );
 
+  if (state.kind === 'idle' && closed && finding.contextStatus !== 'generated') {
+    return frame(<p className="text-xs text-text-secondary">{finding.contextStatus === 'failed'
+      ? 'Generating reviewer context failed before the case closed. A closed case does not try again.'
+      : 'No reviewer context was generated before the case closed. A closed case does not generate any.'}</p>);
+  }
   if (state.kind === 'idle') {
     return frame(
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -112,10 +120,10 @@ function ContextPanel({ caseId, findingId }: { caseId: string; findingId: string
     return frame(
       <div className="space-y-2">
         <p className="text-xs text-danger" role="alert">
-          Generating it failed{c.attempt ? ` (attempt ${c.attempt} of ${MAX_CONTEXT_ATTEMPTS})` : ''}: {c.error ?? 'no reason was recorded'}.
-          {canRetry ? '' : ' No more attempts are allowed.'}
+          Generating it failed{c.attempt ? ` (attempt ${c.attempt} of ${MAX_CONTEXT_ATTEMPTS})` : ''}: {asSentence(c.error ?? 'no reason was recorded')}
+          {closed ? ' A closed case does not try again.' : canRetry ? '' : ' No more attempts are allowed.'}
         </p>
-        {canRetry && <Button size="sm" variant="secondary" onClick={() => void load(true)}>Try again</Button>}
+        {canRetry && !closed && <Button size="sm" variant="secondary" onClick={() => void load(true)}>Try again</Button>}
       </div>,
     );
   }
