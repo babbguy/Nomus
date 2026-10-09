@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fetchCorporateBundle, verifyCorporateBundle } from './bundle-client.js';
+import { bundleFailureOf, CorporateBundleError, fetchCorporateBundle, verifyCorporateBundle } from './bundle-client.js';
 import {
   bundleHashOf, bundleSignedText, policyActivationPayload, ruleHashOf, type BundlePolicy, type CorporateBundle,
 } from './contracts.js';
@@ -149,6 +149,48 @@ describe('fetchCorporateBundle (fail closed)', () => {
       try { await fetchCorporateBundle({ apiUrl, apiKey: 'k', fetchImpl: f }); } catch (err) { caught = err; }
       expect(isNomusApiError(caught), name).toBe(true);
     }
+  });
+});
+
+describe('bundle failure classification (what a client may fall back to)', () => {
+  const apiUrl = 'http://nomus.local.example.org';
+  const failureOf = async (f: typeof fetch) => {
+    try { await fetchCorporateBundle({ apiUrl, apiKey: 'k', fetchImpl: f }); } catch (err) { return { err, failure: bundleFailureOf(err) }; }
+    return { err: null, failure: null };
+  };
+
+  it('returns the instance key the bundle was verified with', async () => {
+    const res = await fetchCorporateBundle({ apiUrl, apiKey: 'k', fetchImpl: fakeFetch({ '/api/v1/cpg/bundle': () => Response.json(bundle([])), '/.well-known/nomus-keys': keys }) });
+    expect(res).toMatchObject({ available: true, publicKeySpki: spki });
+  });
+
+  it('no answer is unreachable; an unexpected status is http with the status; anything that does not verify is invalid', async () => {
+    const cases: Array<[string, typeof fetch, unknown]> = [
+      ['network', (async () => { throw new TypeError('fetch failed'); }) as typeof fetch, { kind: 'unreachable' }],
+      ['500', fakeFetch({ '/api/v1/cpg/bundle': () => Response.json({}, { status: 500 }), '/.well-known/nomus-keys': keys }), { kind: 'http', status: 500 }],
+      ['401', fakeFetch({ '/api/v1/cpg/bundle': () => Response.json({}, { status: 401 }), '/.well-known/nomus-keys': keys }), { kind: 'http', status: 401 }],
+      ['keys 503', fakeFetch({ '/api/v1/cpg/bundle': () => Response.json(bundle([])), '/.well-known/nomus-keys': () => Response.json({}, { status: 503 }) }), { kind: 'http', status: 503 }],
+      ['invalid json', fakeFetch({ '/api/v1/cpg/bundle': () => new Response('{', { status: 200 }), '/.well-known/nomus-keys': keys }), { kind: 'invalid' }],
+      ['wrong key', fakeFetch({ '/api/v1/cpg/bundle': () => Response.json(bundle([])), '/.well-known/nomus-keys': () => Response.json({ keys: [{ spki: other }] }) }), { kind: 'invalid' }],
+      ['tampered', fakeFetch({ '/api/v1/cpg/bundle': () => { const b = bundle([policy('corp.a')]); return Response.json({ ...b, policies: [{ ...b.policies[0], tier: 'advisory' }] }); }, '/.well-known/nomus-keys': keys }), { kind: 'invalid' }],
+    ];
+    for (const [name, f, want] of cases) {
+      const { err, failure } = await failureOf(f);
+      expect(err, name).toBeInstanceOf(CorporateBundleError);
+      expect(isNomusApiError(err), name).toBe(true);
+      expect(failure, name).toEqual(want);
+    }
+  });
+
+  it('a 401 message names the rejected key', async () => {
+    const { err } = await failureOf(fakeFetch({ '/api/v1/cpg/bundle': () => Response.json({}, { status: 401 }), '/.well-known/nomus-keys': keys }));
+    expect((err as Error).message).toMatch(/answered 401: the API key was rejected/);
+  });
+
+  it('an error from anywhere else counts as invalid (never as a reason to trust a cache)', () => {
+    expect(bundleFailureOf(new Error('boom'))).toEqual({ kind: 'invalid' });
+    expect(bundleFailureOf(null)).toEqual({ kind: 'invalid' });
+    expect(bundleFailureOf({ failure: { kind: 'http' } })).toEqual({ kind: 'invalid' });
   });
 });
 

@@ -1,5 +1,6 @@
 import { relative, isAbsolute } from 'node:path';
-import type { Finding } from '../match/rule-matcher.js';
+import type { CorporateFinding, Finding } from '../match/rule-matcher.js';
+import type { CorporateScanSummary } from '../scan-corporate.js';
 
 const SEVERITY_ICONS: Record<string, string> = {
   critical: '🔴',
@@ -138,5 +139,91 @@ export function formatJsonReport(findings: Finding[], options: ReportOptions = {
       suggestion: f.suggestion,
     })),
     _disclaimer: DISCLAIMER,
+  };
+}
+
+// ── Corporate policy findings (CPG) ────────────────────────────────────
+// A separate section, printed only when the org has corporate policy
+// governance switched on. The regulatory report above is unchanged, and
+// corporate findings never change the status or the exit code.
+
+/** `needs review`, `advisory; enforced from 2026-10-22` or `advisory`. */
+export function corporateStatusText(f: Pick<CorporateFinding, 'status' | 'enforceFrom'>): string {
+  switch (f.status) {
+    case 'needs_review': return 'needs review';
+    case 'grace': return `advisory; enforced from ${f.enforceFrom.slice(0, 10)}`;
+    case 'advisory': return 'advisory';
+  }
+}
+
+/** Owning boards by name (the bundle lists them by id, which differs between servers). */
+function ownerNames(f: Pick<CorporateFinding, 'rule'>): string {
+  return f.rule.owningBoards.map((b) => b.name).sort((a, b) => a.localeCompare(b)).join(', ');
+}
+
+function lineSpan(f: Pick<CorporateFinding, 'startLine' | 'endLine'>): string {
+  return f.startLine === f.endLine ? `${f.startLine}` : `${f.startLine}-${f.endLine}`;
+}
+
+/** The corporate section of the console report. */
+export function formatCorporateConsoleReport(findings: readonly CorporateFinding[], summary: CorporateScanSummary): string {
+  const files = `${summary.scannedFileCount} file${summary.scannedFileCount === 1 ? '' : 's'} checked`;
+  const head = `Corporate policies: ${summary.policyCount} active polic${summary.policyCount === 1 ? 'y' : 'ies'}, ${files} (bundle ${summary.bundleHash?.slice(0, 12) ?? 'none'})`;
+  if (findings.length === 0) return `\n${head}\nNo corporate policy findings.\n`;
+  const blocking = findings.filter((f) => f.blocking).length;
+  const lines = ['', head, `${findings.length} corporate policy finding(s), ${blocking} blocking:`, ''];
+  for (const f of findings) {
+    lines.push(`[${f.tier.toUpperCase()}] ${f.policyKey} v${f.policyVersion}: ${f.rule.title}`);
+    lines.push(`   File:   ${f.filePath}:${lineSpan(f)}`);
+    lines.push(`   Policy: ${f.rule.message}`);
+    lines.push(`   Status: ${corporateStatusText(f)}${f.blocking ? ' (blocking)' : ''}`);
+    lines.push(`   Owners: ${ownerNames(f)}`);
+    lines.push(`   Fingerprint: ${f.fingerprint}`);
+    lines.push('');
+  }
+  if (summary.skippedLongLines > 0) lines.push(`Note: ${summary.skippedLongLines} line(s) longer than 4,096 characters were not checked by line patterns.`);
+  if (summary.skippedFileCount > 0) lines.push(`Note: ${summary.skippedFileCount} file(s) were skipped (over 2 MB, binary or outside the repository).`);
+  lines.push('Corporate policy findings never change the exit code of this command.');
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * The corporate fields of the JSON report: `corporate` (what was evaluated)
+ * and `corporateFindings`. Paths are repository-relative; the code itself is
+ * not included, only its range and fingerprint.
+ */
+export function formatCorporateJson(findings: readonly CorporateFinding[], summary: CorporateScanSummary) {
+  return {
+    corporate: {
+      enabled: summary.enabled,
+      orgId: summary.orgId,
+      bundleHash: summary.bundleHash,
+      policyCount: summary.policyCount,
+      scannedFileCount: summary.scannedFileCount,
+      skippedLongLines: summary.skippedLongLines,
+      skippedFileCount: summary.skippedFileCount,
+      total: findings.length,
+      blocking: findings.filter((f) => f.blocking).length,
+    },
+    corporateFindings: findings.map((f) => ({
+      file: f.filePath,
+      startLine: f.startLine,
+      endLine: f.endLine,
+      language: f.language,
+      policyKey: f.policyKey,
+      policyVersion: f.policyVersion,
+      policyId: f.rule.policyId,
+      title: f.rule.title,
+      tier: f.tier,
+      status: f.status,
+      blocking: f.blocking,
+      enforceFrom: f.enforceFrom,
+      message: f.rule.message,
+      owningBoards: f.rule.owningBoards.map((b) => b.name),
+      fingerprint: f.fingerprint,
+      snippetHash: f.snippetHash,
+      truncated: f.truncated,
+    })),
   };
 }
