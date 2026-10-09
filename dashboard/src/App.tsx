@@ -4,6 +4,8 @@ import { useAuthStore } from './stores/authStore';
 import Spinner from './components/ui/Spinner';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import Shell from './components/layout/Shell';
+import PermissionRoute from './components/layout/PermissionRoute';
+import { ACCESS_REQUIREMENT, AUDIT_REQUIREMENT, SETTINGS_REQUIREMENT } from './lib/cpg-permissions';
 import Login from './pages/Login';
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const TenantList = lazy(() => import('./pages/admin/TenantList'));
@@ -42,6 +44,10 @@ const Templates = lazy(() => import('./pages/customer/Templates'));
 const AuditExport = lazy(() => import('./pages/customer/AuditExport'));
 const RadarV2 = lazy(() => import('./pages/customer/RadarV2'));
 const BillDetail = lazy(() => import('./pages/customer/BillDetail'));
+const GovernanceOverview = lazy(() => import('./pages/governance/GovernanceOverview'));
+const GovernanceAccess = lazy(() => import('./pages/governance/GovernanceAccess'));
+const GovernanceAudit = lazy(() => import('./pages/governance/GovernanceAudit'));
+const GovernanceSettings = lazy(() => import('./pages/governance/GovernanceSettings'));
 const ScanAdmin = lazy(() => import('./pages/admin/ScanAdmin'));
 const ScoutFeeds = lazy(() => import('./pages/admin/ScoutFeeds'));
 const ScoutReview = lazy(() => import('./pages/admin/ScoutReview'));
@@ -143,6 +149,12 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
         <Route path="team" element={<Team />} />
+
+        {/* Corporate policy governance: guarded by GET /cpg/me permissions */}
+        <Route path="governance" element={<GovernanceOverview />} />
+        <Route path="governance/access" element={<PermissionRoute {...ACCESS_REQUIREMENT}><GovernanceAccess /></PermissionRoute>} />
+        <Route path="governance/audit" element={<PermissionRoute {...AUDIT_REQUIREMENT}><GovernanceAudit /></PermissionRoute>} />
+        <Route path="governance/settings" element={<PermissionRoute {...SETTINGS_REQUIREMENT}><GovernanceSettings /></PermissionRoute>} />
       </Route>
 
       {/* 404 */}
