@@ -42,6 +42,7 @@ import { logChecks } from './checks/server-logs.mjs';
 import { resourceChecks, readProbe } from './checks/resources.mjs';
 import { cpgSetup } from './checks/cpg-setup.mjs';
 import { cpgRbacChecks } from './checks/cpg-rbac.mjs';
+import { cpgBrowserChecks } from './checks/cpg-browser.mjs';
 
 const gateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -146,6 +147,7 @@ async function main() {
       // Corporate Policy Governance (v1.2.0): after every v1.1.0 area, against a
       // second org created by cpg-setup.mjs, so no existing expectation changes.
       ['cpg-rbac', cpgRbacChecks],
+      ['cpg-browser', cpgBrowserChecks],
     ];
     for (const [area, fn] of areas) {
       if (!wants(area)) continue;
