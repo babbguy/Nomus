@@ -153,7 +153,7 @@ It also reports, with a `github-token`:
 
 - a second check run, **Nomus Corporate Policy Gate** (`success` or `failure`, annotated, blocking findings first);
 - a second Code Scanning upload, `nomus-corporate.sarif`, with the category `nomus-corporate/` (approved and excepted findings are suppressed with their decision);
-- one pull request comment marked `<!-- nomus-cpg -->`, edited on every run: the review case link, the counts and one row per blocking finding. It never contains code.
+- one pull request comment marked `<!-- nomus-cpg -->`, edited on every run: the review case reference (`CPG-…`) linked to the case, the counts and one row per blocking finding. It never contains code.
 
 When a pull request is closed, the action closes its review case (as merged or not) instead of evaluating, so run it on `closed` too, as in the Quick Start.
 

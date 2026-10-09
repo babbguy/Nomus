@@ -72,6 +72,7 @@ are the usual per-organization limits (`NOMUS_RATE_LIMIT_RPM`).
 | `GET /api/v1/cpg/settings` | `policy.read` | Governance settings |
 | `PATCH /api/v1/cpg/settings` | `org.settings.manage` | Enable governance; switch reviewer-context generation |
 | `GET /api/v1/cpg/audit` | `audit.read` | The hash-chained audit log |
+| `GET /api/v1/cpg/audit/export` | `audit.export` | The signed governance audit export |
 | `POST /api/v1/tenants/:id/org-admins` | platform admin session or `admin` API key | Grant Org Admin to a user of an organization (recovery) |
 
 ---
@@ -272,6 +273,43 @@ Actions recorded in this release: `settings.initialized`, `rbac.roles_seeded`, `
 `policy.version_proposed`, `policy.retirement_proposed`, `policy.vote_cast`, `policy.activated`,
 `policy.retired`, `policy.version_rejected`, `policy.version_withdrawn` and
 `policy.proposal_expired`. Payloads carry identifiers, hashes and settings, never source code.
+
+### GET /api/v1/cpg/audit/export
+
+A browser session with `audit.export` (the Auditor role). Returns a file
+(`Content-Disposition: attachment`) to verify offline:
+
+```json
+{
+  "kind": "nomus.cpg-governance-export.v1",
+  "orgId": "<uuid>",
+  "exportedAt": "2026-10-09T12:00:00.000Z",
+  "content": {
+    "chainValid": true,
+    "auditEvents": [{ "id": "…", "seq": 1, "…": "as in GET /audit", "prevHash": "000…0", "hash": "…" }],
+    "decisions": [{ "id": "<uuid>", "signedPayloadCanonicalJson": "{\"kind\":\"nomus.cpg-decision.v1\",…}", "signature": "<base64>" }],
+    "revocations": [{ "id": "<uuid>", "signedPayloadCanonicalJson": "…", "signature": "…" }],
+    "caseClosures": [{ "id": "<case uuid>", "signedPayloadCanonicalJson": "…", "signature": "…" }],
+    "ciRuns": [{ "id": "<run uuid>", "signedPayloadCanonicalJson": "…", "signature": "…" }]
+  },
+  "contentHash": "<sha256 hex>",
+  "signature": "<base64 Ed25519>"
+}
+```
+
+`auditEvents` is the whole chain, oldest first. To verify with the Ed25519 key at
+`/.well-known/nomus-keys`:
+
+1. `contentHash` equals `sha256(canonicalJSON(content))`.
+2. `signature` verifies over `canonicalJSON({kind, orgId, exportedAt, contentHash})`.
+3. The chain verifies from 64 zeros: each event's `seq` is its position (from 1), its `prevHash` is
+   the previous `hash`, and its `hash` is computed as described for `GET /audit` above.
+4. Each record's `signature` verifies over its `signedPayloadCanonicalJson`, whose `kind` names
+   the record (`nomus.cpg-decision.v1`, `nomus.cpg-revocation.v1`, `nomus.cpg-case-closure.v1`,
+   `nomus.cpg-ci-run.v1`).
+
+`chainValid` is the server's own check at export time. The policy log and quorum versions are in
+`GET /api/v1/cpg/policies/export`.
 
 ### POST /api/v1/tenants/:id/org-admins
 
