@@ -14,12 +14,15 @@ The action needs a Nomus engine that you run yourself and an API key for it (`ap
 - **PR summary comment** with regulatory weight breakdown and compliance badge
 - **Check Runs** with pass/fail status and annotations
 - **Configurable threshold** — fail on critical, high, medium, or low
+- **Corporate policy gate** — enforces your organization's corporate policies when they are switched on (see [Corporate policy gate](#corporate-policy-gate))
 
 ## Quick Start
 
 ```yaml
 name: Regulatory Check
-on: [pull_request]
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
 
 jobs:
   nomus:
@@ -53,6 +56,7 @@ The repository you scan needs a `.nomus.yml` (see [Configuration](#configuration
 | `post-pr-comment` | Post obligations on PRs | No | `true` |
 | `badge-embed` | Include the public Nomus badge in the PR comment (skipped when the organization has no public badge) | No | `true` |
 | `badge-org` | Slug of your Nomus organization, for the badge | No | repository owner |
+| `corporate-gate` | Run the corporate policy gate. `false` fails the job while the organization enforces corporate policies | No | `true` |
 
 ## Outputs
 
@@ -67,6 +71,9 @@ The repository you scan needs a `.nomus.yml` (see [Configuration](#configuration
 | `compliance-score` | Regulatory exposure score (0–100) |
 | `compliance-label` | Score label (`Excellent`, `Good`, `Fair`, `Needs Work`, `Critical`) |
 | `sarif-file` | Path to the SARIF file; only set when findings exist, `github-token` is available and `upload-sarif` is on |
+| `corporate-status` | `pass`, `fail`, `unknown` (the gate failed closed), `disabled` (corporate policies are off), `unavailable` (the engine predates them) or `closed` (a closed pull request) |
+| `corporate-blocking` | Corporate policy findings blocking the pull request |
+| `corporate-case-url` | The branch's review case, when there is one |
 
 ## Example: Scheduled Full Repo Scan
 
@@ -138,9 +145,27 @@ nomus:
 
 Which obligations are reported depends on the active rules in the engine you point the action at, filtered by the `jurisdictions` in `.nomus.yml`. A scan that finds nothing is not a compliance clearance. The key needs the `evaluate` scope (and `read:policies` for the score lookup).
 
+## Corporate policy gate
+
+When your organization switches corporate policies on, the action enforces them after the regulatory scan (the API key needs the `read:policies` and `evaluate` scopes). It fetches and verifies the signed policy bundle, scans the **whole checkout** (whatever `working-directory` says), sends every finding to the engine and verifies the engine's signed verdict. The job fails unless every blocking finding has a valid decision (an approval or a standing exception); `::error::Corporate policy gate failed` lists the count and the review case.
+
+It also reports, with a `github-token`:
+
+- a second check run, **Nomus Corporate Policy Gate** (`success` or `failure`, annotated, blocking findings first);
+- a second Code Scanning upload, `nomus-corporate.sarif`, with the category `nomus-corporate/` (approved and excepted findings are suppressed with their decision);
+- one pull request comment marked `<!-- nomus-cpg -->`, edited on every run: the review case link, the counts and one row per blocking finding. It never contains code.
+
+When a pull request is closed, the action closes its review case (as merged or not) instead of evaluating, so run it on `closed` too, as in the Quick Start.
+
+For an organization without corporate policies nothing changes: `corporate-status` is `disabled` and there is no second check run, upload or comment.
+
+To make the gate binding, require the check in branch protection and protect the workflow file with `CODEOWNERS`; see [Enforcing in CI](../../docs/admin-guide/corporate-policies.md#enforcing-in-ci).
+
 ## Behavior on errors
 
 If the engine is unreachable or returns an unusable response, the action fails closed: it sets `status` to `unknown` and fails the step instead of reporting a pass. Uploading findings and fetching the score are best effort and only produce warnings (if the score cannot be fetched it is computed from the scan findings alone).
+
+The corporate policy gate fails closed too: no answer, an error status, a response that does not verify, a scan error or `corporate-gate: false` while the organization enforces corporate policies fail the job with `corporate-status` set to `unknown`, never `pass`. A `409 bundle_stale` (the policies changed during the run) is retried once with a fresh bundle.
 
 ## Links
 

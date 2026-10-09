@@ -204,22 +204,25 @@ function scopeOf(policies: readonly BundlePolicy[]): (path: string) => boolean {
  * Evaluate the bundle's active policies over a repository on disk. Every
  * file under `rootDir` is a candidate (dotfiles included, symlinks not
  * followed) except `.git` and `node_modules`; only files in scope of some
- * policy are read.
+ * policy are read. `generated` lists files the caller itself wrote during
+ * this run (the GitHub Action's SARIF reports), which are not the
+ * repository's code.
  */
 export async function runCorporateScanOnDisk(
   rootDir: string,
   bundle: CorporateBundle,
-  options: { now?: Date } = {},
+  options: { now?: Date; generated?: readonly string[] } = {},
 ): Promise<CorporateScanOutcome> {
   const now = options.now ?? new Date();
   const root = resolve(rootDir);
   const policies = activePolicies(bundle);
   if (policies.length === 0) return evaluateBatches([], bundle, now);
   const inScope = scopeOf(policies);
+  const generated = new Set((options.generated ?? []).map((f) => toPosixPath(relative(root, resolve(root, f)))));
   const paths = (await glob('**/*', {
     cwd: root, dot: true, nodir: true, posix: true, follow: false,
     ignore: ['**/.git/**', '**/node_modules/**'],
-  })).map((p) => toPosixPath(p)).filter(inScope).sort();
+  })).map((p) => toPosixPath(p)).filter((p) => inScope(p) && !generated.has(p)).sort();
 
   let tooLarge = 0;
   async function* batches(): AsyncGenerator<Batch> {

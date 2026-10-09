@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CorporateFinding } from '../match/rule-matcher.js';
+import type { FindingResolution } from '../corporate/contracts.js';
 import { corporateStatusText } from './reporter.js';
 
 /**
@@ -39,6 +40,7 @@ export interface CorporateSarifResult {
     };
   }>;
   partialFingerprints: { 'nomusCorporate/v1': string };
+  suppressions?: Array<{ kind: 'external'; status: 'accepted'; justification: string }>;
   properties: { tier: string; status: string; blocking: boolean; policyVersion: number; enforceFrom: string };
 }
 
@@ -51,6 +53,14 @@ export interface CorporateSarifRun {
 export interface CorporateSarifOptions {
   /** Dashboard origin; when set, each rule links to its policy page. */
   dashboardUrl?: string;
+  /**
+   * The server's resolution of a finding (the CI gate, E61). It replaces the
+   * local status; approved and excepted findings are suppressed with the
+   * decision that covers them.
+   */
+  resolutionOf?: (f: CorporateFinding) => FindingResolution | undefined;
+  /** The review case, linked from every result. */
+  caseUrl?: string | null;
 }
 
 function scannerVersion(): string {
@@ -62,9 +72,11 @@ function scannerVersion(): string {
   }
 }
 
-/** Blocking findings are errors; advisory and grace-period findings are notes. */
-function levelOf(f: CorporateFinding): SarifLevel {
-  return f.blocking ? 'error' : 'note';
+/** A server-side decision covering the finding, as a SARIF suppression. */
+function suppressionOf(r: FindingResolution | undefined): CorporateSarifResult['suppressions'] {
+  if (r?.status !== 'approved' && r?.status !== 'excepted') return undefined;
+  const what = r.status === 'approved' ? `Approved by Nomus decision ${r.decisionId}` : `Excepted by Nomus standing exception ${r.exceptionDecisionId}`;
+  return [{ kind: 'external', status: 'accepted', justification: `${what}${r.expiresAt ? ` until ${r.expiresAt}` : ''}` }];
 }
 
 /** The policy page in the dashboard, or undefined when no dashboard origin is known. */
@@ -98,18 +110,35 @@ export function formatCorporateSarifRun(findings: readonly CorporateFinding[], o
       },
     },
     automationDetails: { id: CORPORATE_SARIF_CATEGORY },
-    results: findings.map((f) => ({
-      ruleId: f.policyKey,
-      level: levelOf(f),
-      message: { text: `${f.rule.title} (${f.policyKey} v${f.policyVersion}): ${f.rule.message} Status: ${corporateStatusText(f)}.` },
-      locations: [{
-        physicalLocation: {
-          artifactLocation: { uri: f.filePath, uriBaseId: '%SRCROOT%' },
-          region: { startLine: f.startLine, endLine: f.endLine, startColumn: 1 },
-        },
-      }],
-      partialFingerprints: { 'nomusCorporate/v1': f.fingerprint },
-      properties: { tier: f.tier, status: f.status, blocking: f.blocking, policyVersion: f.policyVersion, enforceFrom: f.enforceFrom },
-    })),
+    results: findings.map((f) => {
+      const r = options.resolutionOf?.(f);
+      const blocking = r?.blocking ?? f.blocking;
+      const statusText = r ? r.status.replace(/_/g, ' ') : corporateStatusText(f);
+      const suppressions = suppressionOf(r);
+      return {
+        ruleId: f.policyKey,
+        // Blocking findings are errors; advisory, grace-period, approved and excepted ones are notes.
+        level: blocking ? 'error' : 'note',
+        message: { text: `${f.rule.title} (${f.policyKey} v${f.policyVersion}): ${f.rule.message} Status: ${statusText}.${options.caseUrl ? ` Review case: ${options.caseUrl}` : ''}` },
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: f.filePath, uriBaseId: '%SRCROOT%' },
+            region: { startLine: f.startLine, endLine: f.endLine, startColumn: 1 },
+          },
+        }],
+        partialFingerprints: { 'nomusCorporate/v1': f.fingerprint },
+        ...(suppressions ? { suppressions } : {}),
+        properties: { tier: f.tier, status: r?.status ?? f.status, blocking, policyVersion: f.policyVersion, enforceFrom: f.enforceFrom },
+      };
+    }),
+  };
+}
+
+/** A SARIF 2.1.0 log holding only the corporate run: the GitHub Action uploads it on its own (§11.4). */
+export function formatCorporateSarif(findings: readonly CorporateFinding[], options: CorporateSarifOptions = {}) {
+  return {
+    $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/Schemata/sarif-schema-2.1.0.json',
+    version: '2.1.0' as const,
+    runs: [formatCorporateSarifRun(findings, options)],
   };
 }

@@ -11,8 +11,8 @@ period, and what a corporate policy can and cannot express. Roles and permission
 
 > Phase note: this release builds the policy registry, the signed bundle and their dashboard
 > pages (Governance > Policies, Boards and Quorum), corporate findings in the CLI and VS Code, and
-> review cases (requested from VS Code, shown in Governance > Cases), reviewers' decisions and
-> standing exceptions (Governance > Exceptions). The CI gate arrives in a following release.
+> review cases (requested from VS Code, shown in Governance > Cases), reviewers' decisions,
+> standing exceptions (Governance > Exceptions) and the CI gate in the GitHub Action.
 
 ## How it fits together
 
@@ -148,8 +148,8 @@ A policy has at most one pending version at a time. The author can withdraw it.
 | Tier | Effect once enforced |
 |------|----------------------|
 | `advisory` | Shown to developers; never blocks |
-| `review-required` | Blocks CI until a reviewer approves the finding (later release) |
-| `prohibited` | Blocks CI; only snippet-level approvals by two boards (later release) |
+| `review-required` | Blocks CI until a reviewer approves the finding |
+| `prohibited` | Blocks CI; only snippet-level approvals by two boards |
 
 In the dashboard this is **Governance > Policies > New policy** (authors need `policy.author`):
 the page compiles, shows the rule in plain English and as JSON with every rejection reason and
@@ -302,6 +302,38 @@ again to restore it. Affected findings return to review and their cases are re-e
 A daily sweep at 03:30 UTC records an audit event when an approval or exception is 7 days and 1
 day from expiry and when it has expired, once each, and moves any case whose approvals expired out
 of `decided`. Email and webhook notices for these events come with integrations.
+
+## Enforcing in CI
+
+VS Code advises; CI enforces. The Nomus GitHub Action runs the corporate policy gate after its
+regulatory scan whenever corporate policies are on for the organization of its API key (the key
+needs the `read:policies` and `evaluate` scopes). It scans the whole checkout, whatever
+`working-directory` says, sends every finding to the server, and verifies the server's signed
+verdict. The job fails unless every blocking finding has a valid decision; the check run
+**Nomus Corporate Policy Gate**, a `<!-- nomus-cpg -->` pull request comment (the case link, the
+counts and one row per blocking finding; never code) and a Code Scanning upload with the category
+`nomus-corporate/` show why. See the [Action README](../../packages/github-action/README.md#corporate-policy-gate).
+
+The gate fails closed: if the server cannot be reached, answers an error, or sends anything that
+does not verify, the job fails with `corporate-status=unknown`. A workflow cannot switch the gate
+off: `corporate-gate: false` fails the job while the organization enforces corporate policies.
+
+The workflow file lives in the repository, so the gate is only as strong as its protection.
+Before relying on it:
+
+1. **Require the check.** In the repository's branch protection (or ruleset) for the default
+   branch, require the status check of the Nomus job, so a pull request cannot merge while it
+   fails, is missing or is still running.
+2. **Protect the workflow.** Add the workflow file to `CODEOWNERS` with your governance team as
+   owners, and require code-owner review, so nobody can remove or weaken the job in the same pull
+   request it would block:
+
+   ```
+   /.github/workflows/nomus.yml  @your-org/governance
+   ```
+
+3. **Run it on every pull request event**, including `closed`, so a merged pull request closes its
+   review case: `on: pull_request: types: [opened, synchronize, reopened, closed]`.
 
 ## Audit and export
 

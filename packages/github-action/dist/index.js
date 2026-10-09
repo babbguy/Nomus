@@ -273719,7 +273719,7 @@ var external_node_crypto_ = __nccwpck_require__(7598);
  * (engine/src/core/policy-compiler.ts); an engine test pins the parity, so a
  * hash or signature the server computes verifies in the client.
  */
-function canonical_canonicalJson(value) {
+function canonicalJson(value) {
     return JSON.stringify(sortKeysDeep(value));
 }
 function sortKeysDeep(value) {
@@ -274488,7 +274488,7 @@ const BUNDLE_KIND = 'nomus.cpg-bundle.v1';
 const POLICY_ACTIVATION_KIND = 'nomus.cpg-policy.v1';
 /** sha256 of a rule's canonical JSON (the `ruleHash` of a version). */
 function ruleHashOf(rule) {
-    return sha256Hex(canonical_canonicalJson(rule));
+    return sha256Hex(canonicalJson(rule));
 }
 function byKey(a, b) {
     return a.policyKey < b.policyKey ? -1 : a.policyKey > b.policyKey ? 1 : 0;
@@ -274500,11 +274500,11 @@ function sortBundlePolicies(policies) {
 /** The bundle hash: over the sorted policies without their activation signatures. */
 function bundleHashOf(policies) {
     const content = sortBundlePolicies(policies).map(({ activationSignature: _sig, ...rest }) => rest);
-    return sha256Hex(canonical_canonicalJson({ policies: content }));
+    return sha256Hex(canonicalJson({ policies: content }));
 }
 /** The canonical text the bundle signature covers. */
 function bundleSignedText(b) {
-    return canonical_canonicalJson({ kind: BUNDLE_KIND, orgId: b.orgId, enabled: b.enabled, bundleHash: b.bundleHash, generatedAt: b.generatedAt });
+    return canonicalJson({ kind: BUNDLE_KIND, orgId: b.orgId, enabled: b.enabled, bundleHash: b.bundleHash, generatedAt: b.generatedAt });
 }
 // ─── Review cases (§9.3): request review, case status, finding resolutions ──
 const repo = stringType().regex(CANONICAL_REPO_RE);
@@ -274603,7 +274603,7 @@ const ciCountsSchema = objectType({
 }).strict();
 const CI_RUN_KIND = 'nomus.cpg-ci-run.v1';
 /** What the CI verdict signature covers: `signedPayload` is the canonical JSON of this object. */
-const contracts_ciRunPayloadSchema = objectType({
+const ciRunPayloadSchema = objectType({
     kind: literalType(CI_RUN_KIND),
     runId: stringType().uuid(),
     orgId: stringType().uuid(),
@@ -274618,7 +274618,7 @@ const contracts_ciRunPayloadSchema = objectType({
     findingsDigest: sha256,
     evaluatedAt: isoDate,
 }).strict();
-const contracts_ciEvaluateResponseSchema = objectType({
+const ciEvaluateResponseSchema = objectType({
     runId: stringType().uuid(),
     verdict: enumType(['pass', 'fail']),
     /** One line per blocking finding: `corp.x @ path:line: status`. */
@@ -274735,7 +274735,7 @@ function verifyCorporateBundle(raw, spkiB64) {
         keys.add(p.policyKey);
         if (ruleHashOf(p.rule) !== p.ruleHash)
             throw invalid(`The rule of ${p.policyKey} v${p.version} does not match its hash`);
-        const payload = canonical_canonicalJson(policyActivationPayload(bundle.orgId, p));
+        const payload = canonicalJson(policyActivationPayload(bundle.orgId, p));
         if (!verifyEd25519(payload, p.activationSignature, spkiB64)) {
             throw invalid(`The activation signature of ${p.policyKey} v${p.version} does not verify`);
         }
@@ -275278,7 +275278,9 @@ function scopeOf(policies) {
  * Evaluate the bundle's active policies over a repository on disk. Every
  * file under `rootDir` is a candidate (dotfiles included, symlinks not
  * followed) except `.git` and `node_modules`; only files in scope of some
- * policy are read.
+ * policy are read. `generated` lists files the caller itself wrote during
+ * this run (the GitHub Action's SARIF reports), which are not the
+ * repository's code.
  */
 async function runCorporateScanOnDisk(rootDir, bundle, options = {}) {
     const now = options.now ?? new Date();
@@ -275287,10 +275289,11 @@ async function runCorporateScanOnDisk(rootDir, bundle, options = {}) {
     if (policies.length === 0)
         return evaluateBatches([], bundle, now);
     const inScope = scopeOf(policies);
+    const generated = new Set((options.generated ?? []).map((f) => glob_toPosixPath((0,external_node_path_namespaceObject.relative)(root, (0,external_node_path_namespaceObject.resolve)(root, f)))));
     const paths = (await glob('**/*', {
         cwd: root, dot: true, nodir: true, posix: true, follow: false,
         ignore: ['**/.git/**', '**/node_modules/**'],
-    })).map((p) => glob_toPosixPath(p)).filter(inScope).sort();
+    })).map((p) => glob_toPosixPath(p)).filter((p) => inScope(p) && !generated.has(p)).sort();
     let tooLarge = 0;
     async function* batches() {
         for (let i = 0; i < paths.length; i += READ_BATCH) {
@@ -275625,6 +275628,301 @@ async function runScanFromContents(files, options) {
 //# sourceMappingURL=scan.js.map
 // EXTERNAL MODULE: external "node:zlib"
 var external_node_zlib_ = __nccwpck_require__(8522);
+;// CONCATENATED MODULE: ../scanner/dist/output/reporter.js
+
+const SEVERITY_ICONS = {
+    critical: '🔴',
+    high: '🟠',
+    medium: '🟡',
+    low: '🔵',
+};
+const EFFECT_LABELS = {
+    deny: 'BLOCKED',
+    require_disclosure: 'DISCLOSURE REQUIRED',
+    allow_with_audit: 'AUDIT REQUIRED',
+    flag: 'FLAGGED',
+};
+const reporter_SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
+const DISCLAIMER = 'Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.';
+/** pass/fail for a set of findings under a --fail-on threshold. */
+function reportStatus(findings, failOn = 'critical') {
+    const threshold = reporter_SEVERITY_RANK[failOn] ?? reporter_SEVERITY_RANK.critical;
+    return findings.some((f) => (reporter_SEVERITY_RANK[f.rule.severity] ?? 0) >= threshold) ? 'fail' : 'pass';
+}
+function displayPath(file, rootDir) {
+    if (!rootDir || !isAbsolute(file))
+        return file;
+    const rel = relative(rootDir, file).replace(/\\/g, '/');
+    return rel.startsWith('..') ? file : rel;
+}
+/**
+ * Format findings as console output.
+ */
+function formatConsoleReport(findings, options = {}) {
+    if (findings.length === 0) {
+        return '\n✅ No applicable regulatory obligations identified.\n';
+    }
+    const failOn = options.failOn ?? 'critical';
+    const lines = [
+        '',
+        `⚠️  Nomus identified ${findings.length} applicable regulatory obligation(s):`,
+        '',
+    ];
+    // Group by severity
+    const bySeverity = {};
+    for (const f of findings) {
+        const sev = f.rule.severity;
+        if (!bySeverity[sev])
+            bySeverity[sev] = [];
+        bySeverity[sev].push(f);
+    }
+    for (const severity of ['critical', 'high', 'medium', 'low']) {
+        const group = bySeverity[severity];
+        if (!group)
+            continue;
+        for (const f of group) {
+            const icon = SEVERITY_ICONS[severity] ?? '⚪';
+            const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
+            lines.push(`${icon} ${severity.toUpperCase()}: ${f.rule.ruleKey}`);
+            lines.push(`   File: ${displayPath(f.file, options.rootDir)}:${f.line}`);
+            lines.push(`   SDK:  ${f.sdk}`);
+            lines.push(`   Rule: ${f.rule.humanSummary}`);
+            lines.push(`   Ref:  ${f.rule.legalReference}`);
+            lines.push(`   Effect: ${effect}`);
+            if (f.suggestion) {
+                // The whole suggestion: its first line usually ends in ':' and the
+                // steps or code that follow are the actual fix.
+                const [first, ...rest] = f.suggestion.split('\n');
+                lines.push(`   Fix:  ${first}`);
+                for (const line of rest)
+                    lines.push(line ? `         ${line}` : '');
+            }
+            lines.push('');
+        }
+    }
+    // Summary
+    const critical = bySeverity['critical']?.length ?? 0;
+    const high = bySeverity['high']?.length ?? 0;
+    lines.push('─'.repeat(60));
+    lines.push(`Summary: ${critical} critical, ${high} high, ${findings.length} total`);
+    if (reportStatus(findings, failOn) === 'fail') {
+        lines.push(failOn === 'critical'
+            ? '❌ FAIL — Critical regulatory obligations require immediate attention.'
+            : `❌ FAIL — Obligations at or above ${failOn} severity require attention (--fail-on=${failOn}).`);
+    }
+    else if (critical > 0 || high > 0) {
+        lines.push('⚠️  WARN — High-weight obligations identified. Review required.');
+    }
+    else {
+        lines.push('✅ PASS — No blocking issues.');
+    }
+    lines.push('');
+    lines.push(DISCLAIMER);
+    lines.push('');
+    return lines.join('\n');
+}
+/**
+ * Format findings as JSON for programmatic consumption.
+ */
+function formatJsonReport(findings, options = {}) {
+    const failOn = options.failOn ?? 'critical';
+    return {
+        status: reportStatus(findings, failOn),
+        failOn,
+        total: findings.length,
+        critical: findings.filter((f) => f.rule.severity === 'critical').length,
+        high: findings.filter((f) => f.rule.severity === 'high').length,
+        medium: findings.filter((f) => f.rule.severity === 'medium').length,
+        low: findings.filter((f) => f.rule.severity === 'low').length,
+        findings: findings.map((f) => ({
+            file: displayPath(f.file, options.rootDir),
+            line: f.line,
+            sdk: f.sdk,
+            ruleKey: f.rule.ruleKey,
+            severity: f.rule.severity,
+            effect: f.rule.effect,
+            summary: f.rule.humanSummary,
+            legalReference: f.rule.legalReference,
+            confidence: f.rule.confidence,
+            detectorSource: f.detectorSource,
+            suggestion: f.suggestion,
+        })),
+        _disclaimer: DISCLAIMER,
+    };
+}
+// ── Corporate policy findings (CPG) ────────────────────────────────────
+// A separate section, printed only when the org has corporate policy
+// governance switched on. The regulatory report above is unchanged, and
+// corporate findings never change the status or the exit code.
+/** `needs review`, `advisory; enforced from 2026-10-22` or `advisory`. */
+function corporateStatusText(f) {
+    switch (f.status) {
+        case 'needs_review': return 'needs review';
+        case 'grace': return `advisory; enforced from ${f.enforceFrom.slice(0, 10)}`;
+        case 'advisory': return 'advisory';
+    }
+}
+/** Owning boards by name (the bundle lists them by id, which differs between servers). */
+function ownerNames(f) {
+    return f.rule.owningBoards.map((b) => b.name).sort((a, b) => a.localeCompare(b)).join(', ');
+}
+function lineSpan(f) {
+    return f.startLine === f.endLine ? `${f.startLine}` : `${f.startLine}-${f.endLine}`;
+}
+/** The corporate section of the console report. */
+function formatCorporateConsoleReport(findings, summary) {
+    const files = `${summary.scannedFileCount} file${summary.scannedFileCount === 1 ? '' : 's'} checked`;
+    const head = `Corporate policies: ${summary.policyCount} active polic${summary.policyCount === 1 ? 'y' : 'ies'}, ${files} (bundle ${summary.bundleHash?.slice(0, 12) ?? 'none'})`;
+    if (findings.length === 0)
+        return `\n${head}\nNo corporate policy findings.\n`;
+    const blocking = findings.filter((f) => f.blocking).length;
+    const lines = ['', head, `${findings.length} corporate policy finding(s), ${blocking} blocking:`, ''];
+    for (const f of findings) {
+        lines.push(`[${f.tier.toUpperCase()}] ${f.policyKey} v${f.policyVersion}: ${f.rule.title}`);
+        lines.push(`   File:   ${f.filePath}:${lineSpan(f)}`);
+        lines.push(`   Policy: ${f.rule.message}`);
+        lines.push(`   Status: ${corporateStatusText(f)}${f.blocking ? ' (blocking)' : ''}`);
+        lines.push(`   Owners: ${ownerNames(f)}`);
+        lines.push(`   Fingerprint: ${f.fingerprint}`);
+        lines.push('');
+    }
+    if (summary.skippedLongLines > 0)
+        lines.push(`Note: ${summary.skippedLongLines} line(s) longer than 4,096 characters were not checked by line patterns.`);
+    if (summary.skippedFileCount > 0)
+        lines.push(`Note: ${summary.skippedFileCount} file(s) were skipped (over 2 MB, binary or outside the repository).`);
+    lines.push('Corporate policy findings never change the exit code of this command.');
+    lines.push('');
+    return lines.join('\n');
+}
+/**
+ * The corporate fields of the JSON report: `corporate` (what was evaluated)
+ * and `corporateFindings`. Paths are repository-relative; the code itself is
+ * not included, only its range and fingerprint.
+ */
+function formatCorporateJson(findings, summary) {
+    return {
+        corporate: {
+            enabled: summary.enabled,
+            orgId: summary.orgId,
+            bundleHash: summary.bundleHash,
+            policyCount: summary.policyCount,
+            scannedFileCount: summary.scannedFileCount,
+            skippedLongLines: summary.skippedLongLines,
+            skippedFileCount: summary.skippedFileCount,
+            total: findings.length,
+            blocking: findings.filter((f) => f.blocking).length,
+        },
+        corporateFindings: findings.map((f) => ({
+            file: f.filePath,
+            startLine: f.startLine,
+            endLine: f.endLine,
+            language: f.language,
+            policyKey: f.policyKey,
+            policyVersion: f.policyVersion,
+            policyId: f.rule.policyId,
+            title: f.rule.title,
+            tier: f.tier,
+            status: f.status,
+            blocking: f.blocking,
+            enforceFrom: f.enforceFrom,
+            message: f.rule.message,
+            owningBoards: f.rule.owningBoards.map((b) => b.name),
+            fingerprint: f.fingerprint,
+            snippetHash: f.snippetHash,
+            truncated: f.truncated,
+        })),
+    };
+}
+//# sourceMappingURL=reporter.js.map
+;// CONCATENATED MODULE: ../scanner/dist/output/sarif-corporate.js
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+
+
+const CORPORATE_SARIF_CATEGORY = 'nomus-corporate/';
+const CORPORATE_SARIF_TOOL = 'Nomus Corporate Policy';
+function scannerVersion() {
+    try {
+        const dir = typeof __dirname !== 'undefined' ? __dirname : (0,external_node_path_namespaceObject.dirname)((0,external_node_url_.fileURLToPath)(import.meta.url));
+        return JSON.parse((0,external_node_fs_namespaceObject.readFileSync)((0,external_node_path_namespaceObject.resolve)(dir, '..', '..', 'package.json'), 'utf-8')).version ?? '0.0.0';
+    }
+    catch {
+        return '0.0.0';
+    }
+}
+/** A server-side decision covering the finding, as a SARIF suppression. */
+function suppressionOf(r) {
+    if (r?.status !== 'approved' && r?.status !== 'excepted')
+        return undefined;
+    const what = r.status === 'approved' ? `Approved by Nomus decision ${r.decisionId}` : `Excepted by Nomus standing exception ${r.exceptionDecisionId}`;
+    return [{ kind: 'external', status: 'accepted', justification: `${what}${r.expiresAt ? ` until ${r.expiresAt}` : ''}` }];
+}
+/** The policy page in the dashboard, or undefined when no dashboard origin is known. */
+function policyPageUrl(dashboardUrl, policyId) {
+    if (!dashboardUrl)
+        return undefined;
+    return `${dashboardUrl.replace(/\/+$/, '')}/governance/policies/${policyId}`;
+}
+/** The corporate SARIF run (one per scan, appended after the regulatory run by the CLI). */
+function formatCorporateSarifRun(findings, options = {}) {
+    const rules = new Map();
+    for (const f of findings) {
+        if (rules.has(f.policyKey))
+            continue;
+        const helpUri = policyPageUrl(options.dashboardUrl, f.rule.policyId);
+        rules.set(f.policyKey, {
+            id: f.policyKey,
+            shortDescription: { text: f.rule.title },
+            fullDescription: { text: f.rule.message },
+            ...(helpUri ? { helpUri } : {}),
+            defaultConfiguration: { level: f.tier === 'advisory' ? 'note' : 'error' },
+            properties: { tags: ['corporate-policy', f.tier] },
+        });
+    }
+    return {
+        tool: {
+            driver: {
+                name: CORPORATE_SARIF_TOOL,
+                version: scannerVersion(),
+                informationUri: 'https://github.com/babbguy/Nomus',
+                rules: [...rules.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+            },
+        },
+        automationDetails: { id: CORPORATE_SARIF_CATEGORY },
+        results: findings.map((f) => {
+            const r = options.resolutionOf?.(f);
+            const blocking = r?.blocking ?? f.blocking;
+            const statusText = r ? r.status.replace(/_/g, ' ') : corporateStatusText(f);
+            const suppressions = suppressionOf(r);
+            return {
+                ruleId: f.policyKey,
+                // Blocking findings are errors; advisory, grace-period, approved and excepted ones are notes.
+                level: blocking ? 'error' : 'note',
+                message: { text: `${f.rule.title} (${f.policyKey} v${f.policyVersion}): ${f.rule.message} Status: ${statusText}.${options.caseUrl ? ` Review case: ${options.caseUrl}` : ''}` },
+                locations: [{
+                        physicalLocation: {
+                            artifactLocation: { uri: f.filePath, uriBaseId: '%SRCROOT%' },
+                            region: { startLine: f.startLine, endLine: f.endLine, startColumn: 1 },
+                        },
+                    }],
+                partialFingerprints: { 'nomusCorporate/v1': f.fingerprint },
+                ...(suppressions ? { suppressions } : {}),
+                properties: { tier: f.tier, status: r?.status ?? f.status, blocking, policyVersion: f.policyVersion, enforceFrom: f.enforceFrom },
+            };
+        }),
+    };
+}
+/** A SARIF 2.1.0 log holding only the corporate run: the GitHub Action uploads it on its own (§11.4). */
+function formatCorporateSarif(findings, options = {}) {
+    return {
+        $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/Schemata/sarif-schema-2.1.0.json',
+        version: '2.1.0',
+        runs: [formatCorporateSarifRun(findings, options)],
+    };
+}
+//# sourceMappingURL=sarif-corporate.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/output/sarif.js
 
 
@@ -275729,6 +276027,7 @@ function formatSarifReport(findings, rootDir) {
             }],
     };
 }
+
 //# sourceMappingURL=sarif.js.map
 ;// CONCATENATED MODULE: ./src/findings.ts
 // Copyright 2026 babbguy
@@ -275799,13 +276098,25 @@ function commentableLines(patch) {
  * Returns the path to the SARIF file, or null if upload failed.
  */
 async function uploadSarif(result, octokit, repo, sha, rootDir = repoRoot(), ref) {
+    // Code Scanning resolves artifact URIs against the repository root, so
+    // paths must be repo-relative even when working-directory is a subfolder.
+    return uploadSarifDocument(octokit, repo, sha, ref, {
+        sarif: () => formatSarifReport(result.findings, rootDir),
+        file: 'nomus-results.sarif',
+        toolName: 'Nomus',
+    });
+}
+/**
+ * Upload one SARIF log as its own Code Scanning analysis. The regulatory
+ * scan and the corporate gate (category `nomus-corporate/`) each upload
+ * their own. Returns the path to the SARIF file, or null if upload failed.
+ */
+async function uploadSarifDocument(octokit, repo, sha, ref, doc) {
     try {
-        // Code Scanning resolves artifact URIs against the repository root, so
-        // paths must be repo-relative even when working-directory is a subfolder.
-        const sarif = formatSarifReport(result.findings, rootDir);
+        const sarif = typeof doc.sarif === 'function' ? doc.sarif() : doc.sarif;
         const sarifJson = JSON.stringify(sarif, null, 2);
         // Write to file for downstream use
-        const sarifPath = (0,external_node_path_namespaceObject.resolve)('nomus-results.sarif');
+        const sarifPath = (0,external_node_path_namespaceObject.resolve)(doc.file);
         (0,external_node_fs_namespaceObject.writeFileSync)(sarifPath, sarifJson, 'utf-8');
         // Compress and encode for API upload
         const compressed = (0,external_node_zlib_.gzipSync)(Buffer.from(sarifJson, 'utf-8'));
@@ -275815,9 +276126,9 @@ async function uploadSarif(result, octokit, repo, sha, rootDir = repoRoot(), ref
             commit_sha: sha,
             ref: ref ?? process.env.GITHUB_REF ?? `refs/heads/main`,
             sarif: encoded,
-            tool_name: 'Nomus',
+            tool_name: doc.toolName,
         });
-        info('   SARIF uploaded to Code Scanning tab');
+        info(`   SARIF uploaded to Code Scanning tab${doc.category ? ` (category ${doc.category})` : ''}`);
         return sarifPath;
     }
     catch (err) {
@@ -275835,13 +276146,13 @@ async function uploadSarif(result, octokit, repo, sha, rootDir = repoRoot(), ref
 ;// CONCATENATED MODULE: ./src/pr-comments.ts
 
 
-const SEVERITY_ICONS = {
+const pr_comments_SEVERITY_ICONS = {
     critical: '🔴',
     high: '🟠',
     medium: '🟡',
     low: '🔵',
 };
-const EFFECT_LABELS = {
+const pr_comments_EFFECT_LABELS = {
     deny: 'BLOCKED',
     require_disclosure: 'DISCLOSURE REQUIRED',
     allow_with_audit: 'AUDIT REQUIRED',
@@ -275850,12 +276161,12 @@ const EFFECT_LABELS = {
 const COMMENT_MARKER = '<!-- nomus-scan -->';
 /** Hidden marker identifying inline review comments posted by Nomus. */
 const FINDING_MARKER = '<!-- nomus-finding -->';
-const DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
+const pr_comments_DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
 /** GitHub accepts a limited number of comments per review. */
 const MAX_INLINE_COMMENTS = 25;
 function findingBlock(f) {
-    const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
-    const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
+    const icon = pr_comments_SEVERITY_ICONS[f.rule.severity] ?? '⚪';
+    const effect = pr_comments_EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
     let body = `${icon} **Nomus: ${f.rule.severity.toUpperCase()}** — ${effect}\n\n`;
     body += `**${f.rule.ruleKey}**\n`;
     body += `${f.rule.humanSummary}\n\n`;
@@ -275903,7 +276214,7 @@ async function postInlineComments(result, octokit, repo, prNumber, sha) {
             path,
             line,
             side: 'RIGHT',
-            body: `${FINDING_MARKER}\n${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
+            body: `${FINDING_MARKER}\n${findings.map(findingBlock).join('\n---\n\n')}\n---\n${pr_comments_DISCLAIMER}`,
         }));
         if (candidates.length === 0) {
             info('   No obligations on lines changed in this pull request — no inline comments');
@@ -275958,22 +276269,29 @@ async function postInlineComments(result, octokit, repo, prNumber, sha) {
  * null to embed none (the caller checks that the badge is actually served).
  */
 async function postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeOrgSlug, complianceScore) {
+    await upsertMarkedComment(octokit, repo, prNumber, COMMENT_MARKER, () => buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore), 'summary comment');
+}
+/**
+ * Edit the PR comment carrying `marker` in place, or post it when there is
+ * none, so re-runs never stack comments. Failures are warnings.
+ */
+async function upsertMarkedComment(octokit, repo, prNumber, marker, buildBody, label) {
     try {
-        const body = buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore);
+        const body = buildBody();
         // Find existing Nomus comment
         const comments = await octokit.paginate(octokit.rest.issues.listComments, {
             ...repo,
             issue_number: prNumber,
             per_page: 100,
         });
-        const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
+        const existing = comments.find((c) => c.body?.includes(marker));
         if (existing) {
             await octokit.rest.issues.updateComment({
                 ...repo,
                 comment_id: existing.id,
                 body,
             });
-            info('   Updated existing PR summary comment');
+            info(`   Updated existing PR ${label}`);
         }
         else {
             await octokit.rest.issues.createComment({
@@ -275981,11 +276299,11 @@ async function postSummaryComment(result, octokit, repo, apiUrl, prNumber, badge
                 issue_number: prNumber,
                 body,
             });
-            info('   Posted PR summary comment');
+            info(`   Posted PR ${label}`);
         }
     }
     catch (err) {
-        warning(`Failed to post summary comment: ${err instanceof Error ? err.message : String(err)}`);
+        warning(`Failed to post ${label}: ${err instanceof Error ? err.message : String(err)}`);
     }
 }
 function buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore) {
@@ -276016,7 +276334,7 @@ function buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore) {
         body += `### Applicable Obligations\n\n`;
         const top = bySeverity(findings).slice(0, 10);
         for (const f of top) {
-            const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
+            const icon = pr_comments_SEVERITY_ICONS[f.rule.severity] ?? '⚪';
             body += `${icon} **${f.rule.ruleKey}** — \`${toRepoPath(f.file)}:${f.line}\`\n`;
             body += `   ${f.rule.humanSummary}\n\n`;
         }
@@ -276031,7 +276349,7 @@ function buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore) {
         body += `[![Nomus Regulatory](${apiUrl}/api/v1/badge/${slug}/svg)](${apiUrl}/api/v1/badge/${slug})\n\n`;
     }
     body += `---\n`;
-    body += `${DISCLAIMER}\n`;
+    body += `${pr_comments_DISCLAIMER}\n`;
     return body;
 }
 
@@ -276111,7 +276429,323 @@ function mapSeverityToAnnotation(severity) {
     }
 }
 
+;// CONCATENATED MODULE: ../scanner/dist/corporate/index.js
+/**
+ * `@nomus/scanner/corporate`: the pure Corporate Policy Governance library
+ * shared by the engine, the VS Code extension and the GitHub Action (design
+ * spec §0). Rule schema and vocabularies, glob and regex safety, the
+ * deterministic matcher, the fingerprint, repository and language helpers,
+ * and the client contracts with the signed-bundle client.
+ *
+ * Only contracts.ts and bundle-client.ts deal with the network; the matcher
+ * and everything it imports are pure (corporate.test.ts checks the imports).
+ */
+
+
+
+
+
+
+
+
+
+
+
+
+/** The detectors skip test files; the compile step explains that when an example misses. */
+
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./src/cpg-check-run.ts
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+/** The check run of the corporate policy gate (design spec §11.5), next to the regulatory one. */
+const CORPORATE_CHECK_NAME = 'Nomus Corporate Policy Gate';
+/** The policy key a fingerprint names (`sha256:corp.key:version`). */
+const policyKeyOf = (fingerprint) => fingerprint.split(':')[1] ?? fingerprint;
+/**
+ * The verdict as a check run: counts, the case link and the bundle hash, and
+ * up to 50 annotations, blocking first. Locations and statuses only, never
+ * the code (§12).
+ */
+async function createCorporateCheckRun(octokit, repo, sha, v, bundleHash, titles) {
+    const { counts } = v;
+    const summary = [
+        `## ${CORPORATE_CHECK_NAME}: ${v.verdict === 'pass' ? 'passed' : 'failed'}`,
+        '',
+        '| Blocking | Pending | Rejected | Approved | Excepted | Advisory |',
+        '|---|---|---|---|---|---|',
+        `| ${counts.blocking} | ${counts.pending} | ${counts.rejected} | ${counts.approved} | ${counts.excepted} | ${counts.advisory} |`,
+        '',
+        v.caseUrl ? `Review case: ${v.caseUrl}` : 'No review case for this branch.',
+        '',
+        `Policy bundle: \`${bundleHash}\``,
+    ].join('\n');
+    const annotations = [...v.findings]
+        .sort((a, b) => Number(b.blocking) - Number(a.blocking))
+        .slice(0, 50)
+        .map((f) => {
+        const key = policyKeyOf(f.fingerprint);
+        return {
+            path: f.filePath,
+            start_line: f.startLine,
+            end_line: f.endLine,
+            annotation_level: f.blocking ? 'failure' : 'notice',
+            title: `${key}: ${f.status.replace(/_/g, ' ')}`,
+            message: `${titles.get(key) ?? key} (${f.tier})${f.blocking ? ' blocks this pull request until a reviewer decides it.' : ''}`,
+        };
+    });
+    await create(octokit, repo, sha, v.verdict === 'pass' ? 'success' : 'failure', `${counts.blocking} blocking, ${counts.approved} approved, ${counts.excepted} excepted`, summary, annotations);
+}
+/** Best effort when the gate fails closed; the failed job is the authority. */
+async function createFailClosedCheckRun(octokit, repo, sha, title) {
+    await create(octokit, repo, sha, 'failure', title, `## ${CORPORATE_CHECK_NAME}: ${title}\n\nThe corporate policy status is unknown, so the gate fails closed. See the job log for the cause.`, []);
+}
+async function create(octokit, repo, sha, conclusion, title, summary, annotations) {
+    try {
+        await octokit.rest.checks.create({
+            ...repo, head_sha: sha, name: CORPORATE_CHECK_NAME, status: 'completed', conclusion, output: { title, summary, annotations },
+        });
+        info(`   Corporate check run created: ${conclusion}`);
+    }
+    catch (err) {
+        warning(`Failed to create the corporate check run: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+
+;// CONCATENATED MODULE: ./src/cpg-comment.ts
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+const CORPORATE_COMMENT_MARKER = '<!-- nomus-cpg -->';
+const MAX_ROWS = 50;
+/**
+ * The corporate gate's PR comment (design spec §11.6), edited in place on
+ * every run: the case link, the counts and one row per blocking finding.
+ * Never code, snippets or justifications (§12): those stay on the server.
+ */
+function corporateCommentBody(v) {
+    const c = v.counts;
+    const blocking = v.findings.filter((f) => f.blocking);
+    const lines = [
+        CORPORATE_COMMENT_MARKER,
+        `## Nomus Corporate Policy Gate: ${v.verdict === 'pass' ? 'passed' : 'failed'}`,
+        '',
+        v.caseUrl ? `**Review case:** [${v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
+        '',
+        '| Blocking | Pending | Rejected | Approved | Excepted | Advisory |',
+        '|---|---|---|---|---|---|',
+        `| ${c.blocking} | ${c.pending} | ${c.rejected} | ${c.approved} | ${c.excepted} | ${c.advisory} |`,
+    ];
+    if (blocking.length > 0) {
+        lines.push('', '### Blocking findings', '', '| Policy | Location | Status |', '|---|---|---|');
+        for (const f of blocking.slice(0, MAX_ROWS)) {
+            lines.push(`| \`${policyKeyOf(f.fingerprint)}\` | \`${f.filePath}:${f.startLine}\` | ${f.status.replace(/_/g, ' ')} |`);
+        }
+        if (blocking.length > MAX_ROWS)
+            lines.push('', `_…and ${blocking.length - MAX_ROWS} more in the review case._`);
+        lines.push('', 'Each blocking finding needs an approval, a standing exception or a code change. Request a review from VS Code or open the case.');
+    }
+    return `${lines.join('\n')}\n`;
+}
+async function postCorporateComment(octokit, repo, prNumber, v) {
+    await upsertMarkedComment(octokit, repo, prNumber, CORPORATE_COMMENT_MARKER, () => corporateCommentBody(v), 'corporate policy comment');
+}
+
+;// CONCATENATED MODULE: ./src/cpg.ts
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+
+
+
+
+
+
+
+const EVALUATE_TIMEOUT_MS = 30_000;
+const FAILED_CLOSED = 'corporate policy status UNKNOWN; failing closed.';
+class GateRefused extends Error {
+}
+function setStatus(status, blocking = 0, caseUrl = '') {
+    setOutput('corporate-status', status);
+    setOutput('corporate-blocking', blocking);
+    setOutput('corporate-case-url', caseUrl);
+}
+/** The scan identity from the workflow context: the PR head, and `owner/repo:ref` for a fork. */
+function gateIdentity() {
+    const { /* context */ "_": context } = github_namespaceObject;
+    const pr = context.payload.pull_request;
+    const repo = canonicalRepo(`${context.repo.owner}/${context.repo.repo}`);
+    const headFull = String(pr?.head?.repo?.full_name ?? '').toLowerCase();
+    const baseFull = String(pr?.base?.repo?.full_name ?? '').toLowerCase();
+    const branch = pr ? (headFull && baseFull && headFull !== baseFull ? `${headFull}:${pr.head.ref}` : pr.head?.ref) : process.env.GITHUB_REF_NAME;
+    if (!repo || typeof branch !== 'string' || !branch)
+        throw new Error('the repository or branch of this workflow run could not be determined');
+    return { repo, branch, prNumber: pr?.number ?? null, headSha: pr?.head?.sha ?? context.sha };
+}
+/** POST JSON to the engine; no answer is `unreachable`, a body that is not JSON is `invalid`. */
+async function post(o, path, body) {
+    let res;
+    try {
+        res = await (o.fetchImpl ?? fetch)(`${o.apiUrl.replace(/\/+$/, '')}/api/v1/cpg${path}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${o.apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(EVALUATE_TIMEOUT_MS),
+        });
+    }
+    catch (err) {
+        throw new CorporateBundleError({ kind: 'unreachable' }, `Could not reach POST /cpg${path}: ${err instanceof Error ? err.message : String(err)}`, err);
+    }
+    let json;
+    try {
+        json = await res.json();
+    }
+    catch (err) {
+        throw new CorporateBundleError({ kind: 'invalid' }, `POST /cpg${path} answered ${res.status} without JSON`, err);
+    }
+    return { status: res.status, json };
+}
+function cpg_httpError(path, status, json) {
+    const code = json?.code;
+    return new CorporateBundleError({ kind: 'http', status }, `POST /cpg${path} answered ${status}${typeof code === 'string' ? ` ${code}` : ''}`, json);
+}
+async function fetchEnabledBundle(o) {
+    return fetchCorporateBundle({ apiUrl: o.apiUrl, apiKey: o.apiKey, fetchImpl: o.fetchImpl });
+}
+/** Every finding with its snippet: blocking tiers require it, and a case revision stores them all. */
+function evaluateRequest(id, bundle, scan) {
+    return ciEvaluateRequestSchema.parse({
+        ...id,
+        eventName: github_context.eventName.slice(0, 50),
+        bundleHash: bundle.bundleHash,
+        scannedFileCount: scan.summary.scannedFileCount,
+        findings: scan.findings.map((f) => ({
+            fingerprint: f.fingerprint, policyKey: f.policyKey, policyVersion: f.policyVersion, filePath: f.filePath,
+            startLine: f.startLine, endLine: f.endLine, language: f.language, snippet: f.snippet,
+        })),
+    });
+}
+/** Scan the whole checkout (D15: `working-directory` never narrows it) and get the signed verdict. */
+async function evaluate(o, id, first) {
+    let { bundle, publicKeySpki } = first;
+    for (let attempt = 1;; attempt++) {
+        const scan = await runCorporateScanOnDisk(repoRoot(), bundle, { now: o.now, generated: o.generated });
+        info(`   Corporate policies: ${bundle.policies.length}, files checked: ${scan.summary.scannedFileCount}, findings: ${scan.findings.length}`);
+        const res = await post(o, '/ci/evaluate', evaluateRequest(id, bundle, scan));
+        if (res.status === 200) {
+            const verdict = verifyCiVerdict(res.json, publicKeySpki, { orgId: bundle.orgId, ...id, bundleHash: bundle.bundleHash });
+            return { bundle, scan, verdict };
+        }
+        // The policies changed since the bundle was fetched: refetch, rescan and retry once.
+        if (res.status === 409 && res.json?.code === 'bundle_stale' && attempt === 1) {
+            info('   The corporate policy bundle changed during the run; fetching it again and rescanning');
+            const again = await fetchEnabledBundle(o);
+            if (!again.available || !again.bundle.enabled)
+                throw new CorporateBundleError({ kind: 'invalid' }, 'The corporate policy bundle disappeared during the run');
+            ({ bundle, publicKeySpki } = again);
+            continue;
+        }
+        throw cpg_httpError('/ci/evaluate', res.status, res.json);
+    }
+}
+async function closePullRequest(o, id) {
+    const pr = github_context.payload.pull_request;
+    const merged = pr.merged === true;
+    const mergeSha = merged && typeof pr.merge_commit_sha === 'string' ? pr.merge_commit_sha : undefined;
+    const res = await post(o, '/ci/pr-closed', prClosedRequestSchema.parse({ repo: id.repo, branch: id.branch, prNumber: id.prNumber, merged, ...(mergeSha ? { mergeSha } : {}) }));
+    if (res.status !== 200)
+        throw cpg_httpError('/ci/pr-closed', res.status, res.json);
+    const closed = prClosedResponseSchema.safeParse(res.json);
+    if (!closed.success)
+        throw new CorporateBundleError({ kind: 'invalid' }, 'The pr-closed response does not match the contract', closed.error.issues);
+    info(`   Pull request ${merged ? 'merged' : 'closed'}: ${closed.data.closed ? `review case ${closed.data.caseId} closed` : 'no open review case to close'}`);
+    setStatus('closed');
+}
+/** Code Scanning, the check run and the PR comment. Best effort: the job status is the gate. */
+async function report(o, id, findings, bundle, v) {
+    if (!o.octokit) {
+        warning('No github-token provided: skipping the corporate SARIF upload, check run and PR comment.');
+        return;
+    }
+    const { /* context */ "_": context } = github_namespaceObject;
+    if (o.uploadSarif) {
+        const located = new Map(v.findings.map((r) => [`${r.fingerprint}@${r.filePath}:${r.startLine}`, r]));
+        await uploadSarifDocument(o.octokit, context.repo, context.sha, context.ref, {
+            sarif: () => formatCorporateSarif(findings, { resolutionOf: (f) => located.get(`${f.fingerprint}@${f.filePath}:${f.startLine}`), caseUrl: v.caseUrl }),
+            category: CORPORATE_SARIF_CATEGORY, file: 'nomus-corporate.sarif', toolName: 'Nomus Corporate Policy',
+        });
+    }
+    const titles = new Map(bundle.policies.map((p) => [p.policyKey, p.title]));
+    await createCorporateCheckRun(o.octokit, context.repo, id.headSha, v, bundle.bundleHash, titles);
+    if (o.postPrComment && id.prNumber && (v.findings.length > 0 || v.caseId)) {
+        await postCorporateComment(o.octokit, context.repo, id.prNumber, v);
+    }
+}
+/** Why the gate failed closed, as the check run title and the job error. */
+function failClosedReason(err) {
+    if (err instanceof GateRefused)
+        return 'Corporate policy gate cannot be disabled';
+    if (!(err instanceof CorporateBundleError))
+        return 'Corporate policy scan failed';
+    return bundleFailureOf(err).kind === 'invalid' ? 'Nomus response could not be verified' : 'Nomus unreachable';
+}
+/** Run the gate after the regulatory flow. Never throws: every failure fails the job closed. */
+async function runCorporateGate(o) {
+    info('🛡️  Nomus Corporate Policy Gate');
+    let id = null;
+    try {
+        const gateInput = o.gateInput.trim().toLowerCase() || 'true';
+        if (gateInput !== 'true' && gateInput !== 'false')
+            throw new GateRefused(`corporate-gate must be true or false (got "${o.gateInput}")`);
+        if (gateInput === 'false')
+            info('Corporate policy gate: disabled by workflow input');
+        const fetched = await fetchEnabledBundle(o);
+        if (!fetched.available) {
+            info('   This Nomus server does not support corporate policies; the corporate policy gate did not run');
+            setStatus('unavailable');
+            return;
+        }
+        if (!fetched.bundle.enabled) {
+            info('   Corporate policies are not enabled for this organization; the corporate policy gate did not run');
+            setStatus('disabled');
+            return;
+        }
+        if (gateInput === 'false') {
+            throw new GateRefused('the organization enforces corporate policies; the gate cannot be disabled from the workflow');
+        }
+        id = gateIdentity();
+        if (github_context.payload.action === 'closed' && github_context.payload.pull_request) {
+            await closePullRequest(o, id);
+            return;
+        }
+        const { bundle, scan, verdict: v } = await evaluate(o, id, fetched);
+        setStatus(v.verdict, v.counts.blocking, v.caseUrl ?? '');
+        info(`   Corporate verdict: ${v.verdict} (${v.counts.blocking} blocking, ${v.counts.approved} approved, ${v.counts.excepted} excepted)`);
+        await report(o, id, scan.findings, bundle, v);
+        if (v.verdict === 'fail') {
+            for (const reason of v.reasons)
+                info(`   Blocking: ${reason}`);
+            setFailed(`Corporate policy gate failed: ${v.counts.blocking} blocking finding(s) without a valid decision (${v.counts.rejected} rejected, ${v.counts.blocking - v.counts.rejected} need review).`
+                + (v.caseUrl ? ` Review case: ${v.caseUrl}` : ''));
+        }
+    }
+    catch (err) {
+        const reason = failClosedReason(err);
+        setStatus('unknown');
+        if (o.octokit) {
+            const sha = id?.headSha ?? github_context.payload.pull_request?.head?.sha ?? github_context.sha;
+            await createFailClosedCheckRun(o.octokit, github_context.repo, sha, `${reason}: failing closed`);
+        }
+        setFailed(`${reason}: ${FAILED_CLOSED} ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+
 ;// CONCATENATED MODULE: ./src/index.ts
+
 
 
 
@@ -276131,6 +276765,7 @@ async function run() {
         const postPrComment = getBooleanInput('post-pr-comment');
         const badgeEmbed = getBooleanInput('badge-embed');
         const badgeOrg = getInput('badge-org');
+        const corporateGate = getInput('corporate-gate');
         // GitHub context
         const { /* context */ "_": context } = github_namespaceObject;
         const token = getInput('github-token') || process.env.GITHUB_TOKEN || '';
@@ -276174,12 +276809,13 @@ async function run() {
         setOutput('compliance-label', complianceScore.label);
         info(`   Regulatory exposure score: ${complianceScore.score}% (${complianceScore.label})`);
         // GitHub integrations (require token)
+        let sarifFile = null;
         if (octokit) {
             // SARIF upload for Code Scanning tab
             if (uploadSarifEnabled && result.findings.length > 0) {
-                const sarifPath = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
-                if (sarifPath)
-                    setOutput('sarif-file', sarifPath);
+                sarifFile = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
+                if (sarifFile)
+                    setOutput('sarif-file', sarifFile);
             }
             // PR comments (only on pull requests)
             if (postPrComment && prNumber) {
@@ -276198,8 +276834,13 @@ async function run() {
             setFailed(`Nomus found ${result.counts.critical} critical and ${result.counts.high} high severity findings. ` +
                 `Threshold: --fail-on=${failOn}`);
         }
+        // Corporate policy gate: after the regulatory flow, which it leaves unchanged.
+        // The SARIF report just written to the checkout is not the repository's code.
+        await runCorporateGate({ apiUrl, apiKey, gateInput: corporateGate, uploadSarif: uploadSarifEnabled, postPrComment, octokit, generated: sarifFile ? [sarifFile] : [] });
     }
     catch (error) {
+        // The corporate policy gate did not run (it never throws), so its status is unknown too.
+        setOutput('corporate-status', 'unknown');
         // Fail CLOSED on Nomus API failure: the scan could not determine
         // compliance, so the check must fail — never report green on an outage.
         if (isNomusApiError(error)) {

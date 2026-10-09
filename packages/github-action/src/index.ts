@@ -5,6 +5,7 @@ import { uploadSarif } from './sarif-upload.js';
 import { postSummaryComment, postInlineComments } from './pr-comments.js';
 import { createCheckRun } from './check-run.js';
 import { repoRoot, toRepoPath } from './findings.js';
+import { runCorporateGate } from './cpg.js';
 import axios from 'axios';
 
 async function run(): Promise<void> {
@@ -18,6 +19,7 @@ async function run(): Promise<void> {
     const postPrComment = core.getBooleanInput('post-pr-comment');
     const badgeEmbed = core.getBooleanInput('badge-embed');
     const badgeOrg = core.getInput('badge-org');
+    const corporateGate = core.getInput('corporate-gate');
 
     // GitHub context
     const { context } = github;
@@ -68,11 +70,12 @@ async function run(): Promise<void> {
     core.info(`   Regulatory exposure score: ${complianceScore.score}% (${complianceScore.label})`);
 
     // GitHub integrations (require token)
+    let sarifFile: string | null = null;
     if (octokit) {
       // SARIF upload for Code Scanning tab
       if (uploadSarifEnabled && result.findings.length > 0) {
-        const sarifPath = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
-        if (sarifPath) core.setOutput('sarif-file', sarifPath);
+        sarifFile = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
+        if (sarifFile) core.setOutput('sarif-file', sarifFile);
       }
 
       // PR comments (only on pull requests)
@@ -95,7 +98,13 @@ async function run(): Promise<void> {
         `Threshold: --fail-on=${failOn}`,
       );
     }
+
+    // Corporate policy gate: after the regulatory flow, which it leaves unchanged.
+    // The SARIF report just written to the checkout is not the repository's code.
+    await runCorporateGate({ apiUrl, apiKey, gateInput: corporateGate, uploadSarif: uploadSarifEnabled, postPrComment, octokit, generated: sarifFile ? [sarifFile] : [] });
   } catch (error) {
+    // The corporate policy gate did not run (it never throws), so its status is unknown too.
+    core.setOutput('corporate-status', 'unknown');
     // Fail CLOSED on Nomus API failure: the scan could not determine
     // compliance, so the check must fail — never report green on an outage.
     if (isNomusApiError(error)) {

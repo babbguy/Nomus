@@ -41,6 +41,10 @@ inputs:
     description: 'Slug of your Nomus organization, used for the badge. Defaults to the repository owner.'
     required: false
     default: ''
+  corporate-gate:
+    description: 'Run the corporate policy gate. When the organization enforces corporate policies, setting this to false fails the job: a workflow cannot switch the gate off. The corporate scan always covers the whole checkout, whatever working-directory says.'
+    required: false
+    default: 'true'
 
 outputs:
   total-findings:
@@ -61,6 +65,12 @@ outputs:
     description: 'Human-readable regulatory rating (Excellent, Good, Fair, Needs Work, Critical)'
   sarif-file:
     description: 'Path to the SARIF file (only set when findings exist, a GitHub token is available and upload-sarif is enabled)'
+  corporate-status:
+    description: 'Corporate policy gate result: pass, fail, unknown (the gate failed closed), disabled (the organization does not enforce corporate policies), unavailable (the Nomus server predates them) or closed (a closed pull request; nothing evaluated)'
+  corporate-blocking:
+    description: 'Number of corporate policy findings that block the pull request'
+  corporate-case-url:
+    description: 'Link to the review case for this branch, when there is one'
 
 runs:
   using: 'node20'

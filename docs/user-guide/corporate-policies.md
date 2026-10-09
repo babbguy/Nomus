@@ -351,7 +351,11 @@ view's status row and as an error message:
 The CLI stops with exit code `3` when the bundle does not verify, and warns that corporate
 policies were NOT checked when the bundle cannot be fetched (see [Exit codes](#scanner-cli)).
 
-## What is not in this release
+## In CI
 
-The CI gate for corporate findings comes in a later release. Until then, decisions are shown in the
-dashboard and in VS Code, and CI does not yet enforce them.
+VS Code advises; CI enforces. When your organization runs the Nomus GitHub Action, your pull
+request fails while any blocking finding has no valid decision. The check run **Nomus Corporate
+Policy Gate** annotates each finding, and the pull request comment lists the blocking ones with a
+link to the review case. Fix the code or request a review; once reviewers approve, or you remove
+the flagged code, the next run passes and the case gains a new revision. Merging or closing the
+pull request closes the case. Administrators: see [Enforcing in CI](../admin-guide/corporate-policies.md#enforcing-in-ci).
