@@ -1,10 +1,10 @@
 import type { z } from 'zod';
 import api from './client';
 import {
-  auditListSchema, boardMemberSchema, boardSchema, compileRecordSchema, cpgSettingsSchema, grantSchema, inviteResultSchema,
+  auditListSchema, boardMemberSchema, governanceExportSchema, boardSchema, compileRecordSchema, cpgSettingsSchema, grantSchema, inviteResultSchema,
   listOf, meSchema, orgUserSchema, permissionSchema, policyDetailSchema, policyHeadSchema, roleSchema, teamSchema,
   voteResultSchema,
-  type AuditList, type Board, type BoardKind, type BoardMember, type CompileRecord, type CpgMe, type CpgSettings, type Grant,
+  type AuditList, type GovernanceExport, type Board, type BoardKind, type BoardMember, type CompileRecord, type CpgMe, type CpgSettings, type Grant,
   type InviteResult, type OrgUser, type Permission, type PolicyDetail, type PolicyHead, type PolicyState, type Role,
   type ScopeType, type Team, type Tier, type VoteResult,
 } from './cpg-schemas';
@@ -33,7 +33,8 @@ export * from './cpg-integration-schemas';
  * Typed client for the Corporate Policy Governance API (/api/v1/cpg):
  * RBAC, settings and the audit log (E1 to E17); boards, quorum, compile and
  * the policy log (E19 to E37); review cases (E41 to E52); proposals,
- * decisions and standing exceptions (E54 to E60); a case's CI runs (E63). Every response is parsed with its zod
+ * decisions and standing exceptions (E54 to E60); a case's CI runs (E63); the
+ * signed governance audit export (E73). Every response is parsed with its zod
  * contract (cpg-schemas.ts, cpg-quorum.ts); a response that does not match
  * throws CpgContractError, which pages show as a load failure.
  */
@@ -192,6 +193,12 @@ export function auditQueryString(q: AuditQuery): string {
 export async function listAuditEvents(q: AuditQuery = {}): Promise<AuditList> {
   const { data } = await api.get(`/cpg/audit${auditQueryString(q)}`);
   return parseResponse(auditListSchema, data, 'GET /cpg/audit');
+}
+
+/** E73: the signed governance audit export (audit.export). */
+export async function exportGovernanceAudit(): Promise<GovernanceExport> {
+  const { data } = await api.get('/cpg/audit/export');
+  return parseResponse(governanceExportSchema, data, 'GET /cpg/audit/export');
 }
 
 // ─── E19–E24 boards ────────────────────────────────────────────────────

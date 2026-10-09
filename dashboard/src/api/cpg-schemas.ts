@@ -112,6 +112,25 @@ export const auditListSchema = z.object({
   chainValid: z.boolean(),
 }).strict();
 
+const signedRecordSchema = z.object({ id: uuid, signedPayloadCanonicalJson: z.string(), signature: z.string() }).strict();
+
+/** E73: the signed governance audit export the Auditor downloads (verifiable offline). */
+export const governanceExportSchema = z.object({
+  kind: z.literal('nomus.cpg-governance-export.v1'),
+  orgId: uuid,
+  exportedAt: isoDate,
+  content: z.object({
+    chainValid: z.boolean(),
+    auditEvents: z.array(auditEventSchema),
+    decisions: z.array(signedRecordSchema),
+    revocations: z.array(signedRecordSchema),
+    caseClosures: z.array(signedRecordSchema),
+    ciRuns: z.array(signedRecordSchema),
+  }).strict(),
+  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+  signature: z.string(),
+}).strict();
+
 export const mePermissionSchema = z.object({
   key: z.string(),
   scope: scopeTypeSchema,
@@ -333,6 +352,7 @@ export type InviteResult = z.infer<typeof inviteResultSchema>;
 export type Team = z.infer<typeof teamSchema>;
 export type CpgSettings = z.infer<typeof cpgSettingsSchema>;
 export type AuditEvent = z.infer<typeof auditEventSchema>;
+export type GovernanceExport = z.infer<typeof governanceExportSchema>;
 export type AuditList = z.infer<typeof auditListSchema>;
 export type CpgMe = z.infer<typeof meSchema>;
 export type Tier = z.infer<typeof tierSchema>;

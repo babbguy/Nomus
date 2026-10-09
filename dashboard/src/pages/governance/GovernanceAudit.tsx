@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { History, ShieldCheck, ShieldX, ChevronDown, ChevronRight } from 'lucide-react';
+import { Download, History, ShieldCheck, ShieldX, ChevronDown, ChevronRight } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -8,7 +8,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import DataFreshness from '../../components/ui/DataFreshness';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import {
-  listAuditEvents, listOrgUsers, listRoles, listTeams, type AuditEvent, type AuditQuery,
+  exportGovernanceAudit, listAuditEvents, listOrgUsers, listRoles, listTeams, type AuditEvent, type AuditQuery,
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { cpgErrorMessage } from '../../lib/cpg-errors';
@@ -22,6 +22,7 @@ type Names = { users: Map<string, { name: string; email: string }>; roles: Map<s
 /**
  * /governance/audit (E17): the organization's hash-chained governance audit
  * log, newest first, with the chain verification the server runs on every read.
+ * Holders of audit.export download the signed export (E73).
  */
 export default function GovernanceAudit() {
   const { me } = useCpgMe();
@@ -116,7 +117,12 @@ export default function GovernanceAudit() {
 
   return (
     <div>
-      <GovernanceHeader icon={History} title="Governance audit log" subtitle="Every access and settings change, newest first, hash-chained" />
+      <GovernanceHeader
+        icon={History}
+        title="Governance audit log"
+        subtitle="Every access and settings change, newest first, hash-chained"
+        actions={hasOrgPermission(me, 'audit.export') ? <AuditExportButton /> : undefined}
+      />
 
       {chainValid !== null && !error && <ChainStatus valid={chainValid} />}
 
@@ -170,6 +176,39 @@ export default function GovernanceAudit() {
           <DataFreshness fetchedAt={fetchedAt} className="mt-2" />
         </>
       )}
+    </div>
+  );
+}
+
+/** E73: downloads the signed governance audit export (the server checks audit.export). */
+export function AuditExportButton() {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function downloadExport() {
+    setExporting(true);
+    setError(null);
+    try {
+      const signed = await exportGovernanceAudit();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(signed, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nomus-governance-audit-${signed.exportedAt.slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(cpgErrorMessage(err, 'Failed to export the audit log'));
+    }
+    setExporting(false);
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button size="sm" variant="secondary" onClick={() => void downloadExport()} disabled={exporting}
+        title="The whole audit chain and every signed decision, revocation, closure record and CI verdict, signed for offline verification">
+        <Download size={14} /> {exporting ? 'Exporting...' : 'Export signed audit (JSON)'}
+      </Button>
+      {error && <p className="text-xs text-danger" role="alert">{error}</p>}
     </div>
   );
 }

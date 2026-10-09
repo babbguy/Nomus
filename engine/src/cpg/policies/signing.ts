@@ -13,6 +13,7 @@ import { CpgError } from '../errors.js';
 
 export const QUORUM_KIND = 'nomus.cpg-quorum.v1';
 export const POLICY_EXPORT_KIND = 'nomus.cpg-policy-export.v1';
+export const GOVERNANCE_EXPORT_KIND = 'nomus.cpg-governance-export.v1';
 
 /** signData, with "keys not initialized" turned into 503 signing_unavailable. */
 export function cpgSign(text: string): string {
@@ -39,8 +40,9 @@ export function activationSignedText(orgId: string, p: Omit<BundlePolicy, 'activ
   return canonicalJson(policyActivationPayload(orgId, p));
 }
 
-export function exportSignedText(e: { orgId: string; exportedAt: string; contentHash: string }): string {
-  return canonicalJson({ kind: POLICY_EXPORT_KIND, orgId: e.orgId, exportedAt: e.exportedAt, contentHash: e.contentHash });
+/** What a signed export's signature covers (the policy log E39, the governance audit E73). */
+export function exportSignedText(e: { kind: typeof POLICY_EXPORT_KIND | typeof GOVERNANCE_EXPORT_KIND; orgId: string; exportedAt: string; contentHash: string }): string {
+  return canonicalJson({ kind: e.kind, orgId: e.orgId, exportedAt: e.exportedAt, contentHash: e.contentHash });
 }
 
 export function contentHashOf(content: unknown): string {

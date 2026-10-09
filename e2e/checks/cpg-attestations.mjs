@@ -1,5 +1,6 @@
 // CPG Phase 8: corporate policy records in attestations, design spec §16.8
 // release-gate checks 1 to 7, against the built engine and dashboard.
+// Check 6 also verifies the signed governance audit export (E73) offline.
 //
 // Uses what cpg-approvals left in "Gate Policy Org": the active 30-day
 // approval of the chat.ts finding and the case it closed (with its CI run).
@@ -54,6 +55,30 @@ export function verifyGovernance(b, key) {
       if (!r || r.kind !== 'nomus.cpg-revocation.v1' || r.decisionId !== ref.id || !(r.revokedAt > m.evaluatedAt)) reasons.push('revocation does not verify');
     }
   }
+  return { ok: reasons.length === 0, reasons };
+}
+
+const canonical = (v) => JSON.stringify(sortDeep(v));
+function sortDeep(v) {
+  if (Array.isArray(v)) return v.map(sortDeep);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortDeep(v[k])]));
+  return v;
+}
+const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+
+/** The signed governance audit export (E73), offline: export signature, content hash, the chain from genesis, each record. */
+export function verifyAuditExport(e, key) {
+  const reasons = [];
+  const c = e?.content ?? {};
+  if (e?.kind !== 'nomus.cpg-governance-export.v1' || sha256(canonical(c)) !== e.contentHash) reasons.push('content hash differs');
+  if (!signedBy(key, { signedPayloadCanonicalJson: canonical({ kind: e?.kind, orgId: e?.orgId, exportedAt: e?.exportedAt, contentHash: e?.contentHash }), signature: e?.signature })) reasons.push('export signature');
+  let prev = '0'.repeat(64);
+  for (const [i, ev] of (c.auditEvents ?? []).entries()) {
+    const body = canonical({ id: ev.id, org_id: e.orgId, seq: ev.seq, actor: ev.actor, action: ev.action, target_type: ev.targetType, target_id: ev.targetId, payload: ev.payload, created_at: ev.createdAt });
+    if (ev.seq !== i + 1 || ev.prevHash !== prev || sha256(prev + body) !== ev.hash) { reasons.push(`audit chain breaks at ${ev.seq}`); break; }
+    prev = ev.hash;
+  }
+  for (const r of ['decisions', 'revocations', 'caseClosures', 'ciRuns'].flatMap((k) => c[k] ?? [])) if (!signedBy(key, r)) reasons.push(`record ${r.id} does not verify`);
   return { ok: reasons.length === 0, reasons };
 }
 
@@ -141,11 +166,28 @@ export async function cpgAttestationsChecks(ctx) {
       revoked.status === 201 && item?.statusAtGeneration === 'revoked' && signedBy(key, item.revocation)?.decisionId === exceptionId && afterCheck.ok,
       'revoked, revocation verifies, bundle verifies', `${revoked.status} ${item?.statusAtGeneration} ${afterCheck.reasons}`);
 
-    // ── 6. the audit chain: the Auditor reads it valid, the Developer is refused ──
+    // ── 6. the audit chain: the Auditor reads it valid and exports it signed; the Developer is refused ──
     const audit = await users.auditor.client.get('/api/v1/cpg/audit?limit=5');
     const devAudit = await users.dev.client.get('/api/v1/cpg/audit?limit=5');
     gate.check('Auditor reads the governance audit log with chainValid true; Developer is 403',
       audit.status === 200 && audit.json?.chainValid === true && devAudit.status === 403, '200 chainValid, 403', `${audit.status} ${audit.json?.chainValid} ${devAudit.status}`);
+    const exp = await users.auditor.client.get('/api/v1/cpg/audit/export');
+    const e = exp.json;
+    const ev = verifyAuditExport(e, key);
+    const closure = e?.content?.caseClosures?.find((r) => r.id === caseId);
+    const ciRunIds = signedBy(key, closure)?.ciRunIds ?? [];
+    const holds = e?.content?.chainValid === true && e.content.auditEvents.length >= 5 && e.content.auditEvents.some((x) => x.hash === audit.json?.items?.[0]?.hash)
+      && e.content.revocations.some((r) => signedBy(key, r)?.decisionId === exceptionId) && ciRunIds.length > 0
+      && ciRunIds.every((id) => e.content.ciRuns.some((r) => r.id === id && signedBy(key, r)?.runId === id));
+    gate.check('Auditor GET /cpg/audit/export: the export signature, content hash, whole audit chain and every signed record verify offline; it holds the revocation, the closure and its CI runs',
+      exp.status === 200 && ev.ok && holds, '200, verifies, revocation + closure + CI runs', `${exp.status} ${ev.reasons.slice(0, 3)} holds=${holds}`);
+    const forged = structuredClone(e ?? {});
+    if (forged.content?.auditEvents?.[0]) forged.content.auditEvents[0].actor = 'system:forged';
+    forged.contentHash = sha256(canonical(forged.content ?? {}));
+    const exportRefused = [users.dev, owner].map((u) => u.client.get('/api/v1/cpg/audit/export'));
+    const refused = (await Promise.all(exportRefused)).map((r) => r.status);
+    gate.check('the audit export: an edited audit event is rejected offline; a Developer and an Org Admin (no audit.export) are 403',
+      !verifyAuditExport(forged, key).ok && refused.every((s) => s === 403), 'rejected, 403 403', `${verifyAuditExport(forged, key).ok ? 'accepted' : 'rejected'} ${refused}`);
 
     // ── 7. in the browser ──
     await attestationPageChecks(ctx, { id });

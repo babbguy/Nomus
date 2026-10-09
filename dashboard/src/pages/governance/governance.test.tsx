@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { OverviewView } from './GovernanceOverview';
 import { SettingsView } from './GovernanceSettings';
-import { AuditTable, ChainStatus } from './GovernanceAudit';
+import { AuditExportButton, AuditTable, ChainStatus } from './GovernanceAudit';
 import { UsersTable } from './access/UsersPanel';
 import { RoleMatrix } from './access/RolesPanel';
 import { TeamsTable } from './access/TeamsPanel';
@@ -103,6 +103,10 @@ describe('Governance audit', () => {
   it('shows the chain status, loudly when broken', () => {
     expect(text(<ChainStatus valid />)).toContain('Chain verified');
     expect(text(<ChainStatus valid={false} />)).toContain('Chain broken');
+  });
+
+  it('offers the signed export (E73)', () => {
+    expect(text(<AuditExportButton />)).toContain('Export signed audit (JSON)');
   });
 });
 
