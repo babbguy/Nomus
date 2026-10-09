@@ -9,10 +9,9 @@ period, and what a corporate policy can and cannot express. Roles and permission
 [Roles and permissions](./roles-and-permissions.md); the endpoints are in the
 [policy registry API reference](../api-reference/policy-registry.md).
 
-> Phase note: this release builds the policy registry, the signed bundle and the dashboard's
-> policy pages (Governance > Policies). Dashboard pages for boards and the quorum follow in the next
-> update; until then use the API for them. Showing corporate findings in scans, the editor and CI,
-> and review cases, arrive in the following releases.
+> Phase note: this release builds the policy registry, the signed bundle and their dashboard
+> pages (Governance > Policies, Boards and Quorum). Showing corporate findings in scans, the editor
+> and CI, and review cases, arrive in the following releases.
 
 ## How it fits together
 
@@ -53,6 +52,19 @@ Board management needs `boards.manage` (Org Admin). Members are added and remove
 a removal is recorded once and never deleted. A board that owns an active or pending policy
 version cannot be archived (`409 board_in_use`, with the policy keys); archive is final.
 
+### Boards in the dashboard
+
+**Governance > Boards** lists the active boards with their members and the policies each one owns
+(archived boards are listed separately). With `boards.manage`:
+
+- **New board** asks for the key, kind, name and an optional description;
+- **Edit** renames a board or changes its description (the bundle carries the new name);
+- **Add** puts an active organization user on the board; the cross next to a member removes them;
+- **Archive** is refused while the board owns an active or pending version, and the message names
+  those policies.
+
+Without `boards.manage` the page is read-only and shows member counts instead of names.
+
 ## The approval quorum
 
 The quorum configuration decides how many approvals each kind of decision needs. It is versioned:
@@ -81,6 +93,22 @@ There is no setting that allows self-approval. The schema refuses unknown fields
 prohibited tier (also through `policyOverrides`, `422 bulk_forbidden_on_prohibited`), extra boards
 that are not active boards of the organization (`422 unknown_board`) and overrides for unknown
 policies (`422 unknown_policy`).
+
+### Editing the quorum in the dashboard
+
+**Governance > Quorum** shows the version in force (who saved it, when, the change note, the
+configuration hash and signature), the rules no setting can change, and every tier and scope in a
+table. Org Admins and Auditors also see the version history; **Changes** next to a version lists
+what it changed compared with the version before.
+
+With `quorum.manage`, **Edit** opens a form over the whole configuration: each tier's scopes
+(allowed or not, approvals, board coverage, extra required boards, required permission, maximum
+and default expiry), policy approvals, standing-exception limits, grace periods, the proposal lapse
+window, and per-policy overrides. The form checks the draft with the engine's own rules as you
+type, shows each problem next to its field and in a summary, and lists exactly what will change.
+**Save as version N** stays disabled until the draft is valid, differs from the version in force
+and has a change note; nothing is sent before that. Bulk decisions on the prohibited tier, and bulk
+overrides for a prohibited policy, are shown locked. There is no self-approval setting to show.
 
 ## Authoring a policy
 

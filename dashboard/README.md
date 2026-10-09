@@ -78,6 +78,8 @@ Shown according to the user's organization permissions from `GET /api/v1/cpg/me`
 | `GovernancePolicies` | `/governance/policies` | `policy.read` | The corporate policy log: state, tier, owning boards, versions, grace period or enforcement date |
 | `PolicyNew` | `/governance/policies/new` (`?policy=<id>` for a new version) | `policy.read` and `policy.author` | Plain-English authoring with code examples, compile (generated output labelled), rejection reasons, propose |
 | `PolicyDetail` | `/governance/policies/:id` | `policy.read` (votes: `policy.approve`, never the author or compile requester) | Versions, votes, signatures, supersede history, version diff, four-eyes status, withdraw, new version, retirement |
+| `GovernanceBoards` | `/governance/boards` | `policy.read` (changes: `boards.manage`) | Boards, members and the policies each board owns |
+| `GovernanceQuorum` | `/governance/quorum` | `policy.read` (edit: `quorum.manage`; history: `audit.read` or `quorum.manage`) | The signed quorum in force, a validating editor that saves new versions, version history with changes |
 
 ### Public and auth pages
 
@@ -104,7 +106,7 @@ Typed clients built on a shared Axios base client (`client.ts`), including `admi
 `cpg-schemas.ts` and `cpg-quorum.ts` before a page uses it; a response that does not match shows as
 a load error naming the endpoint and field. The engine's `dashboard-api-contract.test.ts` and
 `routes/cpg/dashboard-registry-contract.test.ts` parse real engine responses with the same schemas.
-`cpg-quorum.ts` mirrors the engine's quorum schema (for parsing and form validation); a contract
+`cpg-quorum.ts` mirrors the engine's quorum schema for the quorum editor's validation; a contract
 test runs both over the same accept and reject cases. The corporate rule schema is mirrored by
 structure only: the engine validates vocabularies, regex safety and globs.
 

@@ -17,9 +17,10 @@
 // confirms what the UI did.
 //
 // Phase 2b (design spec §16.2 check 11) adds the policy registry pages: the
-// policy log, a policy's detail and authoring (a rejected compile, a compiled
+// policy log, a policy's detail, authoring (a rejected compile, a compiled
 // rule, a proposal its author cannot approve, an approval by the approver),
-// all through the UI, and the sidebar's governance role label.
+// boards and the quorum (an invalid change refused in the browser, a valid
+// one saved as a new version), all through the UI.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -260,11 +261,13 @@ const UI_VIOLATING = `// ${UI_MARKER}\nexport const model = 'gpt-4-32k';\n`;
 const UI_COMPLIANT = `// ${UI_MARKER}\nexport const model = 'gpt-4o';\n`;
 
 /**
- * CPG Phase 2b: the policy log, a policy's detail and authoring in the
- * browser, against the gate-policy org as cpg-policy left it (three active
- * policies, two boards, quorum v2; governance off). Authoring runs end to end
- * through the UI: a rejected compile, a compiled rule, a proposal its author
- * cannot approve (four-eyes), and the approver's approval.
+ * CPG Phase 2b: the policy log, a policy's detail, authoring, boards and
+ * quorum in the browser, against the gate-policy org as cpg-policy left it
+ * (three active policies, two boards, quorum v2; governance off). Authoring
+ * runs end to end through the UI: a rejected compile, a compiled rule, a
+ * proposal its author cannot approve (four-eyes), and the approver's
+ * approval. The Org Admin creates a board and a quorum version through the
+ * UI; an invalid quorum is refused in the browser without a request.
  */
 async function policyRegistryChecks(ctx, browser) {
   const { gate } = ctx;
@@ -272,7 +275,7 @@ async function policyRegistryChecks(ctx, browser) {
   const heads = (await owner.client.get('/api/v1/cpg/policies')).json?.items ?? [];
   const openaiPolicy = heads.find((h) => h.policyKey === 'corp.no-direct-openai');
 
-  // ── Org Admin: list and detail ──────────────────────────────────────
+  // ── Org Admin: list, detail, boards, quorum ──────────────────────────
   const admin = await openAs(browser, ctx, owner.client);
   const list = await visit(ctx, admin, 'owner', '/governance/policies', {
     must: ['corp.no-direct-openai', 'corp.no-gpt-4-32k', 'corp.no-pii-to-ai', 'Prohibited', 'Grace period', 'AI Review Board', 'Governance is off'],
@@ -285,6 +288,68 @@ async function policyRegistryChecks(ctx, browser) {
   });
   gate.check('Org Admin policy detail renders cleanly: versions, signature, approval vote, enforcement, history', !!openaiPolicy && detail.problems.length === 0,
     'no 4xx, signed v1 with its vote', detail.problems.slice(0, 4));
+  const boards = await visit(ctx, admin, 'owner', '/governance/boards', {
+    must: ['AI Review Board', 'Legal Board', users['ai-reviewer'].email, users['legal-reviewer'].email, 'corp.no-direct-openai', 'corp.no-pii-to-ai'],
+  });
+  gate.check('Org Admin /governance/boards renders cleanly: members and the policies each board owns', boards.problems.length === 0, 'no 4xx, members and owned policies', boards.problems.slice(0, 4));
+  const quorum = await visit(ctx, admin, 'owner', '/governance/quorum', {
+    must: ['Version 2 (in force)', 'Release gate: longer proposal window', 'Nobody can approve their own proposal', 'Bulk decisions are never allowed on the Prohibited tier', 'Version history'],
+  });
+  gate.check('Org Admin /governance/quorum renders cleanly: version in force, fixed rules, history', quorum.problems.length === 0, 'no 4xx', quorum.problems.slice(0, 4));
+
+  // A board through the UI.
+  await visit(ctx, admin, 'owner', '/governance/boards', {});
+  const p = admin.page;
+  const boardSteps = [];
+  boardSteps.push(...await uiStep(admin, 'create board', async () => {
+    await p.click('button:has-text("New board")');
+    await p.fill('#board-key', 'gate-ui-board');
+    await p.fill('#board-name', 'Gate UI Board');
+    await p.selectOption('#board-kind', 'security');
+    await p.click('button[type=submit]:has-text("Create board")');
+    await p.waitForSelector('text=Board Gate UI Board created.', { timeout: 10_000 });
+  }));
+  boardSteps.push(...await uiStep(admin, 'add board member', async () => {
+    await p.selectOption('[aria-label="Add a member to Gate UI Board"]', users.exceptions.id);
+    await p.locator('.glass', { hasText: 'gate-ui-board' }).locator('button:has-text("Add")').click();
+    await p.waitForSelector(`text=${users.exceptions.email} added to Gate UI Board.`, { timeout: 10_000 });
+  }));
+  const apiBoard = ((await owner.client.get('/api/v1/cpg/boards')).json?.items ?? []).find((b) => b.key === 'gate-ui-board');
+  gate.check('Org Admin creates a board and adds a member through the Boards page; the API holds exactly that',
+    boardSteps.length === 0 && apiBoard?.kind === 'security' && JSON.stringify(apiBoard?.members?.map((m) => m.userEmail)) === JSON.stringify([users.exceptions.email]),
+    'no 4xx; board security with one member', [...boardSteps, JSON.stringify({ kind: apiBoard?.kind, members: apiBoard?.members?.map((m) => m.userEmail) })].slice(0, 4));
+
+  // The quorum through the UI: an invalid value is refused in the browser (no PUT), a valid one becomes v3.
+  await visit(ctx, admin, 'owner', '/governance/quorum', {});
+  const puts = [];
+  const onRequest = (r) => { if (r.method() === 'PUT' && new URL(r.url()).pathname === '/api/v1/cpg/quorum') puts.push(r.url()); };
+  p.on('request', onRequest);
+  let invalidShown = false;
+  let saveDisabled = false;
+  const quorumSteps = [];
+  quorumSteps.push(...await uiStep(admin, 'invalid quorum', async () => {
+    await p.click('button:has-text("Edit")');
+    await p.fill('#q-policy-approvals', '0');
+    await p.waitForSelector('[data-testid="quorum-issues"]', { timeout: 10_000 });
+    invalidShown = /Policy approval · Approvals: Number must be greater than or equal to 1/.test(await p.textContent('[data-testid="quorum-issues"]') ?? '');
+    await p.fill('#q-note', 'should not be saved');
+    saveDisabled = await p.isDisabled('button:has-text("Save as version 3")');
+  }));
+  const putsWhileInvalid = puts.length;
+  quorumSteps.push(...await uiStep(admin, 'valid quorum', async () => {
+    await p.fill('#q-policy-approvals', '1');
+    await p.fill('#q-lapse', '60');
+    await p.fill('#q-note', 'Release gate UI: proposal window');
+    await p.click('button:has-text("Save as version 3")');
+    await p.waitForSelector('text=Saved as version 3.', { timeout: 10_000 });
+  }));
+  p.off('request', onRequest);
+  gate.check('an invalid quorum (0 policy approvals) is refused in the browser with the reason, Save disabled and no PUT sent',
+    invalidShown && saveDisabled && putsWhileInvalid === 0, 'reason shown, Save disabled, 0 PUT', JSON.stringify({ invalidShown, saveDisabled, putsWhileInvalid }));
+  const q3 = (await owner.client.get('/api/v1/cpg/quorum')).json;
+  gate.check('Org Admin saves a quorum change through the UI: version 3 with its change note, exactly one PUT',
+    quorumSteps.length === 0 && q3?.version === 3 && q3?.config?.proposalLapseDays === 60 && q3?.config?.policyApproval?.approvals === 1 && q3?.changeNote === 'Release gate UI: proposal window' && puts.length === 1,
+    'v3, lapse 60, approvals 1, 1 PUT', [...quorumSteps, JSON.stringify({ v: q3?.version, lapse: q3?.config?.proposalLapseDays, puts: puts.length })].slice(0, 4));
   await admin.context.close();
 
   // ── Author: compile (rejected, then compiled), propose; four-eyes ───
@@ -355,8 +420,9 @@ async function policyRegistryChecks(ctx, browser) {
   const devNew = await visit(ctx, dev, 'dev', '/governance/policies/new', { expectLanding: '/governance', must: ["You don't have access to New policy", 'policy.author'] });
   gate.check('Developer /governance/policies/new redirects with an explanation (no policy.author), no 4xx', devNew.problems.length === 0, 'landed on /governance', devNew.problems.slice(0, 4));
   const devList = await visit(ctx, dev, 'dev', '/governance/policies', { must: ['corp.no-direct-openai', 'corp.gate-ui-model'], mustNot: ['New policy'] });
-  gate.check('Developer reads the policy log without authoring controls, no 4xx', devList.problems.length === 0,
-    'no New policy', devList.problems.slice(0, 4));
+  const devQuorum = await visit(ctx, dev, 'dev', '/governance/quorum', { must: ['Version 3 (in force)'], mustNot: ['Version history', 'Edit'] });
+  gate.check('Developer reads the policy log and the quorum without management controls, no 4xx', devList.problems.length === 0 && devQuorum.problems.length === 0,
+    'no New policy, no Edit, no history (no audit.read)', [...devList.problems, ...devQuorum.problems].slice(0, 4));
   // dev@ holds Developer plus the custom role this area granted per team and repository; system roles rank first.
   const devRoleTitle = await dev.page.getAttribute('[data-testid="sidebar-role"]', 'title').catch(() => null);
   gate.equal('Developer sidebar role label: Developer, +1 for the custom role granted above (full list on hover)',

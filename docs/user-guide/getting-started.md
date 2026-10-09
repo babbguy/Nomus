@@ -201,6 +201,12 @@ status, Scout feeds and review, the Modus integration, and the public Ledger.
     and how it is enforced right now: in its grace period (advisory until a date, in UTC) or
     enforced. Policy Authors see **New policy**; see
     [Writing and approving a policy](#writing-and-approving-a-policy) below.
+  - **Boards** (`/governance/boards`): the review boards, their members and the policies each one
+    owns. Org Admins create, rename and archive boards and add or remove members; others see member
+    counts.
+  - **Quorum** (`/governance/quorum`): who must approve what, as the signed version in force. Org
+    Admins edit it (each save is a new version); Org Admins and Auditors also see the history and
+    what each version changed.
   - **Access** (`/governance/access`, Org Admins): users and their roles, the role permission
     matrix, and teams. See [Roles and permissions](../admin-guide/roles-and-permissions.md#managing-access-in-the-dashboard).
   - **Audit log** (`/governance/audit`, Org Admins and Auditors): every access and settings change,

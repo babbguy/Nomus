@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { FilePlus2, Plus, Trash2, Wand2, ShieldCheck } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -220,7 +220,7 @@ export default function PolicyNew() {
                 <fieldset>
                   <legend className="block text-xs text-text-muted mb-1">Owning boards * (they review findings of this policy)</legend>
                   {activeBoards.length === 0 ? (
-                    <p className="text-xs text-warning">No active boards yet. An Org Admin creates boards first (they own policies and review their findings).</p>
+                    <p className="text-xs text-warning">No active boards yet. <Link to="/governance/boards" className="underline">Create a board</Link> first.</p>
                   ) : (
                     <div className="space-y-1">
                       {activeBoards.map((b) => (

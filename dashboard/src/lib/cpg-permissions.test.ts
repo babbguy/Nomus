@@ -43,9 +43,9 @@ describe('permission checks', () => {
 
   it('lists only the pages the user can open', () => {
     expect(visibleGovernancePages(me()).map((p) => p.to)).toEqual([
-      '/governance', '/governance/policies', '/governance/access', '/governance/audit', '/governance/settings',
+      '/governance', '/governance/policies', '/governance/boards', '/governance/quorum', '/governance/access', '/governance/audit', '/governance/settings',
     ]);
-    expect(visibleGovernancePages(developer).map((p) => p.to)).toEqual(['/governance', '/governance/policies', '/governance/settings']);
+    expect(visibleGovernancePages(developer).map((p) => p.to)).toEqual(['/governance', '/governance/policies', '/governance/boards', '/governance/quorum', '/governance/settings']);
     expect(visibleGovernancePages(me({ permissions: [] })).map((p) => p.to)).toEqual(['/governance']);
   });
 });

@@ -62,11 +62,15 @@ export const AUDIT_REQUIREMENT: PermissionRequirement = { all: ['audit.read'] };
 export const SETTINGS_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
 export const POLICIES_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
 export const POLICY_AUTHOR_REQUIREMENT: PermissionRequirement = { all: ['policy.read', 'policy.author'] };
+export const BOARDS_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
+export const QUORUM_REQUIREMENT: PermissionRequirement = { all: ['policy.read'] };
 
 /** The governance pages, in sidebar order. */
 export const GOVERNANCE_PAGES: GovernancePage[] = [
   { to: '/governance', label: 'Overview', description: 'Your governance access and status', requires: {} },
   { to: '/governance/policies', label: 'Policies', description: 'The corporate policy log: versions, approvals, grace periods', requires: POLICIES_REQUIREMENT },
+  { to: '/governance/boards', label: 'Boards', description: 'Review boards, their members and the policies they own', requires: BOARDS_REQUIREMENT },
+  { to: '/governance/quorum', label: 'Quorum', description: 'Who must approve what, versioned and signed', requires: QUORUM_REQUIREMENT },
   { to: '/governance/access', label: 'Access', description: 'Users, role grants, custom roles and teams', requires: ACCESS_REQUIREMENT },
   { to: '/governance/audit', label: 'Audit log', description: 'Every access and settings change, hash-chained', requires: AUDIT_REQUIREMENT },
   { to: '/governance/settings', label: 'Settings', description: 'Turn governance on, reviewer context', requires: SETTINGS_REQUIREMENT },
