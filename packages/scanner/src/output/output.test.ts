@@ -70,6 +70,55 @@ describe('generateSuggestions', () => {
     expect(out[0].suggestion).toMatch(/auditLog/);
   });
 
+  it('allow_with_audit suggestion for a Python file is Python and names no model', () => {
+    const out = generateSuggestions([makeFinding({
+      file: '/repo/app/summarize.py', sdk: 'anthropic', rule: { ...makeFinding().rule, effect: 'allow_with_audit' },
+    })]);
+    const s = out[0].suggestion!;
+    expect(s).toContain('result = anthropic_client.messages.create(**request)');
+    expect(s).toContain('model=request["model"]');
+    expect(s).toContain('datetime.now(timezone.utc).isoformat()');
+    expect(s).not.toMatch(/import \{|const |await |\/\//);
+  });
+
+  it('require_disclosure suggestion for a Python file is Python', () => {
+    const out = generateSuggestions([makeFinding({
+      file: '/repo/app/views.PY', sdk: 'openai', rule: { ...makeFinding().rule, effect: 'require_disclosure' },
+    })]);
+    expect(out[0].suggestion).toContain('response.headers["X-AI-Generated"] = "true"');
+    expect(out[0].suggestion).toContain('"_ai_disclosure"');
+    expect(out[0].suggestion).not.toMatch(/res\.header\(|\/\//);
+  });
+
+  it.each(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts'])('treats %s files as JavaScript/TypeScript', (ext) => {
+    const out = generateSuggestions([makeFinding({
+      file: `/repo/src/chat${ext}`, sdk: '@anthropic-ai/sdk', rule: { ...makeFinding().rule, effect: 'allow_with_audit' },
+    })]);
+    expect(out[0].suggestion).toContain('const result = await anthropic.messages.create(request);');
+    expect(out[0].suggestion).toContain('model: request.model,');
+  });
+
+  it('other languages get prose guidance, not another language\'s code', () => {
+    for (const effect of ['allow_with_audit', 'require_disclosure']) {
+      const out = generateSuggestions([makeFinding({
+        file: '/repo/src/Chat.java', sdk: 'com.openai', rule: { ...makeFinding().rule, effect },
+      })]);
+      expect(out[0].suggestion).not.toMatch(/[;{}]|import |result =/);
+    }
+    const audit = generateSuggestions([makeFinding({ file: '/repo/main.go', rule: { ...makeFinding().rule, effect: 'allow_with_audit' } })]);
+    expect(audit[0].suggestion).toMatch(/model the request used and a UTC ISO-8601 timestamp/);
+  });
+
+  it('never hard-codes a model name in any suggestion', () => {
+    const files = ['/repo/a.py', '/repo/a.ts', '/repo/A.java'];
+    const sdks = ['anthropic', '@anthropic-ai/sdk', 'openai', 'google.generativeai', '@google/generative-ai', 'cohere'];
+    const effects = ['deny', 'require_disclosure', 'allow_with_audit', 'flag', 'other'];
+    for (const file of files) for (const sdk of sdks) for (const effect of effects) {
+      const [f] = generateSuggestions([makeFinding({ file, sdk, rule: { ...makeFinding().rule, effect } })]);
+      expect(f.suggestion).not.toMatch(/claude-|gpt-|gemini-|sonnet|haiku|opus/i);
+    }
+  });
+
   it('flag effect suggestion is informational', () => {
     const out = generateSuggestions([makeFinding({ rule: { ...makeFinding().rule, effect: 'flag' } })]);
     expect(out[0].suggestion).toMatch(/flagged for review/i);
