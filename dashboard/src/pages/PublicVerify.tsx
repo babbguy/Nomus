@@ -392,6 +392,24 @@ function AttestationVerifyView({ attestationId }: { attestationId: string }) {
           )}
         </div>
 
+        {data.corporateGovernance && (
+          <div className="bg-[#161922] border border-[#2a2d3a] rounded-xl p-5 mb-4">
+            <h2 className="text-sm font-semibold text-[#9ca3af] mb-3 flex items-center gap-2">
+              <Shield size={14} /> Corporate policy exceptions
+            </h2>
+            <p className="text-sm text-[#e5e7eb]">
+              {data.corporateGovernance.exceptions} approved exception{data.corporateGovernance.exceptions === 1 ? '' : 's'}
+              {data.corporateGovernance.revokedSince > 0 && ` (${data.corporateGovernance.revokedSince} revoked since)`},{' '}
+              {data.corporateGovernance.caseClosures} closed review case{data.corporateGovernance.caseClosures === 1 ? '' : 's'},{' '}
+              {data.corporateGovernance.ciRuns} CI run{data.corporateGovernance.ciRuns === 1 ? '' : 's'}.
+            </p>
+            <p className="text-xs mt-2" style={{ color: data.corporateGovernance.manifestSignatureValid ? '#22c55e' : '#ef4444' }}>
+              {data.corporateGovernance.manifestSignatureValid ? 'Manifest signature valid' : 'Manifest signature INVALID'}.
+              {' '}The records are signed separately and verify offline from the owner's evidence export.
+            </p>
+          </div>
+        )}
+
         {/* Independent verification */}
         <div className="bg-[#161922] border border-[#2a2d3a] rounded-xl p-5 mb-4">
           <h2 className="text-sm font-semibold text-[#9ca3af] mb-3 flex items-center gap-2">

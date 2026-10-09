@@ -41,6 +41,14 @@ export interface AttestationVerification {
   subject: Record<string, unknown>;
   ruleContext: VerifyRuleContext | null;
   verification: VerificationInfo;
+  /** Present only when the attestation carries a signed corporate-policy manifest: counts and validity, nothing org-private. */
+  corporateGovernance?: {
+    manifestSignatureValid: boolean;
+    exceptions: number;
+    revokedSince: number;
+    caseClosures: number;
+    ciRuns: number;
+  };
   _disclaimer: string;
 }
 

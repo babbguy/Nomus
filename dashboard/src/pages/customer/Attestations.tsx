@@ -12,6 +12,7 @@ import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
 import ComplianceStatusBadge from '../../components/domain/ComplianceStatusBadge';
 import LifecycleBadge from '../../components/domain/LifecycleBadge';
 import JurisdictionTag from '../../components/domain/JurisdictionTag';
@@ -181,7 +182,14 @@ export default function Attestations() {
                     <tr key={a.id} className="hover:bg-surface-hover transition">
                       <td className="px-4 py-3"><ComplianceStatusBadge status={a.result} /></td>
                       <td className="px-4 py-3">
-                        <LifecycleBadge lifecycle={lifecycle} reason={a.revocationReason} />
+                        <div className="flex flex-col items-start gap-1">
+                          <LifecycleBadge lifecycle={lifecycle} reason={a.revocationReason} />
+                          {a.corporateGovernance && (
+                            <Badge variant="info" className="whitespace-nowrap">
+                              Corporate governance: {a.corporateGovernance.exceptions} exception{a.corporateGovernance.exceptions === 1 ? '' : 's'}
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-text-primary">{a.actionContext.action || '—'}</td>
                       <td className="px-4 py-3"><JurisdictionTag code={a.jurisdiction} /></td>
