@@ -591,6 +591,8 @@ export const caseFindingResponseSchema = z.object({
   tier: z.enum(TIERS), blocking: z.boolean(), owningBoardIds: z.array(uuid),
   statusAtRevision: z.enum(['new', 'carried']), filePath: z.string(), startLine: z.number().int(), endLine: z.number().int(),
   language: z.string().nullable(), snippet: z.string(), justification: justificationResponseSchema.nullable(),
+  /** The stored reviewer context of the snippet, if any (E51 generates one on first request). */
+  contextStatus: z.enum(['none', 'generated', 'failed']),
 }).strict();
 
 export const revisionDetailResponseSchema = z.object({

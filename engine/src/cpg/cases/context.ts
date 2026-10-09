@@ -41,7 +41,8 @@ const defaultGenerate: Generate = (system, user) => generateWithFallback('transl
 
 type Target = Pick<CaseFindingRow, 'orgId' | 'snippetHash' | 'policyVersionId' | 'language'>;
 
-function latestAttempt(db: Db, t: Target): ReviewerContextRow | undefined {
+/** The latest stored attempt for a snippet and policy version, if any (never generates). */
+export function latestAttempt(db: Db, t: Target): ReviewerContextRow | undefined {
   return db.select().from(cpgReviewerContexts).where(and(
     eq(cpgReviewerContexts.orgId, t.orgId), eq(cpgReviewerContexts.snippetHash, t.snippetHash),
     eq(cpgReviewerContexts.policyVersionId, t.policyVersionId), eq(cpgReviewerContexts.promptVersion, CPG_REVIEWER_CONTEXT_PROMPT_VERSION),
@@ -51,9 +52,14 @@ function latestAttempt(db: Db, t: Target): ReviewerContextRow | undefined {
 /**
  * The context of a finding: the stored one, or a new attempt when there is
  * none yet (or `retry` after a failure). `null` means disabled for the org.
+ * A closed case is read-only: it shows a stored context but never makes a
+ * new attempt (409 case_closed).
  */
-export async function reviewerContext(db: Db, t: Target, opts: { retry: boolean; actor: string }, generate: Generate = defaultGenerate): Promise<ReviewerContextRow | null> {
+export async function reviewerContext(db: Db, t: Target, opts: { retry: boolean; actor: string; caseClosed: boolean }, generate: Generate = defaultGenerate): Promise<ReviewerContextRow | null> {
   const latest = latestAttempt(db, t);
+  if (opts.caseClosed && (opts.retry || !latest)) {
+    throw new CpgError(409, 'case_closed', 'The case is closed: reviewer context is not generated for it any more');
+  }
   if (opts.retry && latest?.status !== 'failed') throw new CpgError(409, 'context_not_failed', 'Only a failed context can be retried');
   if (opts.retry && latest && latest.attempt >= MAX_CONTEXT_ATTEMPTS) {
     throw new CpgError(409, 'retry_limit_reached', `Reviewer context is tried at most ${MAX_CONTEXT_ATTEMPTS} times`);

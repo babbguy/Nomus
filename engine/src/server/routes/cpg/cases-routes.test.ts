@@ -288,6 +288,26 @@ describe('E49–E50 close, closure record, PR attach', () => {
     expect([reopened.created, reopened.case.id === kase.id]).toEqual([true, false]);
   });
 
+  it('a closed case shows stored reviewer context but never generates or retries it (409 case_closed, no LLM call)', async () => {
+    const kase = await openCase('feat/closed-context');
+    await call(app, 'PATCH', '/api/v1/cpg/settings', { cookie: owner.cookie, body: { reviewerContextLlm: true } });
+    expect((await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/close`, { cookie: reviewer.cookie, body: { reason: 'Done.' } })).status).toBe(200);
+    const rev = revisionDetailResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/${kase.id}/revisions/1`, { cookie: reviewer.cookie })).json);
+    // The E51 test above stored context for the chat.ts snippet; nothing is stored for log.ts.
+    const [stored, none] = ['src/chat.ts', 'src/log.ts'].map((p) => rev.findings.find((f) => f.filePath === p)!);
+    expect([stored.contextStatus, none.contextStatus]).toEqual(['generated', 'none']);
+    const calls = llmCalls.length;
+    const contexts = () => rawSqlite(getDb()).prepare('SELECT count(*) AS n FROM cpg_reviewer_contexts').get() as { n: number };
+    const rows = contexts().n;
+    const path = (f: { id: string }) => `/api/v1/cpg/cases/${kase.id}/findings/${f.id}/context`;
+    expect(reviewerContextResponseSchema.parse((await call(app, 'GET', path(stored), { cookie: reviewer.cookie })).json)).toMatchObject({ status: 'generated' });
+    const refused = await call(app, 'GET', path(none), { cookie: reviewer.cookie });
+    expect([refused.status, refused.json.code]).toEqual([409, 'case_closed']);
+    const retry = await call(app, 'POST', `${path(stored)}/retry`, { cookie: reviewer.cookie, body: {} });
+    expect([retry.status, retry.json.code]).toEqual([409, 'case_closed']);
+    expect([llmCalls.length, contexts().n]).toEqual([calls, rows]);
+  });
+
   it('the opener may withdraw without case.close', async () => {
     const kase = await openCase('feat/withdraw');
     const res = await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/withdraw`, { cookie: dev.cookie, body: { reason: 'Not needed any more.' } });

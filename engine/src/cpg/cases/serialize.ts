@@ -13,7 +13,7 @@ import { CpgError, notFound } from '../errors.js';
 import { boardIdsOf, userNames } from '../policies/service.js';
 import { closurePayload, closureSignedText } from './close.js';
 import { listComments, type CommentRow } from './comments.js';
-import type { ReviewerContextRow } from './context.js';
+import { latestAttempt, type ReviewerContextRow } from './context.js';
 import { currentJustifications, type JustificationRow } from './justifications.js';
 import { caseLanes } from './lanes.js';
 import { isBlocking, latestFindings, openChangeRequests, type CaseFindingRow, type CaseRow, type RevisionRow } from './service.js';
@@ -209,7 +209,7 @@ export function revisionDetail(db: Db, c: CaseRow, revision: number) {
         id: f.id, fingerprint: f.fingerprint, policyId: f.policyId, policyKey: f.policyKey, policyTitle, policyVersion: f.policyVersion,
         tier: f.tier, blocking: isBlocking(f), owningBoardIds: boardIdsOf({ owningBoardIds }),
         statusAtRevision: f.statusAtRevision, filePath: f.filePath, startLine: f.startLine, endLine: f.endLine, language: f.language,
-        snippet, justification: j ? justificationOf(j, names) : null,
+        snippet, justification: j ? justificationOf(j, names) : null, contextStatus: latestAttempt(db, f)?.status ?? 'none',
       };
     }),
   });

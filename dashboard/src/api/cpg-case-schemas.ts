@@ -83,7 +83,7 @@ export const caseFindingSchema = z.object({
   id: uuid, fingerprint, policyId: uuid, policyKey: z.string(), policyTitle: z.string(), policyVersion: z.number().int(),
   tier: tierSchema, blocking: z.boolean(), owningBoardIds: z.array(uuid), statusAtRevision: z.enum(['new', 'carried']),
   filePath: z.string(), startLine: z.number().int(), endLine: z.number().int(), language: z.string().nullable(),
-  snippet: z.string(), justification: justificationSchema.nullable(),
+  snippet: z.string(), justification: justificationSchema.nullable(), contextStatus: z.enum(['none', 'generated', 'failed']),
 }).strict();
 
 export const revisionDetailSchema = z.object({ revision: revisionSummarySchema, findings: z.array(caseFindingSchema) }).strict();

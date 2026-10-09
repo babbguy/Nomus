@@ -247,7 +247,7 @@ for (const retry of [false, true]) {
     const findingId = pathParam(c, 'findingId');
     const finding = db.select().from(cpgCaseFindings).where(and(eq(cpgCaseFindings.id, findingId), eq(cpgCaseFindings.caseId, kase.id))).get();
     if (!finding) throw notFound('Finding');
-    const row = await reviewerContext(db, finding, { retry, actor: `user:${actor.userId}` });
+    const row = await reviewerContext(db, finding, { retry, actor: `user:${actor.userId}`, caseClosed: kase.closedAt !== null });
     return c.json(reviewerContextOf(findingId, row, CPG_REVIEWER_CONTEXT_PROMPT_VERSION));
   });
   if (retry) cpgCaseRoutes.post(route, ...auth(false), handler);
