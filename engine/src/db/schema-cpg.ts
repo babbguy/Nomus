@@ -502,6 +502,25 @@ export const cpgDeliveryAttempts = sqliteTable('cpg_delivery_attempts', {
   responseExcerpt: text('response_excerpt'),
 });
 
+export const cpgAttestationManifests = sqliteTable('cpg_attestation_manifests', {
+  attestationId: text('attestation_id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  repo: text('repo').notNull(),
+  branch: text('branch'),
+  evaluatedAt: text('evaluated_at').notNull(),
+  bundleHash: text('bundle_hash').notNull(),
+  signedPayload: text('signed_payload').notNull(),
+  signature: text('signature').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgAttestationLinks = sqliteTable('cpg_attestation_links', {
+  attestationId: text('attestation_id').notNull(),
+  itemType: text('item_type', { enum: ['decision', 'case_closure', 'ci_run'] }).notNull(),
+  itemId: text('item_id').notNull(),
+  itemSignatureSha256: text('item_signature_sha256').notNull(),
+}, (t) => [primaryKey({ columns: [t.attestationId, t.itemType, t.itemId] })]);
+
 /** Every CPG table declared above, for the column-parity test. */
 export const CPG_DRIZZLE_TABLES = [
   schemaMigrations,
@@ -540,4 +559,6 @@ export const CPG_DRIZZLE_TABLES = [
   cpgIntegrationLinks,
   cpgNotificationDeliveries,
   cpgDeliveryAttempts,
+  cpgAttestationManifests,
+  cpgAttestationLinks,
 ] as const;
