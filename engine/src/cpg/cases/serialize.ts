@@ -1,13 +1,13 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { caseStatusSchema, type CaseStatus, type FindingResolution } from '@nomus/scanner/corporate';
-import { cpgCaseFindings, cpgCaseRevisions, cpgPolicyHeads, cpgSnippets } from '../../db/schema-cpg.js';
+import { caseStatusSchema, parseFingerprint, type CaseStatus, type FindingResolution } from '@nomus/scanner/corporate';
+import { cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions, cpgSnippets } from '../../db/schema-cpg.js';
 import { listBoards } from '../boards/service.js';
 import {
   caseDetailResponseSchema, revisionDetailResponseSchema, reviewerContextResponseSchema,
   type CaseSummaryResponse, type CommentResponse, type JustificationResponse, type ReviewerContextResponse,
 } from '../contracts.js';
-import { notFound } from '../errors.js';
+import { CpgError, notFound } from '../errors.js';
 import { userNames } from '../policies/service.js';
 import { listComments, type CommentRow } from './comments.js';
 import type { ReviewerContextRow } from './context.js';
@@ -18,6 +18,7 @@ import { isBlocking, latestFindings, openChangeRequests, type CaseFindingRow, ty
 /** Response builders for the review-case routes; each output is parsed with its contract. */
 
 type Db = BetterSQLite3Database<any>;
+type PolicyHead = typeof cpgPolicyHeads.$inferSelect;
 
 export const caseUrl = (origin: string, caseId: string) => `${origin}/governance/cases/${caseId}`;
 
@@ -39,34 +40,86 @@ export function commentOf(m: CommentRow, names: Map<string, string>): CommentRes
   };
 }
 
+interface ResolutionFacts {
+  fingerprint: string;
+  tier: CaseFindingRow['tier'];
+  /** The policy version is enforced (past its grace period). */
+  enforced: boolean;
+  /** The finding's policy version is the policy's active version. */
+  current: boolean;
+  head: Pick<PolicyHead, 'state' | 'enforceFrom'>;
+}
+
 /**
- * The resolution of each latest-revision finding. Decisions arrive in Phase
- * 5, so a blocking finding is `changes_requested` (named by an unresolved
- * change request) or `needs_review`. A finding raised against a version that
- * is no longer active is `expired`: it blocks (rescan) unless the policy is retired.
+ * One finding's resolution. Decisions arrive in Phase 5, so a blocking
+ * finding is `changes_requested` (named by an unresolved change request) or
+ * `needs_review`. A finding raised against a version that is no longer
+ * active is `expired`: it blocks (rescan) unless the policy is retired.
  */
+function resolutionOf(f: ResolutionFacts, changeRequested: ReadonlySet<string>): FindingResolution {
+  const blocking = f.current ? isBlocking(f) : f.head.state === 'active';
+  const status = !f.current ? 'expired' : f.tier === 'advisory' ? 'advisory' : !f.enforced ? 'grace'
+    : changeRequested.has(f.fingerprint) ? 'changes_requested' : 'needs_review';
+  return {
+    fingerprint: f.fingerprint, status, blocking, tier: f.tier, enforceFrom: f.head.enforceFrom,
+    decisionId: null, exceptionDecisionId: null, expiresAt: null,
+  };
+}
+
+/** The change requests of a case that no reply has resolved yet. */
+function unresolvedRequests(db: Db, caseId: string): CommentRow[] {
+  const unresolved = new Set([...openChangeRequests(db, caseId)].filter(([, s]) => !s.resolved).map(([id]) => id));
+  return listComments(db, caseId).filter((m) => unresolved.has(m.id));
+}
+
+const requestedFingerprints = (requests: CommentRow[]) => new Set(requests.flatMap((m) => JSON.parse(m.fingerprints) as string[]));
+
+/** The resolution of each latest-revision finding, by fingerprint. */
 function resolutions(db: Db, findings: CaseFindingRow[], changeRequested: Set<string>): FindingResolution[] {
   const policyIds = [...new Set(findings.map((f) => f.policyId))];
   const heads = new Map(policyIds.length === 0 ? [] : db.select().from(cpgPolicyHeads).where(inArray(cpgPolicyHeads.policyId, policyIds)).all().map((h) => [h.policyId, h]));
   const byFingerprint = new Map(findings.map((f) => [f.fingerprint, f]));
   return [...byFingerprint.values()].sort((a, b) => (a.fingerprint < b.fingerprint ? -1 : 1)).map((f) => {
     const head = heads.get(f.policyId)!;
-    const current = head.activeVersionId === f.policyVersionId;
-    const blocking = current ? isBlocking(f) : head.state === 'active';
-    const status = !current ? 'expired' : f.tier === 'advisory' ? 'advisory' : !f.enforced ? 'grace'
-      : changeRequested.has(f.fingerprint) ? 'changes_requested' : 'needs_review';
-    return {
-      fingerprint: f.fingerprint, status, blocking, tier: f.tier, enforceFrom: head.enforceFrom,
-      decisionId: null, exceptionDecisionId: null, expiresAt: null,
-    };
+    return resolutionOf({ ...f, current: head.activeVersionId === f.policyVersionId, head }, changeRequested);
+  });
+}
+
+/**
+ * E53: the resolution of fingerprints a scanner found on a branch, before or
+ * after review was requested. Each must name a version of one of the org's
+ * policies (422 unknown_policy otherwise); change requests come from the
+ * branch's open case, if any.
+ */
+export function findingsStatus(db: Db, orgId: string, branch: { repo: string; branch: string }, fingerprints: readonly string[], now: string): FindingResolution[] {
+  const parsed = [...new Set(fingerprints)].map((fingerprint) => ({ fingerprint, ...parseFingerprint(fingerprint)! }));
+  const keys = [...new Set(parsed.map((p) => p.policyKey))];
+  const versions = new Map(db.select({
+    policyKey: cpgPolicies.policyKey, version: cpgPolicyVersions.version, id: cpgPolicyVersions.id, tier: cpgPolicyVersions.tier,
+    state: cpgPolicyHeads.state, activeVersionId: cpgPolicyHeads.activeVersionId, enforceFrom: cpgPolicyHeads.enforceFrom,
+  }).from(cpgPolicyVersions)
+    .innerJoin(cpgPolicies, eq(cpgPolicies.id, cpgPolicyVersions.policyId))
+    .innerJoin(cpgPolicyHeads, eq(cpgPolicyHeads.policyId, cpgPolicyVersions.policyId))
+    .where(and(eq(cpgPolicyVersions.orgId, orgId), inArray(cpgPolicies.policyKey, keys))).all()
+    .map((v) => [`${v.policyKey}:${v.version}`, v]));
+  const unknown = parsed.filter((p) => !versions.has(`${p.policyKey}:${p.policyVersion}`)).map((p) => p.fingerprint);
+  if (unknown.length > 0) throw new CpgError(422, 'unknown_policy', 'A fingerprint names a policy version this organization does not have', { fingerprints: unknown });
+  const kase = db.select({ id: cpgCases.id }).from(cpgCases)
+    .where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, branch.repo), eq(cpgCases.branch, branch.branch), isNull(cpgCases.closedAt))).get();
+  const changeRequested = kase ? requestedFingerprints(unresolvedRequests(db, kase.id)) : new Set<string>();
+  return parsed.map((p) => {
+    const v = versions.get(`${p.policyKey}:${p.policyVersion}`)!;
+    return resolutionOf({
+      fingerprint: p.fingerprint, tier: v.tier, current: v.state === 'active' && v.activeVersionId === v.id,
+      enforced: v.enforceFrom !== null && v.enforceFrom <= now, head: v,
+    }, changeRequested);
   });
 }
 
 /** The CaseStatus contract (§9.3), shared with the extension and the action. */
 export function caseStatus(db: Db, c: CaseRow, origin: string): CaseStatus {
   const boardName = new Map(listBoards(db, c.orgId).map((b) => [b.id, b.name]));
-  const unresolved = new Set([...openChangeRequests(db, c.id)].filter(([, s]) => !s.resolved).map(([id]) => id));
-  const requests = listComments(db, c.id).filter((m) => unresolved.has(m.id));
+  const requests = unresolvedRequests(db, c.id);
   const names = userNames(db, requests.map((m) => m.authorUserId));
   return caseStatusSchema.parse({
     id: c.id, ref: c.ref, repo: c.repo, branch: c.branch, prNumber: c.prNumber, state: c.state, closeReason: c.closeReason,
@@ -76,7 +129,7 @@ export function caseStatus(db: Db, c: CaseRow, origin: string): CaseStatus {
       commentId: m.id, boardName: boardName.get(m.boardId!) ?? '', authorName: names.get(m.authorUserId) ?? '', body: m.body,
       fingerprints: JSON.parse(m.fingerprints) as string[], createdAt: m.createdAt,
     })),
-    resolutions: resolutions(db, latestFindings(db, c.id), new Set(requests.flatMap((m) => JSON.parse(m.fingerprints) as string[]))),
+    resolutions: resolutions(db, latestFindings(db, c.id), requestedFingerprints(requests)),
     updatedAt: c.updatedAt,
   });
 }

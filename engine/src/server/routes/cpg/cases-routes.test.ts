@@ -6,7 +6,10 @@
  * and the identity rules. Every success response is parsed with its contract.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { fingerprintOf, caseStatusSchema, requestReviewResponseSchema, caseByBranchResponseSchema } from '@nomus/scanner/corporate';
+import { randomUUID } from 'node:crypto';
+import {
+  fingerprintOf, caseStatusSchema, requestReviewResponseSchema, caseByBranchResponseSchema, findingsStatusResponseSchema,
+} from '@nomus/scanner/corporate';
 import { getDb } from '../../../db/client.js';
 import { runMigrations } from '../../../db/migrate.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
@@ -20,6 +23,8 @@ import {
 import { listAuditEventsByAction, verifyAuditChain } from '../../../cpg/audit/log.js';
 import { closureSignedText } from '../../../cpg/cases/close.js';
 import { attachPullRequest, getCase } from '../../../cpg/cases/service.js';
+import { applyCpgPullRequest } from '../../../cpg/cases/github-hook.js';
+import { githubAppInstallations } from '../../../db/schema.js';
 import { cpgVerify } from '../../../cpg/policies/signing.js';
 import { caseFixtures } from '../../../cpg/__fixtures__/case-fixtures.js';
 import { call, makeKey, makeOrg, makeUser, type TestUser } from '../../../cpg/__fixtures__/rbac-fixtures.js';
@@ -48,6 +53,8 @@ let reviewer: TestUser; // case_reviewer, member of the AI board
 let bystander: TestUser; // case_reviewer, member of no board
 let outsider: TestUser; // Developer in another org
 let aiBoard: string;
+let legalBoard: string;
+let otherOrg: string;
 
 const finding = (code: string, key: string, filePath = 'src/chat.ts', line = 3) =>
   ({ fingerprint: fingerprintOf(code, key, 1), policyKey: key, policyVersion: 1, filePath, startLine: line, endLine: line, language: 'typescript' as const, snippet: code });
@@ -83,12 +90,13 @@ beforeAll(async () => {
   await grant(bystander, 'case_reviewer');
   const { insertBoard, insertPolicy } = caseFixtures(rawSqlite(getDb()));
   aiBoard = insertBoard(orgId, 'ai');
-  const legalBoard = insertBoard(orgId, 'legal');
+  legalBoard = insertBoard(orgId, 'legal');
   expect((await call(app, 'POST', `/api/v1/cpg/boards/${aiBoard}/members`, { cookie: owner.cookie, body: { userId: reviewer.id } })).status).toBe(201);
   insertPolicy(orgId, 'corp.no-openai', 'prohibited', [aiBoard]);
   insertPolicy(orgId, 'corp.no-pii', 'review-required', [legalBoard]);
+  insertPolicy(orgId, 'corp.later', 'prohibited', [aiBoard], { enforceFrom: '2099-01-01T00:00:00.000Z' });
   expect((await call(app, 'PATCH', '/api/v1/cpg/settings', { cookie: owner.cookie, body: { enabled: true } })).status).toBe(200);
-  const otherOrg = makeOrg('Elsewhere');
+  otherOrg = makeOrg('Elsewhere');
   makeUser(otherOrg); // the other org's owner
   outsider = makeUser(otherOrg);
 });
@@ -263,5 +271,76 @@ describe('E49–E50 close, closure record, PR attach', () => {
     const kase = await openCase('feat/withdraw');
     const res = await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/withdraw`, { cookie: dev.cookie, body: { reason: 'Not needed any more.' } });
     expect(caseStatusSchema.parse(res.json)).toMatchObject({ state: 'closed', closeReason: 'withdrawn' });
+  });
+});
+
+describe('E53 findings status, org-key reads, board filter, size limit', () => {
+  const status = (auth: { cookie?: string; bearer?: string }, branch: string, fingerprints: string[]) =>
+    call(app, 'POST', '/api/v1/cpg/findings/status', { ...auth, body: { repo: REPO, branch, fingerprints } });
+
+  it('E53 resolves each fingerprint: changes requested, needs review, grace; 422 unknown_policy', async () => {
+    const kase = await openCase('feat/status');
+    const [openai, pii] = [finding(OPENAI, 'corp.no-openai').fingerprint, finding(PII, 'corp.no-pii').fingerprint];
+    const later = fingerprintOf("model: 'old-model'", 'corp.later', 1);
+    await call(app, 'POST', `/api/v1/cpg/cases/${kase.id}/request-changes`, { cookie: reviewer.cookie, body: { boardId: aiBoard, body: 'Use the gateway.', fingerprints: [openai] } });
+    const res = await status({ cookie: dev.cookie }, 'feat/status', [openai, pii, later, openai]);
+    const items = findingsStatusResponseSchema.parse(res.json).items;
+    expect(items.map((r) => [r.fingerprint, r.status, r.blocking])).toEqual([[openai, 'changes_requested', true], [pii, 'needs_review', true], [later, 'grace', false]]);
+    // No case on the branch: nothing is change-requested.
+    expect(findingsStatusResponseSchema.parse((await status({ cookie: dev.cookie }, 'feat/none', [openai])).json).items[0].status).toBe('needs_review');
+    const unknown = await status({ cookie: dev.cookie }, 'feat/status', [fingerprintOf('x', 'corp.unknown', 1)]);
+    expect([unknown.status, unknown.json.code]).toEqual([422, 'unknown_policy']);
+  });
+
+  it('an org key with read:policies may read E42 and E53 (the CI action); without the scope it is refused', async () => {
+    await openCase('feat/org-key');
+    const key = makeKey(orgId, null, ['read:policies']).key;
+    const byBranch = await call(app, 'GET', `/api/v1/cpg/cases/by-branch?repo=${REPO}&branch=feat/org-key`, { bearer: key });
+    expect(caseByBranchResponseSchema.parse(byBranch.json).case?.state).toBe('in_review');
+    expect((await status({ bearer: key }, 'feat/org-key', [finding(PII, 'corp.no-pii').fingerprint])).status).toBe(200);
+    const unscoped = makeKey(orgId, null, ['evaluate']).key;
+    expect((await call(app, 'GET', `/api/v1/cpg/cases/by-branch?repo=${REPO}&branch=feat/org-key`, { bearer: unscoped })).status).toBe(403);
+    // Another org's key sees nothing of this org.
+    const foreign = makeKey(otherOrg, null, ['read:policies']).key;
+    expect(caseByBranchResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases/by-branch?repo=${REPO}&branch=feat/org-key`, { bearer: foreign })).json).case).toBeNull();
+  });
+
+  it('the list filters by board: a case without a Legal lane is left out of ?boardId=<legal>', async () => {
+    const aiOnly = requestReviewResponseSchema.parse((await requestReview(dev, reviewBody('feat/ai-only', [finding(OPENAI, 'corp.no-openai')]))).json).case.id;
+    const ids = async (boardId: string) => caseListResponseSchema.parse((await call(app, 'GET', `/api/v1/cpg/cases?limit=200&boardId=${boardId}`, { cookie: dev.cookie })).json).items.map((i) => i.id);
+    expect(await ids(aiBoard)).toContain(aiOnly);
+    const legal = await ids(legalBoard);
+    expect(legal).not.toContain(aiOnly);
+    expect(legal.length).toBeGreaterThan(0);
+  });
+
+  it('request review over 4 MiB is 413 payload_too_large', async () => {
+    const res = await call(app, 'POST', '/api/v1/cpg/cases/request-review', { cookie: dev.cookie, rawBody: JSON.stringify({ pad: 'x'.repeat(4 * 1024 * 1024) }) });
+    expect([res.status, res.json.code]).toEqual([413, 'payload_too_large']);
+  });
+});
+
+describe('GitHub App pull_request hook', () => {
+  it('opened attaches the PR to the branch case, closed (merged) closes it; other orgs and actions are ignored', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    const install = (installationId: number, org: string) => db.insert(githubAppInstallations).values({
+      id: randomUUID(), installationId, orgId: org, accountLogin: 'gate-org', accountType: 'Organization', repositorySelection: 'all',
+      selectedRepos: '[]', permissions: '{}', isActive: true, installedAt: now, updatedAt: now,
+    }).run();
+    install(41_001, orgId);
+    install(41_002, otherOrg); // corporate policies off
+    const kase = requestReviewResponseSchema.parse((await requestReview(dev, { ...reviewBody('feat/gh'), repo: 'gate-org/app' })).json).case;
+    const event = (action: string, merged = false) => ({ action, repository: { full_name: 'Gate-Org/App' }, pull_request: { number: 12, merged, head: { ref: 'feat/gh' } } });
+
+    expect(applyCpgPullRequest(db, 41_002, event('opened'))).toBe('ignored');
+    expect(applyCpgPullRequest(db, 41_999, event('opened'))).toBe('ignored');
+    expect(applyCpgPullRequest(db, 41_001, event('synchronize'))).toBe('ignored');
+    expect(applyCpgPullRequest(db, 41_001, event('opened'))).toBe('attached');
+    expect(getCase(db, orgId, kase.id).prNumber).toBe(12);
+    expect(applyCpgPullRequest(db, 41_001, event('closed', true))).toBe('closed');
+    expect(getCase(db, orgId, kase.id)).toMatchObject({ state: 'closed', closeReason: 'merged', closedBy: 'github_app:41001' });
+    expect(applyCpgPullRequest(db, 41_001, event('closed'))).toBe('ignored'); // no open case left
+    expect(() => applyCpgPullRequest(db, 41_001, { action: 'opened', repository: { full_name: 'gate-org/app' } })).toThrow(/no repository, head branch or PR number/);
   });
 });

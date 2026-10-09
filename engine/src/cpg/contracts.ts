@@ -592,6 +592,8 @@ export const reviewerContextResponseSchema = z.object({
 export const caseListQuerySchema = z.object({
   state: caseStateSchema.optional(),
   repo: z.string().regex(CANONICAL_REPO_RE).optional(),
+  /** Cases with a lane for this board (a latest-revision finding the board owns). */
+  boardId: uuid.optional(),
   mine: z.enum(['true', 'false']).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().max(200).optional(),

@@ -41,18 +41,22 @@ export function loadCpgActor(c: Context<AppEnv>): CpgActor | null {
 export interface CpgPermissionOptions {
   /** Accept a user-bound API key (the "UK" auth in the endpoint table). Default: sessions only. */
   allowUserKey?: boolean;
+  /** Accept an org API key (the "K[scope]" auth): the handler then has no CPG actor and authorizes by the key's org. */
+  allowOrgKey?: boolean;
   /** Derive the repository the request concerns, for team/repo-scoped grants. */
   resource?: (c: Context<AppEnv>) => PermissionResource | undefined;
 }
 
 /**
  * Require a CPG permission. `null` requires only a user identity (GET /cpg/me).
- * Org API keys carry no user, so they get 403 user_identity_required.
+ * Org API keys carry no user, so they get 403 user_identity_required unless
+ * the route allows them (`allowOrgKey`, read-only routes the CI action uses).
  */
 export function requireCpgPermission(permission: PermissionKey | null, opts: CpgPermissionOptions = {}) {
   return createMiddleware<AppEnv>(async (c, next) => {
     const identity = identityOf(c);
     if (identity === 'org_key') {
+      if (opts.allowOrgKey) return next();
       return cpgError(c, 403, 'user_identity_required', 'This endpoint acts on behalf of a user; sign in or use a user-bound key');
     }
     if (identity === 'user_key' && !opts.allowUserKey) {
