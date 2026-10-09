@@ -129,6 +129,9 @@ All notable changes to this project are documented here. The format follows
 - A second developer signing in to VS Code in the same organization revoked the first
   developer's key. Signing in now replaces only your own extension key.
 ### Fixed
+- Scanner: two scans of the same repository could list findings in a different order, because the
+  file walk returns files in no guaranteed order. Files are now sorted before detection, so the
+  console, JSON and SARIF output of identical trees is identical.
 - The database migrator never created the indexes declared in the schema, so rule-key uniqueness was
   enforced only in application code and every lookup index was missing. It now creates every declared
   `index()` / `uniqueIndex()` on fresh and existing databases, deriving them from the schema. Before

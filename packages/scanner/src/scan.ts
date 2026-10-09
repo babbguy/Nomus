@@ -155,13 +155,15 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
     ? await runCorporateScanOnDisk(rootDir, bundle, { now: options.corporate?.now })
     : { findings: [], summary: corporateOff() };
 
-  // Find source files
-  const files = await glob(SOURCE_PATTERNS, {
+  // Find source files. glob walks directories concurrently and returns them
+  // in no guaranteed order; detectors and findings follow this order, so sort
+  // it to make every scan of the same tree produce identical output.
+  const files = (await glob(SOURCE_PATTERNS, {
     cwd: rootDir,
     ignore: config.nomus.ignore,
     absolute: true,
     nodir: true,
-  });
+  })).sort();
 
   // Build detector registry
   const registry = buildRegistry(config, options.detectors);
