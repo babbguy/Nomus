@@ -19,6 +19,8 @@ Permissions are checked on the case's repository; an id of another organization 
 | `GET /api/v1/cpg/proposals/:id` | session | `case.read` | One proposal: requirement, votes, derived status, and whether you may vote |
 | `POST /api/v1/cpg/proposals/:id/votes` | session | `case.review`, and an eligible voter | Vote `approve` or `reject` |
 | `GET /api/v1/cpg/decisions/:id` | session or user-bound key | `case.read` | A decision with its signed payload |
+| `POST /api/v1/cpg/decisions/:id/revoke` | session | `decision.revoke` | Revoke a decision or standing exception |
+| `GET /api/v1/cpg/exceptions` | session or user-bound key | `case.read` | Standing exceptions (`?active=true\|false`, `?repo`, `?policyKey`) |
 
 ## Proposing
 
@@ -87,6 +89,78 @@ so it can be verified offline against `/.well-known/nomus-keys`:
  "quorumConfigVersion":3,"repo":"github.com/gate-org/policy-repo","scope":"snippet"}
 ```
 
+## Standing exceptions
+
+A standing exception covers **future** findings that match a pattern, so nobody has to propose a
+decision for each one. It is pinned to one policy version: when the policy gets a new version, the
+exception no longer matches and has to be proposed again.
+
+```json
+{
+  "scope": "standing",
+  "caseId": "<uuid, optional: the case it was proposed from>",
+  "pattern": {
+    "repos": ["github.com/gate-org/policy-repo"],
+    "teamIds": [],
+    "paths": ["src/legacy/**"],
+    "excludePaths": [],
+    "policyKey": "corp.no-direct-openai",
+    "policyVersion": 1,
+    "conditions": { "branches": ["feat/*"], "languages": ["typescript"], "maxLinesPerFinding": 20,
+                    "snippetMustMatch": { "source": "legacyClient", "flags": "" } }
+  },
+  "expiresAt": "2026-11-08T12:00:00.000Z",
+  "rationale": "Why the exception is acceptable and until when."
+}
+```
+
+- A standing exception is always an approval and always expires: at most the smaller of the tier's
+  standing maximum and `standingExceptions.maxExpiryDays` (90 days by default).
+- Proposing needs `exception.propose` on every repository the pattern can touch: each listed
+  repository, or an organization-wide grant when the pattern has a repository glob or a team. The
+  proposer does not vote.
+- Voters need `case.review` or `exception.approve` on the same repositories, and the quorum's
+  `requiredPermission` (by default `exception.approve`) must be held by one approving voter.
+- Nobody may vote who opened, justified or revised the case the exception was proposed from, or
+  any open case whose findings the pattern covers (`403 self_approval_forbidden`).
+- Globs follow the corporate rule syntax (`*`, `?`, `**`, `{a,b}`; no character classes). Repository
+  patterns are lowercase; a wildcard in the host part (`*`, `**`, `*/*`) is organization-wide and
+  is refused unless `standingExceptions.allowOrgWideRepoPatterns` is on.
+
+A finding is **excepted** when every occurrence of it on the branch matches the pattern: the
+repository (or a repository of a listed team, resolved when the finding is checked), a `paths` glob
+and no `excludePaths` glob, and each condition present. `snippetMustMatch` is tested against the
+stored, normalized snippet; when the server does not have it, the condition fails. A fingerprint
+that is not part of the branch's open case is never excepted.
+
+Resolution order for a blocking finding: its latest snippet or bulk decision first (a rejection
+blocks and beats any exception; an unexpired approval passes), then a matching standing exception
+(`excepted`, reported with `exceptionDecisionId` and the exception's `expiresAt`), otherwise
+`pending`, `expired`, `changes_requested` or `needs_review`.
+
+`GET /exceptions` answers `{ "items": [{ "id", "proposalId", "caseId", "policyId", "policyKey",
+"policyVersion", "pattern", "expiresAt", "finalizedAt", "approverUserIds", "status" ("active",
+"expired" or "revoked"), "revocation" }] }`, listing only exceptions whose repositories you can read.
+
+## Revocation
+
+`POST /decisions/:id/revoke` with `{ "reason": "10 to 2000 characters" }` revokes a snippet, bulk or
+standing decision at once. It needs `decision.revoke` on the decision's repository (for a standing
+exception, on every repository its pattern can touch) and answers `201` with `{ "id", "decisionId",
+"revokedByUserId", "reason", "revokedAt", "signedPayload", "signature" }`. The payload
+(`kind: "nomus.cpg-revocation.v1"`, with the SHA-256 of the decision's signature) is signed with the
+instance key. Revocations are append-only and final: a second one is `409 already_revoked`, and
+restoring an exception means proposing it again. The findings it settled return to review
+immediately, and their cases are re-evaluated.
+
+## Expiry sweep
+
+A daily job (03:30 UTC) records an audit event `decision.expiry_notice` for each approval or
+standing exception that expires within 7 days (`threshold: "7d"`), within 1 day (`"1d"`) or has
+expired (`"expired"`), once per decision and threshold, and re-evaluates open cases: a case whose
+approval expired leaves `decided`. Notifications for these events arrive with the integrations
+release.
+
 ## Error codes
 
 | HTTP | `code` | When |
@@ -94,14 +168,19 @@ so it can be verified offline against `/.well-known/nomus-keys`:
 | 400 | `invalid_input` | For example a snippet proposal with more than one fingerprint, or an approval without `expiresAt` |
 | 403 | `self_approval_forbidden` | The caller opened, justified or revised the case |
 | 403 | `not_eligible_voter` | The caller is not an active member of a required board |
+| 403 | `forbidden` | Missing `exception.propose`, `exception.approve` or `decision.revoke` on a repository the pattern or decision covers |
 | 404 | `not_found` | The case, proposal or decision does not exist in your organization |
 | 409 | `case_closed` | The case is closed |
 | 409 | `proposal_not_pending`, `already_voted` | Voting on a decided, vetoed, invalidated, void or lapsed proposal, or twice |
 | 409 | `proposal_pending` | A pending proposal already covers one of the findings |
+| 409 | `already_revoked` | The decision is already revoked |
 | 409 | `no_active_owning_board` | No active board owns the policy |
 | 422 | `advisory_needs_no_decision` | The finding is advisory |
 | 422 | `scope_not_allowed` | The configuration does not allow this scope on the policy's tier (bulk on `prohibited`, always) |
 | 422 | `bulk_mixed_policies` | A bulk proposal spans more than one policy version |
 | 422 | `expiry_out_of_range` | `expiresAt` is not after now or is beyond the maximum |
 | 422 | `unknown_fingerprint`, `policy_version_not_active` | A fingerprint is not a finding of the latest revision, or its policy version is no longer active |
+| 422 | `invalid_glob`, `invalid_regex`, `unknown_team` | A standing pattern has a bad glob, an unsafe `snippetMustMatch`, or a team that is not active in the organization |
+| 422 | `org_wide_pattern_forbidden` | A repository pattern is organization-wide and the configuration does not allow it |
+| 422 | `unknown_policy_version` | The pattern names a policy version the organization does not have |
 | 503 | `signing_unavailable` | The instance signing key is not initialized |
