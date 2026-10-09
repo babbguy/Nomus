@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 3 (scanner CLI and VS Code): corporate policy findings where
+  developers work. The CLI fetches the organization's signed policy bundle, verifies every signature
+  and hash before using any rule, and evaluates the rules locally and deterministically (no LLM, no
+  code uploaded). Findings carry their line range, status (needs review, or advisory during a grace
+  period) and fingerprint, in a separate console section, in new JSON fields (`corporate`,
+  `corporateFindings`) and in a second SARIF run (`nomus-corporate/`); the regulatory findings,
+  counts, status, SARIF run and exit codes are unchanged, and an organization without corporate
+  policies gets exactly the previous output. `--no-corporate` skips them. A bundle that does not
+  verify fails the scan closed (exit code 3) and nothing is reported; a bundle that cannot be fetched
+  is reported as "corporate policies were NOT checked" and the regulatory scan runs as before. The VS Code
+  extension shows corporate findings as `Nomus Policy` diagnostics over the full matched range, with
+  their own severity mapping and a link to the policy page, adds a **Corporate Policies** view
+  (findings by group, repository and branch, bundle status), revalidates the bundle with its ETag,
+  and makes every failure visible: offline it uses a re-verified cache and says so, an expired,
+  missing, refused or tampered bundle clears corporate diagnostics and shows an error. New settings
+  `nomus.corporate.enabled` and `nomus.corporate.maxCacheAgeHours`; new command
+  `nomus.cpg.refresh`. See `docs/user-guide/corporate-policies.md`.
 - Corporate policy governance, phase 2 (dashboard): the policy registry pages under
   **Governance**. Policies (`/governance/policies`: the policy log with state, tier, owning boards,
   active and pending versions, and the grace period or enforce-from date); New policy
@@ -68,6 +85,10 @@ All notable changes to this project are documented here. The format follows
   migration stops the engine at startup instead of drifting.
 
 ### Changed
+- Scanner CLI: exit codes are now set with `process.exitCode` instead of `process.exit()`, so the
+  process ends after its output is flushed and its connections are closed (the codes themselves are
+  unchanged). `.nomus.yml` `ignore` and detector settings apply to regulatory scanning only; corporate
+  policies check every file except `.git`, `node_modules`, files over 2 MB and binary files.
 - Live events can now be private to one organization: corporate-policy events (`cpg.bundle.changed`)
   reach only that organization's stream clients. Existing events are unchanged.
 - `GET /api/v1/cpg/me` and `GET /api/v1/cpg/users` now list each user's review boards.
