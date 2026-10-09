@@ -39,7 +39,7 @@ function viewerOf(db: Db, view: ProposalView, actor: CpgActor): ProposalDetailRe
 }
 
 export function proposalDetails(db: Db, views: ProposalView[], actor: CpgActor): ProposalDetailResponse[] {
-  const names = userNames(db, views.flatMap((v) => [v.proposal.proposerUserId, ...v.votes.map((b) => b.voterUserId)]));
+  const names = userNames(db, views.flatMap((v) => [v.proposal.proposerUserId, ...v.votes.map((b) => b.voterUserId), ...v.revocations.map((r) => r.revokedByUserId)]));
   return views.map((view) => {
     const p = view.proposal;
     return proposalDetailResponseSchema.parse({
@@ -50,6 +50,7 @@ export function proposalDetails(db: Db, views: ProposalView[], actor: CpgActor):
       proposer: { userId: p.proposerUserId, name: names.get(p.proposerUserId) ?? '' },
       createdAt: p.createdAt, lapsesAt: p.lapsesAt,
       votes: view.votes.map((v) => voteOf(v, names)), decisionIds: view.decisionIds, invalidation: view.invalidation,
+      revocations: view.revocations.map((r) => ({ decisionId: r.decisionId, revokedByName: names.get(r.revokedByUserId) ?? '', reason: r.reason, revokedAt: r.revokedAt })),
       viewer: viewerOf(db, view, actor),
     });
   });
@@ -74,6 +75,6 @@ export function exceptionOf(x: Exception, now: string): StandingException {
   return standingExceptionSchema.parse({
     id: d.id, proposalId: d.proposalId, caseId: d.caseId, policyId: d.policyId, policyKey: d.policyKey, policyVersion: d.policyVersion,
     pattern: x.pattern, expiresAt: d.expiresAt, finalizedAt: d.finalizedAt, approverUserIds: JSON.parse(d.approverUserIds) as string[],
-    status: revoked ? 'revoked' : d.expiresAt! > now ? 'active' : 'expired', revocation: x.revocation && revocationOf(x.revocation),
+    status: revoked ? 'revoked' : d.expiresAt! <= now ? 'expired' : x.activeVersion !== d.policyVersion ? 'lapsed' : 'active', revocation: x.revocation && revocationOf(x.revocation),
   });
 }

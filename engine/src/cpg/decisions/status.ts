@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { cpgCases, cpgDecisions, cpgProposalEvents, cpgProposals, cpgVotes } from '../../db/schema-cpg.js';
+import { cpgCases, cpgDecisions, cpgProposalEvents, cpgProposals, cpgRevocations, cpgVotes } from '../../db/schema-cpg.js';
 import { notFound } from '../errors.js';
 import { proposalStatus, requirementSchema, type ProposalStatus, type Requirement } from '../quorum/evaluate.js';
 
@@ -20,8 +20,11 @@ export interface ProposalView {
   votes: VoteRow[];
   decisionIds: string[];
   invalidation: { reason: string; at: string } | null;
+  revocations: RevocationRow[];
   status: ProposalStatus;
 }
+
+type RevocationRow = typeof cpgRevocations.$inferSelect;
 
 export const requiredOf = (p: ProposalRow): Requirement => requirementSchema.parse(JSON.parse(p.required));
 export const fingerprintsOf = (p: ProposalRow): string[] => JSON.parse(p.fingerprints) as string[];
@@ -37,6 +40,12 @@ export function caseProposals(db: Db, caseId: string): ProposalRow[] {
   return db.select().from(cpgProposals).where(eq(cpgProposals.caseId, caseId)).orderBy(asc(cpgProposals.createdAt), asc(sql`rowid`)).all();
 }
 
+/** The organization's standing exception proposals, oldest first. */
+export function standingProposals(db: Db, orgId: string): ProposalRow[] {
+  return db.select().from(cpgProposals).where(and(eq(cpgProposals.orgId, orgId), eq(cpgProposals.scope, 'standing')))
+    .orderBy(asc(cpgProposals.createdAt), asc(sql`rowid`)).all();
+}
+
 /** The derived view of each proposal, in the given order. */
 export function proposalViews(db: Db, proposals: readonly ProposalRow[], now: string): ProposalView[] {
   const ids = proposals.map((p) => p.id);
@@ -49,6 +58,9 @@ export function proposalViews(db: Db, proposals: readonly ProposalRow[], now: st
   const votes = group(db.select().from(cpgVotes).where(inArray(cpgVotes.proposalId, ids)).orderBy(asc(cpgVotes.createdAt), asc(sql`rowid`)).all());
   const decisions = group(db.select({ id: cpgDecisions.id, proposalId: cpgDecisions.proposalId }).from(cpgDecisions)
     .where(inArray(cpgDecisions.proposalId, ids)).orderBy(asc(sql`rowid`)).all());
+  const revocations = group(db.select({ proposalId: cpgDecisions.proposalId, revocation: cpgRevocations }).from(cpgRevocations)
+    .innerJoin(cpgDecisions, eq(cpgDecisions.id, cpgRevocations.decisionId))
+    .where(inArray(cpgDecisions.proposalId, ids)).orderBy(asc(cpgRevocations.revokedAt), asc(cpgRevocations.id)).all());
   const events = new Map(db.select().from(cpgProposalEvents).where(inArray(cpgProposalEvents.proposalId, ids)).all().map((e) => [e.proposalId, e]));
   const caseIds = [...new Set(proposals.map((p) => p.caseId).filter((id): id is string => id !== null))];
   const closed = new Set(caseIds.length === 0 ? [] : db.select({ id: cpgCases.id }).from(cpgCases)
@@ -65,7 +77,7 @@ export function proposalViews(db: Db, proposals: readonly ProposalRow[], now: st
       caseClosed: proposal.caseId !== null && closed.has(proposal.caseId),
       lapsesAt: proposal.lapsesAt,
     }, now);
-    return { proposal, votes: pv, decisionIds, invalidation, status };
+    return { proposal, votes: pv, decisionIds, invalidation, revocations: (revocations.get(proposal.id) ?? []).map((r) => r.revocation), status };
   });
 }
 

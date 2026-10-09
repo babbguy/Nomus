@@ -11,6 +11,7 @@ import {
 } from '../contracts.js';
 import { coverFindings, settled, type Cover } from '../decisions/resolve.js';
 import { pendingFingerprints } from '../decisions/status.js';
+import { isSelfApproval } from '../decisions/votes.js';
 import { CpgError, notFound } from '../errors.js';
 import { boardIdsOf, userNames } from '../policies/service.js';
 import { closurePayload, closureSignedText } from './close.js';
@@ -208,6 +209,7 @@ export function caseDetail(db: Db, c: CaseRow, origin: string, actor: CpgActor) 
     viewer: {
       comment: can(actor, 'case.comment', repo), review: can(actor, 'case.review', repo),
       close, withdraw: close || c.openedBy === `user:${actor.userId}`,
+      revoke: can(actor, 'decision.revoke', repo), selfApproval: isSelfApproval(db, c, actor.userId),
     },
     revisions: revisions.map(revisionOf),
     justifications: justifications.map((j) => justificationOf(j, names)),

@@ -13,12 +13,12 @@ import { createProposal, createStandingProposal } from '../../../cpg/decisions/p
 import { getDecision, revokeDecision } from '../../../cpg/decisions/revoke.js';
 import { canOnPattern, ruleOf, standingExceptions } from '../../../cpg/decisions/standing.js';
 import { castProposalVote } from '../../../cpg/decisions/votes.js';
-import { caseProposals, getProposal, proposalView, proposalViews } from '../../../cpg/decisions/status.js';
+import { caseProposals, getProposal, proposalView, proposalViews, standingProposals, type ProposalRow } from '../../../cpg/decisions/status.js';
 import { decisionOf, exceptionOf, proposalDetails, revocationOf, voteOf } from '../../../cpg/decisions/serialize.js';
 import { userNames } from '../../../cpg/policies/service.js';
 import {
   castVoteResponseSchema, exceptionListQuerySchema, exceptionListResponseSchema, proposalCreateRequestSchema, proposalListQuerySchema,
-  proposalListResponseSchema, revocationResponseSchema, revokeRequestSchema, voteRequestSchema, type StandingPattern,
+  proposalListResponseSchema, revocationResponseSchema, revokeRequestSchema, standingPatternSchema, voteRequestSchema, type StandingPattern,
 } from '../../../cpg/contracts.js';
 import { CpgError } from '../../../cpg/errors.js';
 import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission } from './helpers.js';
@@ -69,14 +69,20 @@ cpgProposalRoutes.post('/proposals', ...auth(false), handle(async (c) => {
   return c.json(proposalDetails(db, [view], actor)[0], 201);
 }));
 
-// E55 the proposals of a case, oldest first.
+// E55 the proposals of a case, or the organization's standing exception proposals the caller may read; oldest first.
 cpgProposalRoutes.get('/proposals', ...auth(false), handle((c) => {
   const q = parseQuery(c, proposalListQuerySchema);
   const actor = actorFrom(c);
   const db = getDb();
-  const kase = getCase(db, actor.orgId, q.caseId);
-  requirePermission(actor, 'case.read', kase.repo);
-  const views = getOrgSettings(db, actor.orgId)?.enabled ? proposalViews(db, caseProposals(db, kase.id), now()) : [];
+  let proposals: ProposalRow[];
+  if (q.caseId !== undefined) {
+    const kase = getCase(db, actor.orgId, q.caseId);
+    requirePermission(actor, 'case.read', kase.repo);
+    proposals = caseProposals(db, kase.id);
+  } else {
+    proposals = standingProposals(db, actor.orgId).filter((p) => canOnPattern(actor, 'case.read', standingPatternSchema.parse(JSON.parse(p.pattern!))));
+  }
+  const views = getOrgSettings(db, actor.orgId)?.enabled ? proposalViews(db, proposals, now()) : [];
   const items = views.filter((v) => (!q.scope || v.proposal.scope === q.scope) && (!q.status || v.status === q.status));
   return c.json(proposalListResponseSchema.parse({ items: proposalDetails(db, items, actor) }));
 }));
