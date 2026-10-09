@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, phase 6 (CI gate, GitHub Action): when corporate policies are on,
+  the action scans the whole checkout after its regulatory scan, asks the engine for its verdict,
+  verifies the signature and fails the job unless every blocking finding has a valid decision.
+  It adds the check run "Nomus Corporate Policy Gate", a `nomus-corporate/` Code Scanning upload, a
+  `<!-- nomus-cpg -->` pull request comment without code, the outputs `corporate-status`,
+  `corporate-blocking` and `corporate-case-url`, and closes the review case when the pull request
+  closes. It fails closed on any error, and the new `corporate-gate` input cannot switch the gate
+  off while the organization enforces it. Organizations without corporate policies see no change.
 - Corporate policy governance, phase 6 (CI gate, engine): `POST /api/v1/cpg/ci/evaluate` gives the
   server's pass or fail verdict on a CI scan, taken with an organization key with the `evaluate`
   scope. Findings must name a policy version of the current bundle and blocking findings must carry
