@@ -560,6 +560,26 @@ export async function approvalPageChecks(ctx, { caseId, pendingId, status }) {
  * from the page; a Developer is redirected. Called by cpg-integrations while
  * governance is on; the rows are reported under cpg-browser.
  */
+/** §16.8 check 7: the attestation badge, and the governance section of the public verify page. */
+export async function attestationPageChecks(ctx, { id }) {
+  const { gate } = ctx;
+  const area = gate.area;
+  gate.section('cpg-browser');
+  fs.mkdirSync(path.join(ctx.outDir, 'pages'), { recursive: true });
+  const browser = await launchBrowser();
+  try {
+    const admin = await openAs(browser, ctx, ctx.data.cpg.owner.client);
+    const list = await visit(ctx, admin, 'owner', '/attestations', { must: ['Corporate governance: '] });
+    gate.check('Org Admin /attestations shows the corporate governance badge, no 4xx', list.problems.length === 0, 'badge shown', list.problems.slice(0, 4));
+    const pub = await visit(ctx, admin, 'owner', `/verify/${id}`, { must: ['Corporate policy exceptions', 'Manifest signature valid'] });
+    gate.check('the public verify page shows the corporate policy exceptions with a valid manifest signature, no 4xx', pub.problems.length === 0, 'section shown', pub.problems.slice(0, 4));
+    await admin.context.close();
+  } finally {
+    await browser.close();
+    gate.section(area);
+  }
+}
+
 export async function integrationPageChecks(ctx, { names, secrets }) {
   const { gate } = ctx;
   const { owner, users } = ctx.data.cpg;

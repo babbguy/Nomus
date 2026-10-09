@@ -32,6 +32,8 @@ export const APPEND_ONLY_TABLES = [
   { table: 'cpg_ci_runs', drizzleName: 'cpgCiRuns' },
   { table: 'cpg_integration_links', drizzleName: 'cpgIntegrationLinks' },
   { table: 'cpg_delivery_attempts', drizzleName: 'cpgDeliveryAttempts' },
+  { table: 'cpg_attestation_manifests', drizzleName: 'cpgAttestationManifests' },
+  { table: 'cpg_attestation_links', drizzleName: 'cpgAttestationLinks' },
 ] as const;
 
 /**

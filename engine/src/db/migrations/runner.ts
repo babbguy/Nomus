@@ -8,6 +8,7 @@ import { cpg0003ReviewCases } from './cpg-0003-review-cases.js';
 import { cpg0004Approvals } from './cpg-0004-approvals.js';
 import { cpg0005Ci } from './cpg-0005-ci.js';
 import { cpg0006Integrations } from './cpg-0006-integrations.js';
+import { cpg0007Attestations } from './cpg-0007-attestations.js';
 
 /**
  * Numbered raw-SQL migration runner for Corporate Policy Governance (design
@@ -29,7 +30,7 @@ export interface Migration {
 }
 
 /** Ordered, append-only. New phases append; nothing is ever removed or edited. */
-export const MIGRATIONS: readonly Migration[] = [cpg0001Rbac, cpg0002PolicyRegistry, cpg0003ReviewCases, cpg0004Approvals, cpg0005Ci, cpg0006Integrations];
+export const MIGRATIONS: readonly Migration[] = [cpg0001Rbac, cpg0002PolicyRegistry, cpg0003ReviewCases, cpg0004Approvals, cpg0005Ci, cpg0006Integrations, cpg0007Attestations];
 
 export class MigrationChecksumError extends Error {
   constructor(public readonly migrationId: string, expected: string, actual: string) {

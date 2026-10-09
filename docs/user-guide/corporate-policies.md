@@ -17,6 +17,7 @@ extension, and requesting a review of a finding from VS Code.
 - [Review cases in the dashboard](#review-cases-in-the-dashboard)
 - [Deciding findings and voting](#deciding-findings-and-voting)
 - [Standing exceptions](#standing-exceptions)
+- [In attestations](#in-attestations)
 - [When the policy bundle cannot be used](#when-the-policy-bundle-cannot-be-used)
 - [What is not in this release](#what-is-not-in-this-release)
 
@@ -359,3 +360,20 @@ Policy Gate** annotates each finding, and the pull request comment lists the blo
 link to the review case. Fix the code or request a review; once reviewers approve, or you remove
 the flagged code, the next run passes and the case gains a new revision. Merging or closing the
 pull request closes the case. Administrators: see [Enforcing in CI](../admin-guide/corporate-policies.md#enforcing-in-ci).
+
+## In attestations
+
+An attestation can carry the approved exceptions of a repository. Send `governance` with the
+evaluate request (`{"repo": "acme/payments", "branch": "main"}`, plus `caseId` for a closed review
+case). Nomus then signs a separate manifest listing every approval and standing exception in force
+at that instant, and the case's closure record and CI runs. The attestation itself is signed
+exactly as before.
+
+- **Attestations** in the dashboard shows a "Corporate governance: N exceptions" badge.
+- The public verification page shows how many exceptions, closed cases and CI runs the
+  attestation carries, and whether the manifest signature is valid. It never shows policy names,
+  repositories or code.
+- The JSON evidence export (bundle version 2) holds every record as signed text. Your auditor
+  verifies them offline with the key at `/.well-known/nomus-keys`; the steps are in the bundle's
+  `corporateGovernance.instructions` and in [the API reference](../api-reference/governance-attestations.md#verifying-offline).
+- An exception revoked after the attestation is shown as revoked, with its signed revocation.

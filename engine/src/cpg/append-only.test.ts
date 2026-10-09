@@ -145,6 +145,16 @@ function seedIntegration(caseId: string): void {
   run("INSERT INTO cpg_delivery_attempts (id, delivery_id, attempt, started_at, duration_ms, http_status) VALUES (?, ?, 1, ?, 5, 503)", randomUUID(), integration.deliveryId, NOW);
 }
 
+/** One attestation manifest (cpg_0007) with a link, written with raw SQL. */
+function seedManifest(caseId: string): void {
+  const id = randomUUID();
+  run(`INSERT INTO attestation_receipts (id, org_id, action_context, rules_evaluated, result, jurisdiction, policy_state_hash, signature, evaluated_at, schema_version)
+       VALUES (?, ?, '{}', '[]', 'compliant', 'EU', ?, 'sig', ?, 1)`, id, orgId, H, NOW);
+  run(`INSERT INTO cpg_attestation_manifests (attestation_id, org_id, repo, evaluated_at, bundle_hash, signed_payload, signature, created_at)
+       VALUES (?, ?, 'acme/app', ?, ?, '{}', 'sig', ?)`, id, orgId, NOW, H, NOW);
+  run("INSERT INTO cpg_attestation_links (attestation_id, item_type, item_id, item_signature_sha256) VALUES (?, 'case_closure', ?, ?)", id, caseId, H);
+}
+
 beforeAll(() => {
   runMigrations(db);
   orgId = insertOrg();
@@ -158,6 +168,7 @@ beforeAll(() => {
   seedApprovals(seeded);
   seedCiRun(seeded.caseId);
   seedIntegration(seeded.caseId);
+  seedManifest(seeded.caseId);
 });
 
 describe('strictly append-only tables refuse UPDATE and DELETE', () => {
