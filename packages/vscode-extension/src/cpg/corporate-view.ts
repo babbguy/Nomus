@@ -7,7 +7,7 @@ import type { BundleState } from './bundle-cache';
 import type { GitContext } from './git-context';
 import type { CaseView } from './case-status';
 import {
-  bundleStatusText, caseLabel, changeRequestText, formatUtc, groupFindings, laneText, ownersText, statusText, type FindingGroup,
+  bundleStatusText, caseLabel, changeRequestText, formatUtc, groupFindings, laneText, ownersText, statusText, type FindingGroup, type Resolution,
 } from './corporate-format';
 
 /**
@@ -58,6 +58,11 @@ export class CorporateViewProvider implements vscode.TreeDataProvider<Node> {
     return this.state;
   }
 
+  /** The server's resolution of a finding, from the branch's case. */
+  private resolutionOf(fingerprint: string): Resolution | undefined {
+    return this.caseView?.kind === 'case' ? this.caseView.status.resolutions.find((r) => r.fingerprint === fingerprint) : undefined;
+  }
+
   getTreeItem(node: Node): vscode.TreeItem {
     if (node.type === 'message') {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
@@ -95,7 +100,8 @@ export class CorporateViewProvider implements vscode.TreeDataProvider<Node> {
     const lines = f.startLine === f.endLine ? `${f.startLine}` : `${f.startLine}-${f.endLine}`;
     const item = new vscode.TreeItem(`${f.policyKey} · ${f.filePath}:${lines}`, vscode.TreeItemCollapsibleState.None);
     // An advisory policy's status is "advisory" too: say it once.
-    item.description = f.status === 'advisory' ? f.tier : `${f.tier} · ${statusText(f)}`;
+    const r = this.resolutionOf(f.fingerprint);
+    item.description = f.status === 'advisory' && !r ? f.tier : `${f.tier} · ${statusText(f, r)}`;
     item.tooltip = `${f.rule.title}\n${f.rule.message}\n${ownersText(f)}\nFingerprint: ${f.fingerprint}`;
     item.contextValue = f.blocking ? 'nomus.corporate.finding.blocking' : 'nomus.corporate.finding';
     item.command = {
@@ -125,7 +131,7 @@ export class CorporateViewProvider implements vscode.TreeDataProvider<Node> {
       return [{ type: 'message', label: 'Corporate policy findings cannot be shown until a verified policy bundle is available' }, status];
     }
     if (!b.bundle.enabled) return [{ type: 'message', label: 'Corporate policies are not enabled for this organization' }, status];
-    const groups = groupFindings(s.findings).map((group) => ({ type: 'group' as const, group }));
+    const groups = groupFindings(s.findings, (fp) => this.resolutionOf(fp)).map((group) => ({ type: 'group' as const, group }));
     const repo: Node[] = s.repository
       ? [{ type: 'message', label: s.repository.ok ? `Repository: ${s.repository.repo} @ ${s.repository.branch}` : `Repository: ${s.repository.message}` }]
       : [];
