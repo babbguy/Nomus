@@ -72,9 +72,10 @@ verifying it against the stored rows on this request. Each finding of
 reviewer context stored for its snippet, if any).
 
 `CaseStatus` carries the state (`open`, `in_review`, `changes_requested`, `decided`, `closed`), one
-lane per owning board, the open change requests, and a resolution per finding (`advisory`, `grace`,
-`needs_review`, `changes_requested`, or `expired` when the finding's policy version is no longer
-active; `enforceFrom` is `null` only for a retired policy).
+lane per owning board, the open change requests, and a resolution per finding (see
+[Finding status](#finding-status); `enforceFrom` is `null` only for a retired policy). A lane is
+`decided` once every blocking finding in it has a current decision, and the case is `decided` once
+every blocking finding of the latest revision has one ([approvals](./approvals.md)).
 
 ## Change requests
 
@@ -98,11 +99,15 @@ context is still returned, but a request that would generate context, and every 
 
 `POST /api/v1/cpg/findings/status` takes `{ "repo", "branch", "fingerprints": [...] }` and answers
 `{ "items": [FindingResolution], "evaluatedAt" }`, one item per distinct fingerprint, in request
-order. A finding of the active policy version is `advisory`, `grace` (before the policy's
-enforce-from date), `changes_requested` (named by an unresolved change request on the branch's open
-case) or `needs_review`; a finding of a version that is no longer active is `expired` and blocks
-until the branch is rescanned (unless the policy is retired). A fingerprint naming a policy version
-the organization does not have is `422 unknown_policy`.
+order. A finding of the active policy version is `advisory` or `grace` (before the policy's
+enforce-from date) and does not block. Otherwise the latest decision on the repository and
+fingerprint applies ([approvals](./approvals.md)): `rejected` blocks, and `approved` passes until
+`expiresAt`; both carry `decisionId`. Without one, the finding blocks as `pending` (a pending
+proposal on the branch's open case covers it), `expired` (its approval has expired),
+`changes_requested` (named by an unresolved change request on the branch's open case) or
+`needs_review`. A finding of a version that is no longer active is `expired` and blocks until the
+branch is rescanned (unless the policy is retired). A fingerprint naming a policy version the
+organization does not have is `422 unknown_policy`.
 
 ## Pull requests (GitHub App)
 
@@ -115,7 +120,8 @@ switched off, and branches without an open case, are not touched.
 
 `close` and `withdraw` take `{ "reason": "..." }`. Closing appends the final case event and signs a
 closure record (`kind: "nomus.cpg-case-closure.v1"`: case, repository, branch, pull request,
-reason, times, every revision's findings digest, and a digest of the full case history) with the
+reason, times, every revision's findings digest, the ids of the case's decisions, and a digest of
+the full case history) with the
 instance key. The record is rebuilt from the stored rows, so it can be verified at any time. A
 closed case accepts no further writes (`409 case_closed`); new activity on the branch opens a new
 case.

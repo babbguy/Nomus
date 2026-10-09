@@ -19,6 +19,7 @@ are unversioned. The dashboard calls the API same-origin at `/api/v1`.
 - [Governance](./governance.md) - roles, permissions, org users and grants, teams, governance settings and audit log (`/api/v1/cpg`)
 - [Policy registry](./policy-registry.md) - review boards, the approval quorum, compiling and approving corporate policies, the signed policy bundle and the policy-log export (`/api/v1/cpg`)
 - [Review cases](./review-cases.md) - request review, justifications, comments and change requests, reviewer context and closing a case (`/api/v1/cpg/cases`)
+- [Approvals](./approvals.md) - snippet and bulk proposals, votes, quorum and signed decisions (`/api/v1/cpg/proposals`, `/api/v1/cpg/decisions`)
 - [Scan findings](./scan.md) - upload and query scanner findings
 - [Sources and rules](./regulations.md) - add, edit and retire regulations and rules (admin)
 
