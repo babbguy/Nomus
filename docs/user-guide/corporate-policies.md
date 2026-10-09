@@ -284,7 +284,8 @@ What you can do depends on your permissions on the case's repository: comment an
 (`case.comment`); request changes on a lane, if you hold `case.review` and belong to that lane's
 board (other reviewers are told which boards can); withdraw your own case, or close a case with
 `case.close`. A closed case is read-only and shows its **closure record**, signed with the
-instance's key and verified each time the page loads.
+instance's key and verified each time the page loads. Reviewer context generated before it closed
+can still be shown; a closed case does not generate any more.
 
 ## When the policy bundle cannot be used
 
