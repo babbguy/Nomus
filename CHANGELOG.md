@@ -13,6 +13,21 @@ All notable changes to this project are documented here. The format follows
   fingerprint, repository and language helpers, and the signed-bundle client. Scans stay
   deterministic: nothing in it calls an LLM. The SDK-usage detector now reports the last line of
   each call (`endLine`).
+- Corporate policy governance, phase 2 (engine): the corporate policy registry. Review boards
+  and their members; a versioned, signed approval quorum (defaults from the brief: 1 approver for
+  review-required, 2 from each owning board for prohibited, no bulk decisions on prohibited, 14-day
+  grace for new policies); a compile step that turns a plain-English policy into a deterministic
+  rule with the configured LLM provider, sending only the policy text (never example code), then
+  validating the rule and checking it against the author's examples, and recording every attempt;
+  an append-only policy log where a version becomes active only after approval by someone other
+  than its author and the person who compiled it (enforced in code and by the database), with a
+  grace period, retirement through the same approval, and an Ed25519-signed activation; and a
+  signed per-organization policy bundle (`GET /api/v1/cpg/bundle`, ETag) for scanners, plus a
+  signed export of the whole log. Policies that cannot be decided deterministically are rejected
+  with the reason. New endpoints under `/api/v1/cpg`: `/boards`, `/quorum`, `/compile`,
+  `/policies`, `/policy-versions/:id/votes`, `/policy-versions/:id/withdraw`, `/bundle` and
+  `/policies/export`. See `docs/admin-guide/corporate-policies.md` and
+  `docs/api-reference/policy-registry.md`.
 - Corporate policy governance, phase 1 (engine): per-organization role-based access control.
   Seven system roles (Org Admin, Policy Author, Policy Approver, Case Reviewer, Exception Approver,
   Developer, Auditor), custom roles, org-, team- and repository-scoped grants, teams with
@@ -35,6 +50,9 @@ All notable changes to this project are documented here. The format follows
   migration stops the engine at startup instead of drifting.
 
 ### Changed
+- Live events can now be private to one organization: corporate-policy events (`cpg.bundle.changed`)
+  reach only that organization's stream clients. Existing events are unchanged.
+- `GET /api/v1/cpg/me` and `GET /api/v1/cpg/users` now list each user's review boards.
 - On upgrade, each organization's earliest member becomes Org Admin and every member becomes
   Developer; platform administrators get no organization role. Developer keeps the v1.1.0 member
   abilities (`PATCH /org`, organization API keys) as grants an Org Admin can remove.

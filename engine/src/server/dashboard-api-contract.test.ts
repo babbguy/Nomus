@@ -569,6 +569,12 @@ describe('CPG API contracts', () => {
       ['/api/v1/cpg/teams', c.listOf(c.teamResponseSchema)],
       ['/api/v1/cpg/settings', c.cpgSettingsResponseSchema],
       ['/api/v1/cpg/audit', c.auditListResponseSchema],
+      // Phase 2: boards, quorum, policy log, bundle (E19, E25, E31, E38)
+      ['/api/v1/cpg/boards', c.listOf(c.boardResponseSchema)],
+      ['/api/v1/cpg/quorum', c.quorumVersionResponseSchema],
+      ['/api/v1/cpg/quorum/versions', c.listOf(c.quorumVersionSummarySchema)],
+      ['/api/v1/cpg/quorum/versions/1', c.quorumVersionResponseSchema],
+      ['/api/v1/cpg/policies', c.listOf(c.policyHeadResponseSchema)],
     ];
     for (const [path, schema] of reads) {
       const res = await session('GET', path);
@@ -576,6 +582,10 @@ describe('CPG API contracts', () => {
       const body: unknown = await res.json();
       expect(() => schema.parse(body), path).not.toThrow();
     }
+    const { corporateBundleSchema } = await import('@nomus/scanner/corporate');
+    const bundle = await session('GET', '/api/v1/cpg/bundle');
+    expect(bundle.status).toBe(200);
+    expect(corporateBundleSchema.safeParse(await bundle.json()).success).toBe(true);
   });
 
   it('the dashboard zod schemas (dashboard/src/api/cpg-schemas.ts) parse the real responses', async () => {
@@ -644,6 +654,11 @@ describe('CPG API contracts', () => {
       ['POST', '/api/v1/cpg/users'], ['PATCH', `/api/v1/cpg/users/${id}`], ['POST', `/api/v1/cpg/users/${id}/grants`],
       ['POST', `/api/v1/cpg/grants/${id}/revoke`], ['POST', '/api/v1/cpg/teams'], ['PATCH', `/api/v1/cpg/teams/${id}`],
       ['PATCH', '/api/v1/cpg/settings'],
+      ['POST', '/api/v1/cpg/boards'], ['PATCH', `/api/v1/cpg/boards/${id}`], ['POST', `/api/v1/cpg/boards/${id}/archive`],
+      ['POST', `/api/v1/cpg/boards/${id}/members`], ['POST', `/api/v1/cpg/boards/${id}/members/${id}/remove`],
+      ['PUT', '/api/v1/cpg/quorum'], ['POST', '/api/v1/cpg/compile'], ['POST', '/api/v1/cpg/policies'],
+      ['POST', `/api/v1/cpg/policies/${id}/versions`], ['POST', `/api/v1/cpg/policies/${id}/retire`],
+      ['POST', `/api/v1/cpg/policy-versions/${id}/votes`], ['POST', `/api/v1/cpg/policy-versions/${id}/withdraw`],
     ] as const) {
       const res = await session(method, path, { unexpected: true });
       expect([400, 403, 404], `${method} ${path}`).toContain(res.status);
@@ -655,7 +670,9 @@ describe('CPG API contracts', () => {
   });
 
   it('every CPG route answers 401 without credentials', async () => {
-    for (const path of ['/api/v1/cpg/me', '/api/v1/cpg/roles', '/api/v1/cpg/users', '/api/v1/cpg/teams', '/api/v1/cpg/settings', '/api/v1/cpg/audit', '/api/v1/cpg/permissions']) {
+    for (const path of ['/api/v1/cpg/me', '/api/v1/cpg/roles', '/api/v1/cpg/users', '/api/v1/cpg/teams', '/api/v1/cpg/settings', '/api/v1/cpg/audit', '/api/v1/cpg/permissions',
+      '/api/v1/cpg/boards', '/api/v1/cpg/quorum', '/api/v1/cpg/quorum/versions', '/api/v1/cpg/policies', '/api/v1/cpg/policies/export', '/api/v1/cpg/bundle',
+      '/api/v1/cpg/compile/00000000-0000-4000-8000-000000000000']) {
       const res = await app.request(`http://localhost${path}`);
       expect(res.status, path).toBe(401);
     }

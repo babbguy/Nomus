@@ -75,8 +75,11 @@ export function broadcastEvent(event: BroadcastEvent): void {
   const chunk = encoder.encode(payload);
 
   for (const [clientId, client] of clients) {
-    // Filter by jurisdiction subscription
-    if (client.jurisdictions.length > 0 && !client.jurisdictions.includes(event.jurisdiction)) {
+    if (event.orgId !== undefined) {
+      // Org-private event (CPG): only that org's clients, regardless of jurisdictions.
+      if (client.orgId !== event.orgId) continue;
+    } else if (client.jurisdictions.length > 0 && !client.jurisdictions.includes(event.jurisdiction)) {
+      // Filter by jurisdiction subscription
       continue;
     }
 

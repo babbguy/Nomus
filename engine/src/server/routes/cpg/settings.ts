@@ -11,6 +11,7 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
 import { appendAuditEvent } from '../../../cpg/audit/log.js';
+import { invalidateCorporateBundle } from '../../../cpg/bundle/build.js';
 import { cpgSettingsResponseSchema, patchSettingsRequestSchema, type CpgSettingsResponse } from '../../../cpg/contracts.js';
 import { notFound } from '../../../cpg/errors.js';
 import { actorFrom, auditActor, handle, parseBody } from './helpers.js';
@@ -42,14 +43,14 @@ cpgSettingsRoutes.patch('/', requireSessionOrApiKey(), rateLimit(), requireCpgPe
     const db = getDb();
     const orgId = actorFrom(c).orgId;
     const actor = auditActor(c);
-    rawSqlite(db).transaction(() => {
+    const enabledChanged = rawSqlite(db).transaction(() => {
       const before = getOrgSettings(db, orgId);
       if (!before) throw notFound('Settings');
       const after = {
         enabled: body.enabled ?? before.enabled,
         reviewerContextLlm: body.reviewerContextLlm ?? before.reviewerContextLlm,
       };
-      if (after.enabled === before.enabled && after.reviewerContextLlm === before.reviewerContextLlm) return;
+      if (after.enabled === before.enabled && after.reviewerContextLlm === before.reviewerContextLlm) return false;
       db.update(cpgOrgSettings)
         .set({ ...after, updatedBy: actor, updatedAt: new Date().toISOString() })
         .where(eq(cpgOrgSettings.orgId, orgId))
@@ -58,6 +59,9 @@ cpgSettingsRoutes.patch('/', requireSessionOrApiKey(), rateLimit(), requireCpgPe
         orgId, actor, action: 'settings.updated', targetType: 'settings', targetId: orgId,
         payload: { before: { enabled: before.enabled, reviewerContextLlm: before.reviewerContextLlm }, after },
       });
+      return after.enabled !== before.enabled;
     })();
+    // The bundle carries (and signs) the enabled flag.
+    if (enabledChanged) invalidateCorporateBundle(orgId, 'settings_changed');
     return c.json(loadSettings(db, orgId));
   }));

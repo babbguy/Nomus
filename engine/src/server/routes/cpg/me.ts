@@ -8,6 +8,7 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
 import { summarizePermissions } from '../../../cpg/rbac/can.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
+import { boardsOfUser } from '../../../cpg/boards/service.js';
 import { meResponseSchema } from '../../../cpg/contracts.js';
 import { notFound } from '../../../cpg/errors.js';
 import { actorFrom, handle } from './helpers.js';
@@ -31,7 +32,7 @@ cpgMeRoutes.get('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission
     cpgEnabled: getOrgSettings(db, actor.orgId)?.enabled ?? false,
     isPlatformAdmin: user.role === 'platform_admin',
     permissions: summarizePermissions(actor.grants),
-    boards: [],
+    boards: boardsOfUser(db, actor.orgId, actor.userId),
     identity: actor.identity,
   });
   return c.json(body);

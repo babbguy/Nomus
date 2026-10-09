@@ -83,7 +83,7 @@ The engine exposes a REST API on `NOMUS_PORT` (default 3100). Main endpoint grou
 - `/api/v1/scout/*` -- regulatory prediction
 - `/api/v1/benchmarks/*` -- AI model benchmarking
 - `/api/v1/dashboard/*` -- dashboard data
-- `/api/v1/cpg/*` -- corporate policy governance: roles, permissions, org users, teams, settings, audit log
+- `/api/v1/cpg/*` -- corporate policy governance: roles, permissions, org users, teams, settings, audit log; review boards, the versioned approval quorum, the policy compile step, the corporate policy log (four-eyes approval) and the signed policy bundle
 
 Reference documentation: [docs/api-reference](../docs/api-reference/README.md).
 

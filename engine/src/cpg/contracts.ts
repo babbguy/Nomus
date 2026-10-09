@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { cpgRoles, cpgTeamRepos, cpgUserRoles } from '../db/schema-cpg.js';
 import { PERMISSION_KEYS } from './rbac/catalog.js';
 import { rolePermissionKeys, type GrantRow, type RoleRow } from './rbac/grants.js';
+import { corporateRuleSchema } from '@nomus/scanner/corporate';
+import { quorumConfigSchema } from './quorum/schema.js';
+import { boardsOfUser } from './boards/service.js';
 
 /**
  * Engine-only CPG contracts (design spec §9.1, §9.3): strict zod schemas for
@@ -67,7 +70,7 @@ export const orgUserResponseSchema = z.object({
   isActive: z.boolean(),
   mustChangePassword: z.boolean(),
   grants: z.array(grantResponseSchema),
-  /** Board memberships arrive with Phase 2; always empty in Phase 1. */
+  /** Active boards the user is a member of. */
   boards: z.array(z.object({ id: uuid, name: z.string() }).strict()),
 }).strict();
 
@@ -200,6 +203,257 @@ export const auditQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 }).strict();
 
+// ═══ Phase 2: boards, quorum, compile, policy log, export (E19–E39) ═════
+
+const tierSchema = z.enum(['advisory', 'review-required', 'prohibited']);
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
+const boardRef = z.object({ id: uuid, name: z.string() }).strict();
+
+export const boardKeySchema = z.string().regex(/^[a-z][a-z0-9_-]{0,49}$/, 'lowercase letters, digits, _ and -; starts with a letter; at most 50');
+export const boardKindSchema = z.enum(['governance', 'legal', 'ai', 'security', 'custom']);
+
+export const boardMemberResponseSchema = z.object({
+  id: uuid,
+  boardId: uuid,
+  userId: uuid,
+  userName: z.string(),
+  userEmail: z.string(),
+  addedAt: isoDate,
+  addedBy: z.string(),
+  removedAt: isoDate.nullable(),
+  removedBy: z.string().nullable(),
+}).strict();
+
+export const boardResponseSchema = z.object({
+  id: uuid,
+  key: z.string(),
+  name: z.string(),
+  kind: boardKindSchema,
+  description: z.string(),
+  createdAt: isoDate,
+  createdBy: z.string(),
+  archivedAt: isoDate.nullable(),
+  archivedBy: z.string().nullable(),
+  memberCount: z.number().int().min(0),
+  /** Active members; only for callers holding boards.manage (null otherwise). */
+  members: z.array(boardMemberResponseSchema).nullable(),
+}).strict();
+
+export const createBoardRequestSchema = z.object({
+  key: boardKeySchema,
+  name: singleLine(1, 100),
+  kind: boardKindSchema,
+  description: z.string().trim().max(500).optional(),
+}).strict();
+
+export const patchBoardRequestSchema = z.object({
+  name: singleLine(1, 100).optional(),
+  description: z.string().trim().max(500).optional(),
+}).strict().refine((b) => b.name !== undefined || b.description !== undefined, 'nothing to update');
+
+export const addBoardMemberRequestSchema = z.object({ userId: uuid }).strict();
+
+export const quorumVersionResponseSchema = z.object({
+  version: z.number().int().min(1),
+  config: quorumConfigSchema,
+  configHash: sha256Hex,
+  changeNote: z.string(),
+  createdAt: isoDate,
+  createdBy: z.string(),
+  signature: z.string().min(1),
+}).strict();
+
+export const quorumVersionSummarySchema = z.object({
+  version: z.number().int().min(1),
+  configHash: sha256Hex,
+  changeNote: z.string(),
+  createdAt: isoDate,
+  createdBy: z.string(),
+}).strict();
+
+export const putQuorumRequestSchema = z.object({
+  config: quorumConfigSchema,
+  changeNote: z.string().trim().min(1).max(1000),
+}).strict();
+
+const exampleSchema = z.object({ path: z.string(), code: z.string() }).strict();
+
+export const compileRecordResponseSchema = z.object({
+  id: uuid,
+  policyId: uuid.nullable(),
+  requestedBy: z.string(),
+  status: z.enum(['compiled', 'rejected_unexpressible', 'rejected_schema', 'rejected_validation', 'rejected_examples', 'llm_error']),
+  inputText: z.string(),
+  inputHash: sha256Hex,
+  promptVersion: z.number().int().min(1),
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  rejection: z.object({ code: z.string(), reasons: z.array(z.string()) }).strict().nullable(),
+  suggestion: z.discriminatedUnion('expressible', [
+    z.object({
+      expressible: z.literal(true), suggestedKey: z.string(), title: z.string(), suggestedTier: tierSchema,
+      rationale: z.string(), limitations: z.array(z.string()),
+    }).strict(),
+    z.object({ expressible: z.literal(false), reason: z.string(), closestExpressible: z.string().nullable() }).strict(),
+  ]).nullable(),
+  compiledRule: corporateRuleSchema.nullable(),
+  compiledRuleHash: sha256Hex.nullable(),
+  examples: z.object({ violating: z.array(exampleSchema), compliant: z.array(exampleSchema) }).strict(),
+  exampleResults: z.array(z.object({
+    kind: z.enum(['violating', 'compliant']),
+    index: z.number().int().min(0),
+    path: z.string(),
+    expected: z.enum(['finding', 'no_finding']),
+    findings: z.number().int().min(0),
+    lines: z.array(z.number().int().min(1)),
+    passed: z.boolean(),
+    note: z.string().nullable(),
+  }).strict()).nullable(),
+  tokensIn: z.number().int().nullable(),
+  tokensOut: z.number().int().nullable(),
+  createdAt: isoDate,
+}).strict();
+
+const versionStatusSchema = z.enum(['pending', 'active', 'superseded', 'rejected', 'withdrawn', 'expired', 'retired']);
+
+export const policyVersionResponseSchema = z.object({
+  id: uuid,
+  version: z.number().int().min(1),
+  kind: z.enum(['define', 'retire']),
+  status: versionStatusSchema,
+  title: z.string(),
+  plainText: z.string(),
+  tier: tierSchema,
+  owningBoards: z.array(boardRef).min(1),
+  rule: corporateRuleSchema.nullable(),
+  ruleHash: sha256Hex.nullable(),
+  compileRecordId: uuid.nullable(),
+  editedFromCompile: z.boolean(),
+  graceDays: z.number().int().nullable(),
+  enforceFromRequested: isoDate.nullable(),
+  enforceFrom: isoDate.nullable(),
+  activatedAt: isoDate.nullable(),
+  /** Activation (or retirement) signature, once approved. */
+  signature: z.string().nullable(),
+  createdBy: z.string(),
+  createdAt: isoDate,
+}).strict();
+
+export const policyVersionEventResponseSchema = z.object({
+  id: uuid,
+  versionId: uuid,
+  version: z.number().int().min(1),
+  event: z.enum(['proposed', 'approved', 'rejected', 'withdrawn', 'activated', 'superseded', 'retired', 'expired_proposal']),
+  actor: z.string(),
+  details: z.record(z.string(), z.unknown()),
+  createdAt: isoDate,
+}).strict();
+
+export const policyVoteResponseSchema = z.object({
+  id: uuid,
+  versionId: uuid,
+  voterUserId: uuid,
+  voterName: z.string(),
+  vote: z.enum(['approve', 'reject']),
+  comment: z.string(),
+  quorumConfigVersion: z.number().int().min(1),
+  createdAt: isoDate,
+}).strict();
+
+export const policyHeadResponseSchema = z.object({
+  policyId: uuid,
+  policyKey: z.string(),
+  state: z.enum(['draft', 'proposed', 'active', 'retired']),
+  /** Title and tier of the active version, else of the latest version. */
+  title: z.string(),
+  tier: tierSchema,
+  owningBoards: z.array(boardRef),
+  activeVersion: z.number().int().min(1).nullable(),
+  enforceFrom: isoDate.nullable(),
+  /** True while the active version is inside its grace period (advisory everywhere). */
+  inGracePeriod: z.boolean(),
+  pendingVersionId: uuid.nullable(),
+  pendingVersion: z.number().int().min(1).nullable(),
+  latestVersion: z.number().int().min(1),
+  createdAt: isoDate,
+  createdBy: z.string(),
+  updatedAt: isoDate,
+}).strict();
+
+export const policyDetailResponseSchema = z.object({
+  policy: policyHeadResponseSchema,
+  versions: z.array(policyVersionResponseSchema),
+  events: z.array(policyVersionEventResponseSchema),
+  votes: z.array(policyVoteResponseSchema),
+  compileRecords: z.array(z.object({ id: uuid, status: z.string(), requestedBy: z.string(), createdAt: isoDate }).strict()),
+  /** Approvals needed under the quorum configuration in force now. */
+  requiredApprovals: z.number().int().min(1),
+}).strict();
+
+export const voteResponseSchema = z.object({
+  vote: policyVoteResponseSchema,
+  versionState: versionStatusSchema,
+}).strict();
+
+const notBoth = (b: { graceDays?: number; enforceFrom?: string }) => !(b.graceDays !== undefined && b.enforceFrom !== undefined);
+const proposeBase = z.object({
+  compileRecordId: uuid,
+  title: singleLine(3, 120),
+  tier: tierSchema,
+  owningBoardIds: z.array(uuid).min(1).max(10).refine((ids) => new Set(ids).size === ids.length, 'owningBoardIds must not repeat'),
+  /** An edited rule; re-validated and re-checked against the compile record's examples. */
+  rule: z.unknown().optional(),
+  graceDays: z.number().int().min(0).max(365).optional(),
+  enforceFrom: isoDate.optional(),
+});
+
+export const proposePolicyRequestSchema = proposeBase.extend({
+  policyKey: z.string().regex(/^corp\.[a-z0-9][a-z0-9._-]{0,84}$/, 'corp. followed by lowercase letters, digits, ., _ or -'),
+}).strict().refine(notBoth, 'give graceDays or enforceFrom, not both');
+
+export const proposeVersionRequestSchema = proposeBase.strict().refine(notBoth, 'give graceDays or enforceFrom, not both');
+
+export const retirePolicyRequestSchema = z.object({ reason: z.string().trim().min(1).max(1000) }).strict();
+
+export const voteRequestSchema = z.object({
+  vote: z.enum(['approve', 'reject']),
+  comment: z.string().trim().max(2000).optional(),
+}).strict();
+
+export const policyListQuerySchema = z.object({
+  state: z.enum(['draft', 'proposed', 'active', 'retired']).optional(),
+}).strict();
+
+export const policyExportResponseSchema = z.object({
+  kind: z.literal('nomus.cpg-policy-export.v1'),
+  orgId: uuid,
+  exportedAt: isoDate,
+  content: z.object({
+    policies: z.array(z.object({
+      policyId: uuid,
+      policyKey: z.string(),
+      createdAt: isoDate,
+      createdBy: z.string(),
+      versions: z.array(policyVersionResponseSchema),
+      events: z.array(policyVersionEventResponseSchema),
+      votes: z.array(policyVoteResponseSchema),
+    }).strict()),
+    quorumVersions: z.array(quorumVersionSummarySchema.extend({ signature: z.string() }).strict()),
+  }).strict(),
+  /** sha256(canonicalJson(content)). */
+  contentHash: sha256Hex,
+  /** Ed25519 over canonicalJson({kind, orgId, exportedAt, contentHash}). */
+  signature: z.string().min(1),
+}).strict();
+
+export type BoardResponse = z.infer<typeof boardResponseSchema>;
+export type BoardMemberResponse = z.infer<typeof boardMemberResponseSchema>;
+export type CompileRecordResponse = z.infer<typeof compileRecordResponseSchema>;
+export type PolicyHeadResponse = z.infer<typeof policyHeadResponseSchema>;
+export type PolicyVersionResponse = z.infer<typeof policyVersionResponseSchema>;
+export type PolicyDetailResponse = z.infer<typeof policyDetailResponseSchema>;
+export type PolicyExportResponse = z.infer<typeof policyExportResponseSchema>;
+
 // ─── Serializers ───────────────────────────────────────────────────────
 
 export function serializeRole(db: Db, role: RoleRow): RoleResponse {
@@ -255,7 +509,7 @@ export function serializeOrgUser(db: Db, orgId: string, u: {
     isActive: u.isActive,
     mustChangePassword: u.mustChangePassword,
     grants: activeGrantsOf(db, orgId, u.id),
-    boards: [],
+    boards: boardsOfUser(db, orgId, u.id),
   };
 }
 

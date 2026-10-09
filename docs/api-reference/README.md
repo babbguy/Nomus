@@ -17,6 +17,7 @@ are unversioned. The dashboard calls the API same-origin at `/api/v1`.
 - [Health and status](./health.md) - `/health`, `/ready`, `/api/v1/status`, `/api/v1/admin/status`
 - [Your organization](./org.md) - profile, self-service API keys, member list
 - [Governance](./governance.md) - roles, permissions, org users and grants, teams, governance settings and audit log (`/api/v1/cpg`)
+- [Policy registry](./policy-registry.md) - review boards, the approval quorum, compiling and approving corporate policies, the signed policy bundle and the policy-log export (`/api/v1/cpg`)
 - [Scan findings](./scan.md) - upload and query scanner findings
 - [Sources and rules](./regulations.md) - add, edit and retire regulations and rules (admin)
 
