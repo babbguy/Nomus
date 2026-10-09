@@ -37,6 +37,19 @@ export function ruleEditProblems(text: string): string[] {
   return parsed.error.issues.map((i) => `rule${i.path.length ? `.${i.path.join('.')}` : ''}: ${i.message}`);
 }
 
+export type GraceMode = 'default' | 'days' | 'date';
+
+/**
+ * The grace fields of a proposal. The quorum default sends neither field,
+ * so the server applies its default when the version is approved (14 days
+ * for a new policy, 0 for a new version, by default); never a 0 of our own.
+ */
+export function graceFields(mode: GraceMode, daysText: string, date: string): { graceDays?: number; enforceFrom?: string } {
+  if (mode === 'days') return { graceDays: Number(daysText) };
+  if (mode === 'date') return { enforceFrom: `${date}T00:00:00.000Z` };
+  return {};
+}
+
 /** Tomorrow (UTC) as YYYY-MM-DD: the earliest enforce-from date that is not in the past. */
 export function tomorrowUtc(now: number): string {
   return new Date(now + 86_400_000).toISOString().slice(0, 10);

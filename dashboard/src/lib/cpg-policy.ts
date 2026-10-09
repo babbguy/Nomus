@@ -295,6 +295,38 @@ export function enforcementSummary(head: Pick<PolicyHead, 'state' | 'enforceFrom
   return { label: 'Enforced', variant: 'success', detail: `Enforced since ${formatUtc(head.enforceFrom)}.` };
 }
 
+/** The policy list's filter tabs. */
+export type PolicyFilter = '' | 'awaiting' | 'active' | 'draft' | 'retired';
+
+/**
+ * Whether a policy belongs under a filter tab. "Awaiting approval" means a
+ * version is waiting for a decision: a first version, a new version of an
+ * active policy, or a retirement. So a policy can be both Active and
+ * Awaiting approval. The tab counts and the table use this same predicate.
+ */
+export function matchesPolicyFilter(p: Pick<PolicyHead, 'state' | 'pendingVersionId'>, filter: PolicyFilter): boolean {
+  switch (filter) {
+    case '': return true;
+    case 'awaiting': return p.pendingVersionId !== null;
+    default: return p.state === filter;
+  }
+}
+
+export const POLICY_FILTERS: readonly PolicyFilter[] = ['', 'awaiting', 'active', 'draft', 'retired'];
+
+/** The number of policies under each tab: always the length of that tab's filtered list. */
+export function policyFilterCounts(items: ReadonlyArray<Pick<PolicyHead, 'state' | 'pendingVersionId'>>): Record<PolicyFilter, number> {
+  return Object.fromEntries(POLICY_FILTERS.map((f) => [f, items.filter((p) => matchesPolicyFilter(p, f)).length])) as Record<PolicyFilter, number>;
+}
+
+/** What the version column says about a pending version. */
+export function pendingLabel(p: Pick<PolicyHead, 'pendingVersion' | 'pendingVersionKind'>): string | null {
+  if (p.pendingVersion === null) return null;
+  return p.pendingVersionKind === 'retire'
+    ? `v${p.pendingVersion} retirement awaiting approval`
+    : `v${p.pendingVersion} awaiting approval`;
+}
+
 /** The example results of a compile record as readable lines. */
 export function exampleResultLine(r: ExampleResult): string {
   const which = `${r.kind === 'violating' ? 'Violating' : 'Compliant'} example ${r.index + 1} (${r.path})`;

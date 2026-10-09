@@ -8,16 +8,18 @@ import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import DataFreshness from '../../components/ui/DataFreshness';
 import { SkeletonTable } from '../../components/ui/Skeleton';
-import { listPolicies, type PolicyHead, type PolicyState } from '../../api/cpg';
+import { listPolicies, type PolicyHead } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
-import { STATE_LABEL, enforcementSummary, policyErrorMessage } from '../../lib/cpg-policy';
+import {
+  STATE_LABEL, enforcementSummary, matchesPolicyFilter, pendingLabel, policyErrorMessage, policyFilterCounts, type PolicyFilter,
+} from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
 import { StateBadge, TierBadge } from './policies/parts';
 
-const FILTERS: Array<{ value: PolicyState | ''; label: string }> = [
+const FILTERS: Array<{ value: PolicyFilter; label: string }> = [
   { value: '', label: 'All' },
-  { value: 'proposed', label: STATE_LABEL.proposed },
+  { value: 'awaiting', label: 'Awaiting approval' },
   { value: 'active', label: STATE_LABEL.active },
   { value: 'draft', label: STATE_LABEL.draft },
   { value: 'retired', label: STATE_LABEL.retired },
@@ -32,7 +34,7 @@ export default function GovernancePolicies() {
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-  const [filter, setFilter] = useState<PolicyState | ''>('');
+  const [filter, setFilter] = useState<PolicyFilter>('');
   const [now] = useState(() => Date.now());
 
   useEffect(() => {
@@ -43,7 +45,8 @@ export default function GovernancePolicies() {
     return () => { cancelled = true; };
   }, [retryKey]);
 
-  const shown = (items ?? []).filter((p) => !filter || p.state === filter);
+  const shown = (items ?? []).filter((p) => matchesPolicyFilter(p, filter));
+  const counts = items ? policyFilterCounts(items) : null;
 
   return (
     <div>
@@ -72,7 +75,7 @@ export default function GovernancePolicies() {
             onClick={() => setFilter(f.value)}
             className={`px-3 py-1.5 text-xs rounded-lg transition ${filter === f.value ? 'bg-accent-dim text-accent' : 'text-text-secondary hover:bg-surface-hover'}`}
           >
-            {f.label}{items ? ` (${f.value ? items.filter((p) => p.state === f.value).length : items.length})` : ''}
+            {f.label}{counts ? ` (${counts[f.value]})` : ''}
           </button>
         ))}
       </div>
@@ -131,7 +134,7 @@ export function PolicyTable({ items, now, filtered, canAuthor }: { items: Policy
                 </td>
                 <td className="px-4 py-3 text-xs text-text-secondary whitespace-nowrap">
                   <p>{p.activeVersion !== null ? `v${p.activeVersion} ${p.state === 'retired' ? '(retirement)' : 'active'}` : 'none active'}</p>
-                  {p.pendingVersion !== null && <p className="text-accent">v{p.pendingVersion} awaiting approval</p>}
+                  {pendingLabel(p) && <p className="text-accent">{pendingLabel(p)}</p>}
                 </td>
                 <td className="px-4 py-3">
                   <Badge variant={enforcement.variant}>{enforcement.label}</Badge>

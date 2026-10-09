@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as fx from '../test/cpg-fixtures';
-import type { CpgMe, PolicyDetail } from '../api/cpg-schemas';
+import type { CpgMe, PolicyDetail, PolicyHead } from '../api/cpg-schemas';
 import {
-  describeRule, enforcementSummary, formatUtc, fourEyesStatus, jsonDiff, policyErrorMessage, userRoleLabel, versionDiff,
+  describeRule, enforcementSummary, formatUtc, fourEyesStatus, jsonDiff, matchesPolicyFilter, pendingLabel, policyErrorMessage,
+  policyFilterCounts, userRoleLabel, versionDiff, POLICY_FILTERS,
 } from './cpg-policy';
-import { compileInputProblems, ruleEditProblems, tomorrowUtc } from './cpg-policy-forms';
+import { compileInputProblems, graceFields, ruleEditProblems, tomorrowUtc } from './cpg-policy-forms';
 import { pathLabel, quorumChanges, quorumIssues, removeAt, setAt, slotSummary, toggledSlot } from './cpg-quorum-form';
 
 const detail = fx.policyDetail as PolicyDetail;
@@ -129,6 +130,40 @@ describe('error messages', () => {
   });
 });
 
+describe('policy list tabs (counts match the filtered lists)', () => {
+  const id = (n: number) => `${n}0000000-0000-4000-8000-000000000000`;
+  const head = (n: number, over: Partial<PolicyHead>): PolicyHead => ({ ...fx.policyHead, policyId: id(n), policyKey: `corp.p${n}`, ...over });
+  // As in the reviewed screenshot: an active policy with a pending retirement (v3) and an active policy in its grace period.
+  const screenshot = [
+    head(1, { state: 'active', activeVersion: 2, pendingVersionId: id(9), pendingVersion: 3, pendingVersionKind: 'retire' }),
+    head(2, { state: 'active', pendingVersionId: null, pendingVersion: null, pendingVersionKind: null }),
+  ];
+  const all = [
+    ...screenshot,
+    head(3, { state: 'proposed', activeVersion: null, pendingVersionId: id(8), pendingVersion: 1, pendingVersionKind: 'define' }),
+    head(4, { state: 'active', pendingVersionId: id(7), pendingVersion: 2, pendingVersionKind: 'define' }),
+    head(5, { state: 'draft', activeVersion: null, pendingVersionId: null, pendingVersion: null, pendingVersionKind: null }),
+    head(6, { state: 'retired', pendingVersionId: null, pendingVersion: null, pendingVersionKind: null }),
+  ];
+
+  it('"Awaiting approval" counts every policy with a pending version, including retirements and new versions of active policies', () => {
+    expect(policyFilterCounts(screenshot).awaiting).toBe(1);
+    expect(policyFilterCounts(all)).toEqual({ '': 6, awaiting: 3, active: 3, draft: 1, retired: 1 });
+  });
+
+  it('every tab count equals the length of the list that tab shows', () => {
+    const counts = policyFilterCounts(all);
+    for (const f of POLICY_FILTERS) expect(all.filter((p) => matchesPolicyFilter(p, f)).length, f || 'all').toBe(counts[f]);
+    expect(all.filter((p) => matchesPolicyFilter(p, 'awaiting')).map((p) => p.policyKey)).toEqual(['corp.p1', 'corp.p3', 'corp.p4']);
+  });
+
+  it('a pending retirement says it is a retirement', () => {
+    expect(pendingLabel(screenshot[0])).toBe('v3 retirement awaiting approval');
+    expect(pendingLabel(all[3])).toBe('v2 awaiting approval');
+    expect(pendingLabel(screenshot[1])).toBeNull();
+  });
+});
+
 describe('sidebar role label (brief §9)', () => {
   it('keeps the legacy label for platform admins and users without governance roles', () => {
     expect(userRoleLabel('platform_admin', fx.me())).toBe('Admin');
@@ -157,6 +192,13 @@ describe('authoring form checks', () => {
     ]);
     expect(compileInputProblems('A policy text that is long enough.', [{ path: 'src/a.ts', code: 'x' }], [])).toEqual([]);
     expect(compileInputProblems('A policy text that is long enough.', [], [])).toContain('Add at least one violating example.');
+  });
+
+  it('the quorum-default grace choice sends no grace field (the server applies 14 days to a new policy)', () => {
+    expect(graceFields('default', '0', '')).toEqual({});
+    expect(graceFields('default', '14', '2026-12-01')).toEqual({});
+    expect(graceFields('days', '0', '')).toEqual({ graceDays: 0 });
+    expect(graceFields('date', '14', '2026-12-01')).toEqual({ enforceFrom: '2026-12-01T00:00:00.000Z' });
   });
 
   it('an edited rule must be JSON with the rule structure; defaults may be omitted', () => {

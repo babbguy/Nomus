@@ -113,6 +113,7 @@ describe('dashboard schemas over the policy registry workflow', () => {
     const detail = await call(app, 'GET', `/api/v1/cpg/policies/${policyId}`, { cookie: approver.cookie });
     expectParsed(d.policyDetailSchema, detail.json, 'GET /policies/:id');
     expect(detail.json.policy.inGracePeriod).toBe(true);
+    expect(detail.json.policy.pendingVersionKind).toBeNull();
     expect(detail.json.versions[0].signature).toEqual(expect.any(String));
     const list = await call(app, 'GET', '/api/v1/cpg/policies', { cookie: approver.cookie });
     expectParsed(d.listOf(d.policyHeadSchema), list.json, 'GET /policies');
@@ -127,6 +128,7 @@ describe('dashboard schemas over the policy registry workflow', () => {
     });
     expect(v2.status).toBe(201);
     expectParsed(d.policyDetailSchema, v2.json, 'POST /policies/:id/versions');
+    expect(v2.json.policy.pendingVersionKind).toBe('define');
     const pendingV2 = v2.json.versions.find((v: { status: string }) => v.status === 'pending');
     expect([pendingV2.editedFromCompile, pendingV2.enforceFromRequested]).toEqual([true, enforceFrom]);
     const proposed = v2.json.events.find((e: { event: string; version: number }) => e.event === 'proposed' && e.version === 2);
@@ -136,6 +138,9 @@ describe('dashboard schemas over the policy registry workflow', () => {
 
     const retire = await call(app, 'POST', `/api/v1/cpg/policies/${policyId}/retire`, { cookie: author.cookie, body: { reason: 'Model removed everywhere.' } });
     expectParsed(d.policyDetailSchema, retire.json, 'retire');
+    expect([retire.json.policy.state, retire.json.policy.pendingVersionKind]).toEqual(['active', 'retire']);
+    const heads = await call(app, 'GET', '/api/v1/cpg/policies', { cookie: approver.cookie });
+    expect(heads.json.items.find((h: { policyId: string }) => h.policyId === policyId).pendingVersionKind).toBe('retire');
     const retired = await call(app, 'POST', `/api/v1/cpg/policy-versions/${retire.json.policy.pendingVersionId}/votes`, { cookie: approver.cookie, body: { vote: 'approve' } });
     expect(retired.json.versionState).toBe('retired');
     const after = await call(app, 'GET', `/api/v1/cpg/policies/${policyId}`, { cookie: approver.cookie });

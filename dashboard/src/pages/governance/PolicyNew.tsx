@@ -10,7 +10,7 @@ import {
   type Board, type CodeExample, type CompileRecord, type PolicyDetail, type QuorumVersion, type Tier,
 } from '../../api/cpg';
 import { TIER_DESCRIPTION, TIER_LABEL, policyErrorMessage } from '../../lib/cpg-policy';
-import { compileInputProblems, ruleEditProblems, tomorrowUtc } from '../../lib/cpg-policy-forms';
+import { compileInputProblems, graceFields, ruleEditProblems, tomorrowUtc, type GraceMode } from '../../lib/cpg-policy-forms';
 import GovernanceHeader from './GovernanceHeader';
 import CompileResult from './policies/CompileResult';
 
@@ -18,7 +18,6 @@ const inputCls = 'w-full px-3 py-2 bg-surface border border-border rounded-lg te
 const POLICY_KEY_RE = /^corp\.[a-z0-9][a-z0-9._-]{0,84}$/;
 const TIERS: Tier[] = ['advisory', 'review-required', 'prohibited'];
 
-type GraceMode = 'default' | 'days' | 'date';
 
 /**
  * /governance/policies/new (E29, E32, E34): write a policy in plain English,
@@ -141,8 +140,7 @@ export default function PolicyNew() {
         tier,
         owningBoardIds: boardIds,
         rule: editRule ? JSON.parse(ruleText) as unknown : undefined,
-        graceDays: graceMode === 'days' ? graceN : undefined,
-        enforceFrom: graceMode === 'date' ? `${enforceDate}T00:00:00.000Z` : undefined,
+        ...graceFields(graceMode, graceDays, enforceDate),
       };
       const detail = policyId ? await proposePolicyVersion(policyId, input) : await proposePolicy({ ...input, policyKey });
       navigate(`/governance/policies/${detail.policy.policyId}`, { state: { proposed: true } });
