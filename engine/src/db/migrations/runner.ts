@@ -5,6 +5,7 @@ import { appendOnlyTriggers } from './sql-helpers.js';
 import { cpg0001Rbac } from './cpg-0001-rbac.js';
 import { cpg0002PolicyRegistry } from './cpg-0002-policy-registry.js';
 import { cpg0003ReviewCases } from './cpg-0003-review-cases.js';
+import { cpg0004Approvals } from './cpg-0004-approvals.js';
 
 /**
  * Numbered raw-SQL migration runner for Corporate Policy Governance (design
@@ -26,7 +27,7 @@ export interface Migration {
 }
 
 /** Ordered, append-only. New phases append; nothing is ever removed or edited. */
-export const MIGRATIONS: readonly Migration[] = [cpg0001Rbac, cpg0002PolicyRegistry, cpg0003ReviewCases];
+export const MIGRATIONS: readonly Migration[] = [cpg0001Rbac, cpg0002PolicyRegistry, cpg0003ReviewCases, cpg0004Approvals];
 
 export class MigrationChecksumError extends Error {
   constructor(public readonly migrationId: string, expected: string, actual: string) {

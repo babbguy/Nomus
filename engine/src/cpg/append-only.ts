@@ -24,6 +24,11 @@ export const APPEND_ONLY_TABLES = [
   { table: 'cpg_reviewer_contexts', drizzleName: 'cpgReviewerContexts' },
   { table: 'cpg_justifications', drizzleName: 'cpgJustifications' },
   { table: 'cpg_comments', drizzleName: 'cpgComments' },
+  { table: 'cpg_proposals', drizzleName: 'cpgProposals' },
+  { table: 'cpg_votes', drizzleName: 'cpgVotes' },
+  { table: 'cpg_proposal_events', drizzleName: 'cpgProposalEvents' },
+  { table: 'cpg_decisions', drizzleName: 'cpgDecisions' },
+  { table: 'cpg_revocations', drizzleName: 'cpgRevocations' },
 ] as const;
 
 /**

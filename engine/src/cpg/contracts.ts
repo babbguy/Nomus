@@ -8,6 +8,7 @@ import {
   CANONICAL_REPO_RE, FINGERPRINT_RE, TIERS, caseStatusSchema, corporateRuleSchema, requestReviewRequestSchema,
 } from '@nomus/scanner/corporate';
 import { quorumConfigSchema } from './quorum/schema.js';
+import { requirementSchema } from './quorum/evaluate.js';
 import { boardsOfUser } from './boards/service.js';
 
 /**
@@ -641,3 +642,67 @@ export type CaseSummaryResponse = z.infer<typeof caseSummaryResponseSchema>;
 export type JustificationResponse = z.infer<typeof justificationResponseSchema>;
 export type CommentResponse = z.infer<typeof commentResponseSchema>;
 export type ReviewerContextResponse = z.infer<typeof reviewerContextResponseSchema>;
+
+// ─── Proposals, votes and decisions (Phase 5, E54 to E59) ──────────────
+
+const outcomeSchema = z.enum(['approve', 'reject']);
+const decisionScopeSchema = z.enum(['snippet', 'bulk', 'standing']);
+export const proposalStatusSchema = z.enum(['pending', 'finalized', 'vetoed', 'invalidated', 'void', 'lapsed']);
+
+export const proposalCreateRequestSchema = z.object({
+  caseId: uuid,
+  scope: z.enum(['snippet', 'bulk']),
+  outcome: outcomeSchema,
+  fingerprints: z.array(fingerprintSchema).min(1).max(500),
+  /** Required for an approval (§4.3 step 6); a rejection never expires (D5). */
+  expiresAt: isoDate.optional(),
+  rationale: z.string().trim().min(20).max(4000),
+}).strict()
+  .refine((b) => new Set(b.fingerprints).size === b.fingerprints.length, { message: 'fingerprints must be distinct', path: ['fingerprints'] })
+  .refine((b) => (b.scope === 'snippet') === (b.fingerprints.length === 1), { message: 'a snippet proposal decides one finding, a bulk proposal 2 to 500', path: ['fingerprints'] })
+  .refine((b) => (b.outcome === 'approve') === (b.expiresAt !== undefined), { message: 'an approval needs expiresAt; a rejection has none', path: ['expiresAt'] });
+
+export const proposalListQuerySchema = z.object({
+  caseId: uuid,
+  scope: z.enum(['snippet', 'bulk']).optional(),
+  status: proposalStatusSchema.optional(),
+}).strict();
+
+// A vote's body is voteRequestSchema, shared with policy-version votes.
+
+export const proposalVoteSchema = z.object({
+  id: uuid, voterUserId: uuid, voterName: z.string(), vote: outcomeSchema,
+  /** The required boards the voter was an active member of, and the permissions held, at vote time. */
+  boards: z.array(uuid), permissions: z.array(z.string()), comment: z.string(), createdAt: isoDate,
+}).strict();
+
+export const proposalDetailResponseSchema = z.object({
+  id: uuid, caseId: uuid.nullable(), scope: decisionScopeSchema, outcome: outcomeSchema, status: proposalStatusSchema,
+  policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(), tier: z.enum(TIERS),
+  fingerprints: z.array(fingerprintSchema), requestedExpiresAt: isoDate.nullable(), rationale: z.string(),
+  /** The requirement computed at creation; finalization re-evaluates it under the config then in force. */
+  required: requirementSchema, quorumConfigVersionAtCreation: z.number().int(),
+  proposer: z.object({ userId: uuid, name: z.string() }).strict(),
+  createdAt: isoDate, lapsesAt: isoDate,
+  votes: z.array(proposalVoteSchema), decisionIds: z.array(uuid),
+  invalidation: z.object({ reason: z.string(), at: isoDate }).strict().nullable(),
+  /** Whether the caller may vote now, else the code a vote would be refused with. */
+  viewer: z.object({ canVote: z.boolean(), reason: z.string().nullable() }).strict(),
+}).strict();
+
+export const proposalListResponseSchema = z.object({ items: z.array(proposalDetailResponseSchema) }).strict();
+
+export const castVoteResponseSchema = z.object({ vote: proposalVoteSchema, proposalStatus: proposalStatusSchema, decisionIds: z.array(uuid) }).strict();
+
+export const decisionResponseSchema = z.object({
+  id: uuid, proposalId: uuid, caseId: uuid.nullable(), scope: decisionScopeSchema, outcome: outcomeSchema,
+  repo: z.string().nullable(), fingerprint: fingerprintSchema.nullable(), batchId: uuid.nullable(),
+  policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(), expiresAt: isoDate.nullable(),
+  approverUserIds: z.array(uuid), quorumConfigVersion: z.number().int(), quorumConfigHash: sha256Hex, finalizedAt: isoDate,
+  /** Canonical JSON (§13.2), signed with the instance Ed25519 key; verify it offline against /.well-known/nomus-keys. */
+  signedPayload: z.string(), signature: z.string(), signatureValid: z.boolean(),
+}).strict();
+
+export type ProposalDetailResponse = z.infer<typeof proposalDetailResponseSchema>;
+export type ProposalVoteResponse = z.infer<typeof proposalVoteSchema>;
+export type DecisionResponse = z.infer<typeof decisionResponseSchema>;

@@ -2,7 +2,7 @@ import { inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { cpgComments, cpgPolicyVersions } from '../../db/schema-cpg.js';
 import { boardIdsOf } from '../policies/service.js';
-import { getCase, isBlocking, latestFindings, openChangeRequests } from './service.js';
+import { getCase, isBlocking, latestFindings, openChangeRequests, undecidedBlocking } from './service.js';
 
 /**
  * Review lanes (design spec §5.6): a case has one lane per owning board, and
@@ -53,12 +53,12 @@ export function splitIntoLanes(findings: readonly LaneFinding[], changeRequestBo
 }
 
 /**
- * The lanes of a case's latest revision. Decisions (Phase 5) have no writer
- * yet, so every blocking finding is undecided. A lane with a change request
- * that no revision or resubmit has cleared is in changes_requested.
+ * The lanes of a case's latest revision. A blocking finding is decided when a
+ * current decision settles it. A lane with a change request that no revision
+ * or resubmit has cleared is in changes_requested.
  */
 export function caseLanes(db: Db, orgId: string, caseId: string): Lane[] {
-  getCase(db, orgId, caseId);
+  const c = getCase(db, orgId, caseId);
   const findings = latestFindings(db, caseId);
   if (findings.length === 0) return [];
   const versionIds = [...new Set(findings.map((f) => f.policyVersionId))];
@@ -68,7 +68,8 @@ export function caseLanes(db: Db, orgId: string, caseId: string): Lane[] {
   const open = [...openChangeRequests(db, caseId).keys()];
   const changeRequestBoards = new Set(open.length === 0 ? [] : db.select({ boardId: cpgComments.boardId }).from(cpgComments)
     .where(inArray(cpgComments.id, open)).all().map((r) => r.boardId!));
+  const undecided = undecidedBlocking(db, c, new Date().toISOString());
   return splitIntoLanes(findings.map((f) => ({
-    fingerprint: f.fingerprint, owningBoardIds: owners.get(f.policyVersionId)!, blocking: isBlocking(f), decided: false,
+    fingerprint: f.fingerprint, owningBoardIds: owners.get(f.policyVersionId)!, blocking: isBlocking(f), decided: isBlocking(f) && !undecided.has(f.fingerprint),
   })), changeRequestBoards);
 }

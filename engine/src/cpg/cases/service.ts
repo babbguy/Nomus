@@ -7,6 +7,7 @@ import {
   cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgJustifications, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions,
   cpgSnippets,
 } from '../../db/schema-cpg.js';
+import { latestDecisions, settles } from '../decisions/resolve.js';
 import { CpgError, notFound } from '../errors.js';
 import { assertTransition, deriveCaseState, type CaseFacts } from './state.js';
 
@@ -259,15 +260,22 @@ export function openChangeRequests(db: Db, caseId: string): Map<string, { resolv
   return open;
 }
 
-/** The facts of §5.2 over the latest revision. Decisions (Phase 5) have no writer yet. */
-function caseFacts(db: Db, caseId: string): CaseFacts {
-  const blocking = new Set(latestFindings(db, caseId).filter(isBlocking).map((f) => f.fingerprint));
+/** The blocking fingerprints of the latest revision that no current decision settles (§5.2). */
+export function undecidedBlocking(db: Db, c: Pick<CaseRow, 'id' | 'orgId' | 'repo'>, now: string): Set<string> {
+  const blocking = [...new Set(latestFindings(db, c.id).filter(isBlocking).map((f) => f.fingerprint))];
+  const decisions = latestDecisions(db, c.orgId, c.repo, blocking, now);
+  return new Set(blocking.filter((fp) => !settles(decisions.get(fp), now)));
+}
+
+/** The facts of §5.2 over the latest revision. */
+function caseFacts(db: Db, c: CaseRow, now: string): CaseFacts {
+  const undecided = undecidedBlocking(db, c, now);
   const justified = new Set(db.selectDistinct({ fingerprint: cpgJustifications.fingerprint }).from(cpgJustifications)
-    .where(eq(cpgJustifications.caseId, caseId)).all().map((r) => r.fingerprint));
+    .where(eq(cpgJustifications.caseId, c.id)).all().map((r) => r.fingerprint));
   return {
-    blockingUndecided: blocking.size,
-    unjustified: [...blocking].filter((fp) => !justified.has(fp)).length,
-    openChangeRequests: openChangeRequests(db, caseId).size,
+    blockingUndecided: undecided.size,
+    unjustified: [...undecided].filter((fp) => !justified.has(fp)).length,
+    openChangeRequests: openChangeRequests(db, c.id).size,
   };
 }
 
@@ -290,7 +298,7 @@ export function attachPullRequest(db: Db, orgId: string, caseId: string, prNumbe
 
 /** Re-derive the projected state (§5.2) and record the move, refusing any §5.3 forbids. */
 export function refreshCaseState(db: Db, c: CaseRow, actor: string, now: string): void {
-  const to = deriveCaseState(caseFacts(db, c.id));
+  const to = deriveCaseState(caseFacts(db, c, now));
   if (to === c.state) return;
   assertTransition(c.state, to);
   db.update(cpgCases).set({ state: to, updatedAt: now }).where(eq(cpgCases.id, c.id)).run();

@@ -2,7 +2,7 @@ import { asc, eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
-import { cpgCaseEvents, cpgCaseRevisions, cpgCases } from '../../db/schema-cpg.js';
+import { cpgCaseEvents, cpgCaseRevisions, cpgCases, cpgDecisions } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
 import { cpgSign } from '../policies/signing.js';
 import { addCaseEvent, getCase, openCase, type CaseRow } from './service.js';
@@ -29,11 +29,14 @@ export function closurePayload(db: Db, c: CaseRow) {
     id: cpgCaseEvents.id, seq: cpgCaseEvents.seq, event: cpgCaseEvents.event, actor: cpgCaseEvents.actor,
     details: cpgCaseEvents.details, createdAt: cpgCaseEvents.createdAt,
   }).from(cpgCaseEvents).where(eq(cpgCaseEvents.caseId, c.id)).orderBy(asc(cpgCaseEvents.seq)).all();
+  const decisionIds = db.select({ id: cpgDecisions.id }).from(cpgDecisions).where(eq(cpgDecisions.caseId, c.id))
+    .orderBy(asc(cpgDecisions.finalizedAt), asc(cpgDecisions.id)).all().map((d) => d.id);
   return {
     kind: CASE_CLOSURE_KIND, caseId: c.id, orgId: c.orgId, repo: c.repo, branch: c.branch, prNumber: c.prNumber,
     closeReason: c.closeReason, closedAt: c.closedAt, openedAt: c.openedAt, revisions,
-    // Decisions (Phase 5) and CI runs (Phase 6) have no tables yet.
-    decisionIds: [] as string[], standingExceptionDecisionIds: [] as string[], ciRunIds: [] as string[],
+    // A closed case accepts no new decision (trigger), so these ids are as fixed as the rows above.
+    // Standing exceptions are linked in a later phase, and CI runs (Phase 6) have no table yet.
+    decisionIds, standingExceptionDecisionIds: [] as string[], ciRunIds: [] as string[],
     eventsDigest: sha256Hex(canonicalJson(events)),
   };
 }

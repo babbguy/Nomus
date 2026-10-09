@@ -339,6 +339,87 @@ export const cpgComments = sqliteTable('cpg_comments', {
   createdAt: text('created_at').notNull(),
 });
 
+const SCOPES = ['snippet', 'bulk', 'standing'] as const;
+const OUTCOMES = ['approve', 'reject'] as const;
+
+export const cpgProposals = sqliteTable('cpg_proposals', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  caseId: text('case_id'),
+  scope: text('scope', { enum: SCOPES }).notNull(),
+  outcome: text('outcome', { enum: OUTCOMES }).notNull(),
+  policyId: text('policy_id').notNull(),
+  policyVersionId: text('policy_version_id').notNull(),
+  policyKey: text('policy_key').notNull(),
+  policyVersion: integer('policy_version').notNull(),
+  tier: text('tier', { enum: TIERS }).notNull(),
+  fingerprints: text('fingerprints').notNull(),
+  pattern: text('pattern'),
+  requestedExpiresAt: text('requested_expires_at'),
+  rationale: text('rationale').notNull(),
+  required: text('required').notNull(),
+  quorumConfigVersionAtCreation: integer('quorum_config_version_at_creation').notNull(),
+  proposerUserId: text('proposer_user_id').notNull(),
+  createdAt: text('created_at').notNull(),
+  lapsesAt: text('lapses_at').notNull(),
+});
+
+export const cpgVotes = sqliteTable('cpg_votes', {
+  id: text('id').primaryKey(),
+  proposalId: text('proposal_id').notNull(),
+  orgId: text('org_id').notNull(),
+  voterUserId: text('voter_user_id').notNull(),
+  vote: text('vote', { enum: OUTCOMES }).notNull(),
+  boardsAtVote: text('boards_at_vote').notNull(),
+  permissionsAtVote: text('permissions_at_vote').notNull(),
+  comment: text('comment').notNull().default(''),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgProposalEvents = sqliteTable('cpg_proposal_events', {
+  id: text('id').primaryKey(),
+  proposalId: text('proposal_id').notNull(),
+  orgId: text('org_id').notNull(),
+  event: text('event', { enum: ['invalidated'] }).notNull(),
+  actor: text('actor').notNull(),
+  details: text('details').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const cpgDecisions = sqliteTable('cpg_decisions', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  proposalId: text('proposal_id').notNull(),
+  caseId: text('case_id'),
+  scope: text('scope', { enum: SCOPES }).notNull(),
+  outcome: text('outcome', { enum: OUTCOMES }).notNull(),
+  repo: text('repo'),
+  fingerprint: text('fingerprint'),
+  batchId: text('batch_id'),
+  policyId: text('policy_id').notNull(),
+  policyVersionId: text('policy_version_id').notNull(),
+  policyKey: text('policy_key').notNull(),
+  policyVersion: integer('policy_version').notNull(),
+  expiresAt: text('expires_at'),
+  approverUserIds: text('approver_user_ids').notNull(),
+  quorumConfigVersion: integer('quorum_config_version').notNull(),
+  quorumConfigHash: text('quorum_config_hash').notNull(),
+  finalizedAt: text('finalized_at').notNull(),
+  signedPayload: text('signed_payload').notNull(),
+  signature: text('signature').notNull(),
+});
+
+export const cpgRevocations = sqliteTable('cpg_revocations', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  decisionId: text('decision_id').notNull(),
+  revokedByUserId: text('revoked_by_user_id').notNull(),
+  reason: text('reason').notNull(),
+  revokedAt: text('revoked_at').notNull(),
+  signedPayload: text('signed_payload').notNull(),
+  signature: text('signature').notNull(),
+});
+
 /** Every CPG table declared above, for the column-parity test. */
 export const CPG_DRIZZLE_TABLES = [
   schemaMigrations,
@@ -367,4 +448,9 @@ export const CPG_DRIZZLE_TABLES = [
   cpgReviewerContexts,
   cpgJustifications,
   cpgComments,
+  cpgProposals,
+  cpgVotes,
+  cpgProposalEvents,
+  cpgDecisions,
+  cpgRevocations,
 ] as const;
