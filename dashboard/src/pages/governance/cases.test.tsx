@@ -12,7 +12,7 @@ import {
   caseDetailSchema, caseSummarySchema, ciRunSchema, proposalSchema, revisionDetailSchema, standingExceptionSchema, type CaseDetail, type CpgMe,
 } from '../../api/cpg';
 import { exceptionRows, lapsingCount, parseDays, progressText, quorumProgress, requirementText, scopeRule } from '../../lib/cpg-approvals';
-import { asSentence, breakablePath, caseActions, pageNote, pullRequestUrl, threadsOf } from '../../lib/cpg-cases';
+import { asSentence, breakablePath, caseActions, pageNote, pullRequestUrl, relativeTime, threadsOf } from '../../lib/cpg-cases';
 import { missingPermissions } from '../../lib/cpg-permissions';
 
 const text = (node: React.ReactElement) => renderToStaticMarkup(<MemoryRouter>{node}</MemoryRouter>)
@@ -130,11 +130,27 @@ describe('case pages: rules', () => {
 
 describe('case pages: rendering', () => {
   it('the list shows ref, repository @ branch, state, lanes, opener, activity and the pull request link', () => {
-    const html = renderToStaticMarkup(<MemoryRouter><CaseTable items={[summary]} /></MemoryRouter>);
+    const now = Date.parse(T) + 3 * 3_600_000;
+    const later = { ...summary, updatedAt: '2026-10-09T10:30:00.000Z' };
+    const html = renderToStaticMarkup(<MemoryRouter><CaseTable items={[later]} now={now} /></MemoryRouter>);
     expect(html).toContain('href="https://github.com/example-org/support-app/pull/42"');
-    const t = text(<CaseTable items={[summary]} />);
-    for (const s of ['CPG-6F1C2D3E', 'revision 1', 'example-org/support-app', '@ feat/chat', 'Changes requested', 'AI Review Board', '0/1 decided', 'Dana Developer', 'Oct 9, 2026, 08:00 UTC']) expect(t).toContain(s);
+    // Compact relative times, each with the full UTC time on hover; the opener's date is in the case column.
+    expect(html).toContain('<time dateTime="2026-10-09T08:00:00.000Z" title="Oct 9, 2026, 08:00 UTC" class="whitespace-nowrap">opened 3h ago</time>');
+    expect(html).toContain('<time dateTime="2026-10-09T10:30:00.000Z" title="Oct 9, 2026, 10:30 UTC" class="whitespace-nowrap">30m ago</time>');
+    expect(html).toContain('title="Opened Oct 9, 2026, 08:00 UTC">Dana Developer</td>');
+    expect(html).toContain('title="0 of 1 blocking findings decided">0/1</span>');
+    const t = text(<CaseTable items={[later]} now={now} />);
+    for (const s of ['CPG-6F1C2D3E', 'revision 1 · opened 3h ago', 'example-org/support-app', '@ feat/chat', 'Changes requested', 'AI Review Board', 'Dana Developer']) expect(t).toContain(s);
     expectClean(t);
+  });
+
+  it('relative times: compact up to 30 days, then the UTC date; never negative; a dash when unknown', () => {
+    const at = Date.parse(T);
+    expect([0, 59_000, 60_000, 59 * 60_000, 3_600_000, 23 * 3_600_000 + 59 * 60_000, 86_400_000, 29 * 86_400_000].map((d) => relativeTime(T, at + d)))
+      .toEqual(['just now', 'just now', '1m ago', '59m ago', '1h ago', '23h ago', '1d ago', '29d ago']);
+    expect(relativeTime('2026-09-01T23:30:00.000Z', at)).toBe('Sep 1, 2026');
+    expect(relativeTime(T, at - 60_000)).toBe('just now');
+    expect([relativeTime('not a date', at), relativeTime(T, Number.NaN)]).toEqual(['—', '—']);
   });
 
   it('the detail shows the people, lanes, revisions and the thread, and offers the reviewer the actions', () => {

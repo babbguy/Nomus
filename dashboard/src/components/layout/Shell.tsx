@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
-import { useAppStore } from '../../stores/appStore';
+import { Outlet, useLocation } from 'react-router-dom';
+import { isNarrowViewport, useAppStore } from '../../stores/appStore';
 import { usePipelineStore } from '../../stores/pipelineStore';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -10,6 +10,12 @@ export default function Shell() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const initSSE = usePipelineStore((s) => s.initSSE);
+  const { pathname } = useLocation();
+
+  // On a narrow screen, choosing a page closes the overlay sidebar.
+  useEffect(() => {
+    if (isNarrowViewport() && useAppStore.getState().sidebarOpen) useAppStore.getState().toggleSidebar();
+  }, [pathname]);
 
   // Initialize global SSE connection for pipeline progress
   useEffect(() => { initSSE(); }, [initSSE]);
