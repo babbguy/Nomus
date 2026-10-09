@@ -10,6 +10,7 @@ import { createApiKey, listApiKeys, revokeApiKey } from '../../tenant/api-keys.j
 import { actorOf, safeJson } from '../utils.js';
 import { logger } from '../../logger.js';
 import { requireOrgPermission } from '../../cpg/rbac/middleware.js';
+import { invalidateComplianceScore } from '../../core/compliance-score-cache.js';
 
 /**
  * Self-service routes for the signed-in user's own organization. Every handler
@@ -86,6 +87,8 @@ orgRoutes.patch('/', requireOrgPermission('org.profile.update'), async (c) => {
   const orgId = c.get('orgId')!;
   const result = getDb().update(organizations).set(updates).where(eq(organizations.id, orgId)).run();
   if (result.changes === 0) return c.json({ error: 'Organization not found' }, 404);
+  // Jurisdiction access feeds the score's applicable-rule count.
+  invalidateComplianceScore(orgId);
 
   logger.info({ orgId, fields: Object.keys(updates).filter((k) => k !== 'updatedAt'), actor: actorOf(c) }, 'Organization profile updated');
   return c.json(loadOrg(orgId));

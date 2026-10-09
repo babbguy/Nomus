@@ -64,6 +64,9 @@ scanRoutes.post('/findings', async (c) => {
   let updated = 0;
   const correlatable: CorrelatableFinding[] = [];
   const scannedAt = new Date().toISOString();
+  // Rows are written one at a time (not in a transaction), so a failure part
+  // way through still leaves committed findings: invalidate whatever happens.
+  try {
   for (const f of parsed.data.findings) {
     const repo = f.repo || parsed.data.repo || 'unknown';
     const values = {
@@ -126,6 +129,9 @@ scanRoutes.post('/findings', async (c) => {
       detectorSource: f.detectorSource ?? null,
       severity: f.severity,
     });
+  }
+  } finally {
+    invalidateComplianceScore(orgId);
   }
 
   // Correlate this scan's findings against the clause map.

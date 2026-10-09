@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { initSigningKeys } from '../../core/signing.js';
 import { getSourceHealthStatus, checkSlaBreaches } from '../../hunter/source-health.js';
 import { runFullAudit, auditSource, saveAuditReport, getAuditResult } from '../../hunter/data-auditor.js';
+import { invalidateAllComplianceScores } from '../../core/compliance-score-cache.js';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -199,6 +200,8 @@ adminRoutes.post('/rules/:id/approve', (c) => {
     .where(eq(policyRules.id, c.req.param('id')))
     .run();
   if (result.changes === 0) return c.json({ error: 'Rule not found' }, 404);
+  // The write is committed; rules are global, so every org's score moves.
+  invalidateAllComplianceScores();
   return c.json({ message: 'Rule approved and activated' });
 });
 
@@ -209,6 +212,7 @@ adminRoutes.post('/rules/:id/reject', (c) => {
     .where(eq(policyRules.id, c.req.param('id')))
     .run();
   if (result.changes === 0) return c.json({ error: 'Rule not found' }, 404);
+  invalidateAllComplianceScores();
   return c.json({ message: 'Rule rejected and deleted' });
 });
 
