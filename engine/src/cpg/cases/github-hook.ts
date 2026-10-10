@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalRepo } from '@nomus/scanner/corporate';
 import { githubAppInstallations } from '../../db/schema.js';
 import { getOrgSettings } from '../rbac/seed.js';
@@ -14,15 +14,13 @@ import { attachPullRequest, findOpenCase } from './service.js';
  * and branches without an open case, are left alone.
  */
 
-type Db = BetterSQLite3Database<any>;
-
-export interface PullRequestEvent {
+interface PullRequestEvent {
   action?: string;
   repository?: { full_name?: string };
   pull_request?: { number?: number; merged?: boolean; head?: { ref?: string } };
 }
 
-export type PullRequestOutcome = 'attached' | 'closed' | 'ignored';
+type PullRequestOutcome = 'attached' | 'closed' | 'ignored';
 
 export function applyCpgPullRequest(db: Db, installationId: number, payload: PullRequestEvent): PullRequestOutcome {
   if (payload.action !== 'opened' && payload.action !== 'closed') return 'ignored';

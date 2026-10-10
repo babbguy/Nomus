@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgProposals } from '../../db/schema-cpg.js';
@@ -26,9 +26,7 @@ import { recordVote } from './votes.js';
  * not vote, so every vote comes from an eligible approver.
  */
 
-type Db = BetterSQLite3Database<any>;
-
-export interface ProposalInput {
+interface ProposalInput {
   caseId: string;
   scope: 'snippet' | 'bulk';
   outcome: Outcome;
@@ -38,7 +36,7 @@ export interface ProposalInput {
   rationale: string;
 }
 
-export interface StandingInput {
+interface StandingInput {
   /** The case the exception was proposed from, if any. */
   caseId?: string;
   pattern: StandingPattern;

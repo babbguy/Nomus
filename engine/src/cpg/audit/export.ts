@@ -1,12 +1,10 @@
 import { and, asc, eq, isNotNull } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { cpgAuditEvents, cpgCases, cpgCiRuns, cpgDecisions, cpgRevocations } from '../../db/schema-cpg.js';
 import { closureSignedText } from '../cases/close.js';
 import { governanceExportResponseSchema, type GovernanceExportResponse } from '../contracts.js';
 import { contentHashOf, cpgSign, exportSignedText, GOVERNANCE_EXPORT_KIND } from '../policies/signing.js';
 import { verifyAuditChain } from './log.js';
-
-type Db = BetterSQLite3Database<any>;
 
 /**
  * The signed governance audit export (design spec E73), for the Auditor's

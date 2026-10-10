@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../db/client.js';
 import { z } from 'zod';
 import { cpgRoles, cpgTeamRepos, cpgUserRoles } from '../db/schema-cpg.js';
 import { PERMISSION_KEYS } from './rbac/catalog.js';
@@ -18,8 +18,6 @@ import { boardsOfUser } from './boards/service.js';
  * Responses are built by the serializers below and parsed with their schema
  * before they are sent, so the contract is enforced, not just documented.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 const uuid = z.string().uuid();
 const isoDate = z.string().datetime();
@@ -488,18 +486,10 @@ export type PolicyExportResponse = z.infer<typeof policyExportResponseSchema>;
 
 // ─── Serializers ───────────────────────────────────────────────────────
 
-export function serializeRole(db: Db, role: RoleRow): RoleResponse {
+export function serializeRole(db: Db, r: RoleRow): RoleResponse {
   return {
-    id: role.id,
-    key: role.key,
-    name: role.name,
-    description: role.description,
-    isSystem: role.isSystem,
-    permissions: rolePermissionKeys(db, role.id),
-    createdAt: role.createdAt,
-    createdBy: role.createdBy,
-    archivedAt: role.archivedAt,
-    archivedBy: role.archivedBy,
+    id: r.id, key: r.key, name: r.name, description: r.description, isSystem: r.isSystem, permissions: rolePermissionKeys(db, r.id),
+    createdAt: r.createdAt, createdBy: r.createdBy, archivedAt: r.archivedAt, archivedBy: r.archivedBy,
   };
 }
 
@@ -507,56 +497,29 @@ export function serializeGrant(db: Db, grant: GrantRow): GrantResponse {
   const role = db.select({ key: cpgRoles.key, name: cpgRoles.name }).from(cpgRoles).where(eq(cpgRoles.id, grant.roleId)).get();
   if (!role) throw new Error(`Grant ${grant.id} references a missing role`);
   return {
-    id: grant.id,
-    userId: grant.userId,
-    roleId: grant.roleId,
-    roleKey: role.key,
-    roleName: role.name,
-    scopeType: grant.scopeType,
-    scopeId: grant.scopeId,
-    grantedBy: grant.grantedBy,
-    grantedAt: grant.grantedAt,
-    revokedAt: grant.revokedAt,
-    revokedBy: grant.revokedBy,
-    revokeReason: grant.revokeReason,
+    id: grant.id, userId: grant.userId, roleId: grant.roleId, roleKey: role.key, roleName: role.name, scopeType: grant.scopeType,
+    scopeId: grant.scopeId, grantedBy: grant.grantedBy, grantedAt: grant.grantedAt, revokedAt: grant.revokedAt,
+    revokedBy: grant.revokedBy, revokeReason: grant.revokeReason,
   };
-}
-
-export function activeGrantsOf(db: Db, orgId: string, userId: string): GrantResponse[] {
-  return db.select().from(cpgUserRoles)
-    .where(and(eq(cpgUserRoles.orgId, orgId), eq(cpgUserRoles.userId, userId)))
-    .orderBy(asc(cpgUserRoles.grantedAt), asc(cpgUserRoles.id))
-    .all()
-    .filter((g) => !g.revokedAt)
-    .map((g) => serializeGrant(db, g));
 }
 
 export function serializeOrgUser(db: Db, orgId: string, u: {
   id: string; name: string; email: string; isActive: boolean; mustChangePassword: boolean;
 }): OrgUserResponse {
+  const grants = db.select().from(cpgUserRoles)
+    .where(and(eq(cpgUserRoles.orgId, orgId), eq(cpgUserRoles.userId, u.id)))
+    .orderBy(asc(cpgUserRoles.grantedAt), asc(cpgUserRoles.id)).all()
+    .filter((g) => !g.revokedAt);
   return {
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    isActive: u.isActive,
-    mustChangePassword: u.mustChangePassword,
-    grants: activeGrantsOf(db, orgId, u.id),
-    boards: boardsOfUser(db, orgId, u.id),
+    id: u.id, name: u.name, email: u.email, isActive: u.isActive, mustChangePassword: u.mustChangePassword,
+    grants: grants.map((g) => serializeGrant(db, g)), boards: boardsOfUser(db, orgId, u.id),
   };
 }
 
 export function serializeTeam(db: Db, team: { id: string; key: string; name: string; createdAt: string; createdBy: string; archivedAt: string | null }): TeamResponse {
   const repoPatterns = db.select({ p: cpgTeamRepos.repoPattern }).from(cpgTeamRepos)
     .where(eq(cpgTeamRepos.teamId, team.id)).all().map((r) => r.p).sort();
-  return {
-    id: team.id,
-    key: team.key,
-    name: team.name,
-    repoPatterns,
-    createdAt: team.createdAt,
-    createdBy: team.createdBy,
-    archivedAt: team.archivedAt,
-  };
+  return { id: team.id, key: team.key, name: team.name, repoPatterns, createdAt: team.createdAt, createdBy: team.createdBy, archivedAt: team.archivedAt };
 }
 
 // ─── Review cases (Phase 4, E40 to E52) ────────────────────────────────

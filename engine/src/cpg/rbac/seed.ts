@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgOrgSettings, cpgPermissions, cpgRolePermissions, cpgRoles } from '../../db/schema-cpg.js';
 import { organizations, users } from '../../db/schema.js';
@@ -21,13 +21,11 @@ import { activeOrgAdminGrants, getRoleByKey, grantIfMissing, type RoleRow } from
  *      get nothing.
  */
 
-type Db = BetterSQLite3Database<any>;
-
-export const SEED_ACTOR = 'system:seed';
+const SEED_ACTOR = 'system:seed';
 export const MIGRATION_ACTOR = 'system:rbac-migration';
 
 /** INSERT OR IGNORE the permission catalog (append-only: it only ever grows). */
-export function ensurePermissionCatalog(db: Db): void {
+function ensurePermissionCatalog(db: Db): void {
   rawSqlite(db).transaction(() => {
     for (const p of PERMISSIONS) {
       db.insert(cpgPermissions).values({ key: p.key, category: p.category, scopable: p.scopable, description: p.description })

@@ -1,4 +1,4 @@
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import {
   decisionResponseSchema, proposalDetailResponseSchema, standingExceptionSchema,
   type DecisionResponse, type ProposalDetailResponse, type ProposalVoteResponse, type RevocationResponse, type StandingException,
@@ -14,8 +14,6 @@ import { fingerprintsOf, requiredOf, type ProposalView, type VoteRow } from './s
 import { eligibleBallot } from './votes.js';
 
 /** Response builders for the proposal and decision routes; each output is parsed with its contract. */
-
-type Db = BetterSQLite3Database<any>;
 
 export function voteOf(v: VoteRow, names: Map<string, string>): ProposalVoteResponse {
   return {

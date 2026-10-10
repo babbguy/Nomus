@@ -2,9 +2,6 @@ import { Hono, type Context } from 'hono';
 import { compileGlobList } from '@nomus/scanner/corporate';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
 import type { CpgActor } from '../../../cpg/rbac/can.js';
 import type { PermissionKey } from '../../../cpg/rbac/catalog.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
@@ -21,7 +18,7 @@ import {
   proposalListResponseSchema, revocationResponseSchema, revokeRequestSchema, standingPatternSchema, voteRequestSchema, type StandingPattern,
 } from '../../../cpg/contracts.js';
 import { CpgError } from '../../../cpg/errors.js';
-import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission } from './helpers.js';
+import { actorFrom, cpgAuth, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission } from './helpers.js';
 
 /**
  * Proposals, votes, decisions, standing exceptions and revocations (design
@@ -34,7 +31,7 @@ import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, re
 export const cpgProposalRoutes = new Hono<AppEnv>();
 
 /** `userKey`: also accept the VS Code user-bound key, for reads. */
-const auth = (userKey: boolean) => [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: userKey })] as const;
+const auth = (userKey: boolean) => cpgAuth(null, { scope: 'read:policies', allowUserKey: userKey });
 
 const now = () => new Date().toISOString();
 

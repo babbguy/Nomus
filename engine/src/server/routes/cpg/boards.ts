@@ -1,12 +1,8 @@
 import { Hono } from 'hono';
 import { inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { AppEnv } from '../../app.js';
-import { getDb } from '../../../db/client.js';
+import { getDb, type Db } from '../../../db/client.js';
 import { users } from '../../../db/schema.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
 import { can } from '../../../cpg/rbac/can.js';
 import {
   activeMembers, addBoardMember, archiveBoard, createBoard, getBoard, listBoards, removeBoardMember, updateBoard,
@@ -18,7 +14,7 @@ import {
   addBoardMemberRequestSchema, boardMemberResponseSchema, boardResponseSchema, createBoardRequestSchema, emptyRequestSchema,
   listOf, patchBoardRequestSchema, type BoardMemberResponse, type BoardResponse,
 } from '../../../cpg/contracts.js';
-import { actorFrom, auditActor, handle, parseBody, pathParam } from './helpers.js';
+import { actorFrom, auditActor, cpgAuth, handle, parseBody, pathParam } from './helpers.js';
 
 /**
  * Review boards (design spec §9.2, E19 to E24). Reading needs policy.read
@@ -26,8 +22,6 @@ import { actorFrom, auditActor, handle, parseBody, pathParam } from './helpers.j
  * session. Cross-org ids are 404.
  */
 export const cpgBoardRoutes = new Hono<AppEnv>();
-
-type Db = BetterSQLite3Database<any>;
 
 function serializeMembers(db: Db, rows: BoardMemberRow[]): BoardMemberResponse[] {
   const ids = rows.map((r) => r.userId);
@@ -47,10 +41,10 @@ function serializeBoard(db: Db, b: BoardRow, withMembers: boolean): BoardRespons
   });
 }
 
-const manage = [requireSessionOrApiKey(), rateLimit(), requireCpgPermission('boards.manage')] as const;
+const manage = cpgAuth('boards.manage');
 
 // E19
-cpgBoardRoutes.get('/', requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission('policy.read', { allowUserKey: true }), handle((c) => {
+cpgBoardRoutes.get('/', ...cpgAuth('policy.read', { scope: 'read:policies', allowUserKey: true }), handle((c) => {
   const db = getDb();
   const actor = actorFrom(c);
   const withMembers = can(actor, 'boards.manage');

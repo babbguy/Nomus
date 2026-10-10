@@ -1,18 +1,13 @@
 import { Hono } from 'hono';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import type { Context } from 'hono';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import { cpgBoards, cpgPolicies, cpgPolicyVersions } from '../../../db/schema-cpg.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
-import { can } from '../../../cpg/rbac/can.js';
 import { createQuorumVersion, currentQuorum, getQuorumVersion, listQuorumVersions, type QuorumVersion } from '../../../cpg/quorum/store.js';
 import type { QuorumConfig } from '../../../cpg/quorum/schema.js';
 import { listOf, putQuorumRequestSchema, quorumVersionResponseSchema, quorumVersionSummarySchema } from '../../../cpg/contracts.js';
 import { CpgError, notFound } from '../../../cpg/errors.js';
-import { actorFrom, auditActor, handle, parseBody, pathParam } from './helpers.js';
+import { actorFrom, auditActor, cpgAuth, handle, parseBody, pathParam, requireEither } from './helpers.js';
 
 /**
  * The versioned approval quorum (design spec §4, E25 to E28). Reading the
@@ -25,13 +20,6 @@ const full = (v: QuorumVersion) => quorumVersionResponseSchema.parse({
   version: v.version, config: v.config, configHash: v.configHash, changeNote: v.changeNote,
   createdAt: v.createdAt, createdBy: v.createdBy, signature: v.signature,
 });
-
-function requireHistoryReader(c: Context<AppEnv>): void {
-  const actor = actorFrom(c);
-  if (!can(actor, 'audit.read') && !can(actor, 'quorum.manage')) {
-    throw new CpgError(403, 'forbidden', 'Missing permission audit.read or quorum.manage', { permission: 'audit.read' });
-  }
-}
 
 /** The database-dependent checks of a new configuration (§4.1, after zod). */
 function checkAgainstOrg(orgId: string, config: QuorumConfig): void {
@@ -64,11 +52,11 @@ function checkAgainstOrg(orgId: string, config: QuorumConfig): void {
 }
 
 // E25
-cpgQuorumRoutes.get('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission('policy.read'), handle((c) =>
+cpgQuorumRoutes.get('/', ...cpgAuth('policy.read'), handle((c) =>
   c.json(full(currentQuorum(getDb(), actorFrom(c).orgId)))));
 
 // E26
-cpgQuorumRoutes.put('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission('quorum.manage'), handle(async (c) => {
+cpgQuorumRoutes.put('/', ...cpgAuth('quorum.manage'), handle(async (c) => {
   const body = await parseBody(c, putQuorumRequestSchema);
   const orgId = actorFrom(c).orgId;
   checkAgainstOrg(orgId, body.config);
@@ -76,8 +64,8 @@ cpgQuorumRoutes.put('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermis
 }));
 
 // E27
-cpgQuorumRoutes.get('/versions', requireSessionOrApiKey(), rateLimit(), requireCpgPermission(null), handle((c) => {
-  requireHistoryReader(c);
+cpgQuorumRoutes.get('/versions', ...cpgAuth(null), handle((c) => {
+  requireEither(actorFrom(c), 'audit.read', 'quorum.manage');
   const items = listQuorumVersions(getDb(), actorFrom(c).orgId).map((v) => ({
     version: v.version, configHash: v.configHash, changeNote: v.changeNote, createdAt: v.createdAt, createdBy: v.createdBy,
   }));
@@ -85,8 +73,8 @@ cpgQuorumRoutes.get('/versions', requireSessionOrApiKey(), rateLimit(), requireC
 }));
 
 // E28
-cpgQuorumRoutes.get('/versions/:version', requireSessionOrApiKey(), rateLimit(), requireCpgPermission(null), handle((c) => {
-  requireHistoryReader(c);
+cpgQuorumRoutes.get('/versions/:version', ...cpgAuth(null), handle((c) => {
+  requireEither(actorFrom(c), 'audit.read', 'quorum.manage');
   const n = Number(pathParam(c, 'version'));
   if (!Number.isInteger(n) || n < 1) throw notFound('Quorum version');
   const v = getQuorumVersion(getDb(), actorFrom(c).orgId, n);

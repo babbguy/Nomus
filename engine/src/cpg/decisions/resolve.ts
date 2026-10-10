@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { cpgDecisions } from '../../db/schema-cpg.js';
 import { matchesStanding, snippetReader, standingExceptions, type LocatedFinding } from './standing.js';
 
@@ -11,7 +11,6 @@ import { matchesStanding, snippetReader, standingExceptions, type LocatedFinding
  * snippet decision settles.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type DecisionRow = typeof cpgDecisions.$inferSelect;
 
 /** The latest snippet or bulk decision of each fingerprint in `repo`, not revoked at `now`. */

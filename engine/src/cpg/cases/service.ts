@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson, MAX_SNIPPET_LINES, normalizeSnippet, parseFingerprint, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import {
@@ -25,13 +25,12 @@ import { assertTransition, deriveCaseState, type CaseFacts } from './state.js';
  * fingerprint, and the policy version exists in the org and is active.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type CaseRow = typeof cpgCases.$inferSelect;
 export type RevisionRow = typeof cpgCaseRevisions.$inferSelect;
 export type CaseFindingRow = typeof cpgCaseFindings.$inferSelect;
 type CaseEvent = (typeof cpgCaseEvents.$inferSelect)['event'];
 
-export interface CaseKey {
+interface CaseKey {
   orgId: string;
   /** canonicalRepo() output. */
   repo: string;
@@ -49,14 +48,14 @@ export interface RevisionFinding {
   snippet?: string;
 }
 
-export interface RevisionInput {
+interface RevisionInput {
   source: RevisionRow['source'];
   headSha: string | null;
   bundleHash: string;
   findings: readonly RevisionFinding[];
 }
 
-export interface RevisionResult {
+interface RevisionResult {
   /** The new revision, or the latest one when nothing changed. */
   revision: RevisionRow;
   revisionCreated: boolean;
@@ -99,7 +98,7 @@ export function isBlocking(f: Pick<CaseFindingRow, 'tier' | 'enforced'>): boolea
   return f.tier !== 'advisory' && f.enforced;
 }
 
-export function latestRevision(db: Db, caseId: string): RevisionRow | undefined {
+function latestRevision(db: Db, caseId: string): RevisionRow | undefined {
   return db.select().from(cpgCaseRevisions).where(eq(cpgCaseRevisions.caseId, caseId))
     .orderBy(desc(cpgCaseRevisions.revision)).limit(1).get();
 }
@@ -117,7 +116,7 @@ export function latestFindings(db: Db, caseId: string): CaseFindingRow[] {
 export function findOrCreateCase(db: Db, key: CaseKey, actor: string): { case: CaseRow; created: boolean } {
   const sameBranch = and(eq(cpgCases.orgId, key.orgId), eq(cpgCases.repo, key.repo), eq(cpgCases.branch, key.branch));
   return rawSqlite(db).transaction(() => {
-    const open = db.select().from(cpgCases).where(and(sameBranch, isNull(cpgCases.closedAt))).get();
+    const open = findOpenCase(db, key);
     if (open) return { case: open, created: false };
 
     const previous = db.select({ id: cpgCases.id }).from(cpgCases).where(and(sameBranch, isNotNull(cpgCases.closedAt)))

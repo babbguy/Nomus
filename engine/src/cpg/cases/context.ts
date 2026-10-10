@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { z } from 'zod';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgPolicies, cpgPolicyVersions, cpgReviewerContexts, cpgSnippets } from '../../db/schema-cpg.js';
@@ -28,9 +28,8 @@ import type { CaseFindingRow } from './service.js';
  *   can never block or fail one.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type ReviewerContextRow = typeof cpgReviewerContexts.$inferSelect;
-export const MAX_CONTEXT_ATTEMPTS = 5;
+const MAX_CONTEXT_ATTEMPTS = 5;
 
 const contextOutputSchema = z.object({
   whatItDoes: z.string().trim().min(1).max(1200),

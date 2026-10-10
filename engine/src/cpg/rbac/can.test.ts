@@ -15,7 +15,7 @@ import { cpgRolePermissions, cpgRoles, cpgTeamRepos, cpgTeams } from '../../db/s
 import { can, loadEffectiveGrants, summarizePermissions, userCan } from './can.js';
 import { createGrant, getRoleByKey, insertGrant, revokeGrant } from './grants.js';
 import { ensureOrgRbac } from './seed.js';
-import { compileGlob, InvalidGlobError, repoPatternError } from './repo-glob.js';
+import { compileGlob, InvalidGlobError, repoPatternError } from '@nomus/scanner/corporate';
 import { makeOrg, makeUser } from '../__fixtures__/rbac-fixtures.js';
 import { CpgError } from '../errors.js';
 

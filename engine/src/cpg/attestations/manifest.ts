@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { z } from 'zod';
 import { canonicalJson, compileGlobList, repoInputSchema, sha256Hex } from '@nomus/scanner/corporate';
 import { cpgAttestationLinks, cpgAttestationManifests, cpgCiRuns, cpgDecisions } from '../../db/schema-cpg.js';
@@ -21,8 +21,7 @@ import { getOrgSettings } from '../rbac/seed.js';
  * named, its signed closure record and the CI runs that record lists.
  */
 
-type Db = BetterSQLite3Database<any>;
-export const MANIFEST_KIND = 'nomus.cpg-attestation-manifest.v1';
+const MANIFEST_KIND = 'nomus.cpg-attestation-manifest.v1';
 
 /** The optional `governance` extra of POST /evaluate, outside the shared schema and the signed actionContext. */
 export const governanceExtrasSchema = z.object({
@@ -32,13 +31,13 @@ export const governanceExtrasSchema = z.object({
     caseId: z.string().uuid().optional(),
   }).strict().optional(),
 });
-export type GovernanceRequest = NonNullable<z.infer<typeof governanceExtrasSchema>['governance']>;
+type GovernanceRequest = NonNullable<z.infer<typeof governanceExtrasSchema>['governance']>;
 
 export type ItemType = typeof cpgAttestationLinks.$inferSelect['itemType'];
-export interface ManifestItem { type: ItemType; id: string; signatureSha256: string }
+interface ManifestItem { type: ItemType; id: string; signatureSha256: string }
 
 /** Every CPG record in force for the request at `at`, sorted by (type, id). */
-export function manifestItems(db: Db, orgId: string, req: GovernanceRequest, at: string): ManifestItem[] {
+function manifestItems(db: Db, orgId: string, req: GovernanceRequest, at: string): ManifestItem[] {
   const signed: Array<{ type: ItemType; id: string; signature: string }> = [];
 
   // Approvals: the latest snippet or bulk decision of each fingerprint, if it approves and is unexpired.

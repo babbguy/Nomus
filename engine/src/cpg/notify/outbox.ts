@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { users } from '../../db/schema.js';
@@ -26,7 +26,6 @@ import { kickNotificationWorker } from './worker.js';
  * commits without it.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type DeliveryRow = typeof cpgNotificationDeliveries.$inferSelect;
 
 /** What a delivery stores and sends: the summary, plus the email recipients. */

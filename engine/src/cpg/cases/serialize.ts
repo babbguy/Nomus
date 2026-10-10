@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { and, asc, eq, inArray } from 'drizzle-orm';
+import type { Db } from '../../db/client.js';
 import { caseStatusSchema, parseFingerprint, type CaseStatus, type FindingResolution } from '@nomus/scanner/corporate';
-import { cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions, cpgSnippets } from '../../db/schema-cpg.js';
+import { cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions, cpgSnippets } from '../../db/schema-cpg.js';
 import { listBoards } from '../boards/service.js';
 import { can, type CpgActor } from '../rbac/can.js';
 import { cpgVerify } from '../policies/signing.js';
@@ -20,11 +20,10 @@ import { listComments, type CommentRow } from './comments.js';
 import { latestAttempt, type ReviewerContextRow } from './context.js';
 import { currentJustifications, type JustificationRow } from './justifications.js';
 import { caseLanes } from './lanes.js';
-import { caseCover, isBlocking, latestFindings, openChangeRequests, type CaseFindingRow, type CaseRow, type RevisionRow } from './service.js';
+import { caseCover, findOpenCase, isBlocking, latestFindings, openChangeRequests, type CaseFindingRow, type CaseRow, type RevisionRow } from './service.js';
 
 /** Response builders for the review-case routes; each output is parsed with its contract. */
 
-type Db = BetterSQLite3Database<any>;
 type PolicyHead = typeof cpgPolicyHeads.$inferSelect;
 
 export const caseUrl = (origin: string, caseId: string) => `${origin}/governance/cases/${caseId}`;
@@ -145,8 +144,7 @@ export function findingsStatus(
     .map((v) => [`${v.policyKey}:${v.version}`, v]));
   const unknown = parsed.filter((p) => !versions.has(`${p.policyKey}:${p.policyVersion}`)).map((p) => p.fingerprint);
   if (unknown.length > 0) throw new CpgError(422, 'unknown_policy', 'A fingerprint names a policy version this organization does not have', { fingerprints: unknown });
-  const kase = db.select().from(cpgCases)
-    .where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, branch.repo), eq(cpgCases.branch, branch.branch), isNull(cpgCases.closedAt))).get();
+  const kase = findOpenCase(db, { orgId, repo: branch.repo, branch: branch.branch });
   const ctx: ResolutionContext = {
     cover: coverFindings(db, orgId, parsed.map((p) => p.fingerprint), located ?? (kase ? latestFindings(db, kase.id) : []).map((f) => ({ ...f, ...branch })), branch.repo, now),
     pending: kase ? pendingFingerprints(db, kase.id, now) : new Set(),

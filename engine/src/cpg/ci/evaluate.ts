@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, gt } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import {
   canonicalJson, ciRunPayloadSchema, CI_RUN_KIND, normalizeSnippet, parseFingerprint, sha256Hex,
   type CiEvaluateRequest, type CiEvaluateResponse, type FindingResolution,
@@ -29,11 +29,10 @@ import { cpgSign } from '../policies/signing.js';
  * on the case and in the audit chain. A refused request writes nothing.
  */
 
-type Db = BetterSQLite3Database<any>;
 type ResolvedFinding = CiEvaluateResponse['findings'][number];
 type Counts = CiEvaluateResponse['counts'];
 
-export interface CiCaller {
+interface CiCaller {
   orgId: string;
   apiKeyId: string;
 }

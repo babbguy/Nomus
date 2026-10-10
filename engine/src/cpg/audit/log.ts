@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { z } from 'zod';
 import { canonicalJSON } from '../../core/policy-compiler.js';
 import { cpgAuditEvents } from '../../db/schema-cpg.js';
@@ -20,49 +20,17 @@ import { rawSqlite } from '../../db/migrations/runner.js';
 
 export const GENESIS_HASH = '0'.repeat(64);
 
-type Db = BetterSQLite3Database<any>;
-
 /** Payloads are JSON objects; every value must survive canonicalJSON unchanged. */
-export const auditPayloadSchema = z.record(z.string(), z.unknown());
+const auditPayloadSchema = z.record(z.string(), z.unknown());
 
-export interface AuditEventInput {
-  orgId: string;
-  actor: string;
-  action: string;
-  targetType: string;
-  targetId: string | null;
-  payload: Record<string, unknown>;
-}
-
-export interface AuditEventRow {
-  id: string;
-  orgId: string;
-  seq: number;
-  actor: string;
-  action: string;
-  targetType: string;
-  targetId: string | null;
-  payload: string;
-  prevHash: string;
-  hash: string;
-  createdAt: string;
-}
+type AuditEventRow = typeof cpgAuditEvents.$inferSelect;
+type AuditEventInput = Pick<AuditEventRow, 'orgId' | 'actor' | 'action' | 'targetType' | 'targetId'> & { payload: Record<string, unknown> };
 
 /** The hash of one event given its predecessor's hash. */
-export function computeAuditHash(prevHash: string, e: {
-  id: string; orgId: string; seq: number; actor: string; action: string;
-  targetType: string; targetId: string | null; payload: unknown; createdAt: string;
-}): string {
+export function computeAuditHash(prevHash: string, e: Omit<AuditEventRow, 'payload' | 'prevHash' | 'hash'> & { payload: unknown }): string {
   const body = canonicalJSON({
-    id: e.id,
-    org_id: e.orgId,
-    seq: e.seq,
-    actor: e.actor,
-    action: e.action,
-    target_type: e.targetType,
-    target_id: e.targetId,
-    payload: e.payload,
-    created_at: e.createdAt,
+    id: e.id, org_id: e.orgId, seq: e.seq, actor: e.actor, action: e.action,
+    target_type: e.targetType, target_id: e.targetId, payload: e.payload, created_at: e.createdAt,
   });
   return createHash('sha256').update(prevHash + body).digest('hex');
 }
@@ -79,24 +47,11 @@ export function appendAuditEvent(db: Db, input: AuditEventInput): AuditEventRow 
   const hashedPayload = JSON.parse(payloadText) as unknown;
 
   return rawSqlite(db).transaction(() => {
-    const last = db.select({ seq: cpgAuditEvents.seq, hash: cpgAuditEvents.hash })
-      .from(cpgAuditEvents)
-      .where(eq(cpgAuditEvents.orgId, input.orgId))
-      .orderBy(desc(cpgAuditEvents.seq))
-      .limit(1)
-      .get();
-
+    const last = db.select({ seq: cpgAuditEvents.seq, hash: cpgAuditEvents.hash }).from(cpgAuditEvents)
+      .where(eq(cpgAuditEvents.orgId, input.orgId)).orderBy(desc(cpgAuditEvents.seq)).limit(1).get();
     const row: AuditEventRow = {
-      id: randomUUID(),
-      orgId: input.orgId,
-      seq: (last?.seq ?? 0) + 1,
-      actor: input.actor,
-      action: input.action,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      payload: payloadText,
-      prevHash: last?.hash ?? GENESIS_HASH,
-      hash: '',
+      id: randomUUID(), orgId: input.orgId, seq: (last?.seq ?? 0) + 1, actor: input.actor, action: input.action,
+      targetType: input.targetType, targetId: input.targetId, payload: payloadText, prevHash: last?.hash ?? GENESIS_HASH, hash: '',
       createdAt: new Date().toISOString(),
     };
     row.hash = computeAuditHash(row.prevHash, { ...row, payload: hashedPayload });
@@ -105,7 +60,7 @@ export function appendAuditEvent(db: Db, input: AuditEventInput): AuditEventRow 
   })();
 }
 
-export interface ChainVerification {
+interface ChainVerification {
   valid: boolean;
   checked: number;
   /** The first seq whose link or hash does not verify, or null. */
@@ -114,11 +69,7 @@ export interface ChainVerification {
 
 /** Re-verify an org's entire chain from genesis. */
 export function verifyAuditChain(db: Db, orgId: string): ChainVerification {
-  const rows = db.select().from(cpgAuditEvents)
-    .where(eq(cpgAuditEvents.orgId, orgId))
-    .orderBy(asc(cpgAuditEvents.seq))
-    .all();
-
+  const rows = db.select().from(cpgAuditEvents).where(eq(cpgAuditEvents.orgId, orgId)).orderBy(asc(cpgAuditEvents.seq)).all();
   let prev = GENESIS_HASH;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -128,9 +79,7 @@ export function verifyAuditChain(db: Db, orgId: string): ChainVerification {
     } catch {
       return { valid: false, checked: i, firstInvalidSeq: r.seq };
     }
-    const ok = r.seq === i + 1
-      && r.prevHash === prev
-      && computeAuditHash(prev, { ...r, payload }) === r.hash;
+    const ok = r.seq === i + 1 && r.prevHash === prev && computeAuditHash(prev, { ...r, payload }) === r.hash;
     if (!ok) return { valid: false, checked: i, firstInvalidSeq: r.seq };
     prev = r.hash;
   }
@@ -139,8 +88,6 @@ export function verifyAuditChain(db: Db, orgId: string): ChainVerification {
 
 /** Convenience for tests and the export: the events of one action in an org. */
 export function listAuditEventsByAction(db: Db, orgId: string, action: string) {
-  return db.select().from(cpgAuditEvents)
-    .where(and(eq(cpgAuditEvents.orgId, orgId), eq(cpgAuditEvents.action, action)))
-    .orderBy(asc(cpgAuditEvents.seq))
-    .all();
+  return db.select().from(cpgAuditEvents).where(and(eq(cpgAuditEvents.orgId, orgId), eq(cpgAuditEvents.action, action)))
+    .orderBy(asc(cpgAuditEvents.seq)).all();
 }

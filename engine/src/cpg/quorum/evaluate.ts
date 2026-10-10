@@ -9,8 +9,8 @@ import type { QuorumConfig, TIERS } from './schema.js';
  * the config then in force, every time a vote may finalize it.
  */
 
-export type Scope = 'snippet' | 'bulk' | 'standing';
-export type Tier = (typeof TIERS)[number];
+type Scope = 'snippet' | 'bulk' | 'standing';
+type Tier = (typeof TIERS)[number];
 export type Outcome = 'approve' | 'reject';
 
 const DAY_MS = 86_400_000;
@@ -27,7 +27,7 @@ export const requirementSchema = z.object({
 }).strict();
 export type Requirement = z.infer<typeof requirementSchema>;
 
-export interface DecisionTarget {
+interface DecisionTarget {
   scope: Scope;
   tier: Tier;
   policyId: string;

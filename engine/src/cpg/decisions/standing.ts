@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { checkRegexSafety, compileGlobList, globError, repoPatternError } from '@nomus/scanner/corporate';
 import {
   cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgDecisions, cpgPolicyHeads, cpgProposals, cpgRevocations, cpgSnippets, cpgTeamRepos, cpgTeams,
@@ -16,8 +16,6 @@ import type { DecisionRow } from './resolve.js';
  * version (D11), and teams are resolved to their repository patterns at match
  * time, so archiving a team or changing its repositories takes effect at once.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 /** One occurrence of a finding, located in a repository and branch. */
 export interface LocatedFinding {
@@ -108,7 +106,7 @@ function teamRepos(db: Db, orgId: string): Map<string, string[]> {
   return by;
 }
 
-export const resolveRule = (pattern: StandingPattern, teams: Map<string, string[]>): StandingRule =>
+const resolveRule = (pattern: StandingPattern, teams: Map<string, string[]>): StandingRule =>
   ({ pattern, teamRepos: pattern.teamIds.flatMap((id) => teams.get(id) ?? []) });
 
 /** Every standing exception of the org, oldest first, with its pattern (from the immutable proposal) and revocation. */

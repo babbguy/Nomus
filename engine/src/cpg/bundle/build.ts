@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import {
   bundleHashOf, bundleSignedText, corporateBundleSchema, corporateRuleSchema, sortBundlePolicies, BUNDLE_KIND,
   type BundlePolicy, type CorporateBundle,
@@ -20,9 +20,7 @@ import { cpgSign } from '../policies/signing.js';
  * change: activation, retirement, settings and board renames.
  */
 
-type Db = BetterSQLite3Database<any>;
-
-export interface BuiltBundle {
+interface BuiltBundle {
   bundle: CorporateBundle;
   /** Strong ETag: the content hash plus the enabled flag (both are signed). */
   etag: string;
@@ -30,7 +28,7 @@ export interface BuiltBundle {
 
 const cache = new PolicyCache<BuiltBundle>(500, 300);
 
-export function bundleCacheKey(orgId: string): string {
+function bundleCacheKey(orgId: string): string {
   return `cpg:${orgId}`;
 }
 

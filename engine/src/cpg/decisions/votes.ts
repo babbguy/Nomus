@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgCaseRevisions, cpgJustifications, cpgVotes } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
@@ -22,8 +22,6 @@ import { getProposal, proposalView, requiredOf, type ProposalRow, type VoteRow }
  * trg_cpg_votes_no_self_approval refuses it again for the proposal's own case.
  */
 
-type Db = BetterSQLite3Database<any>;
-
 /** Permissions a vote may need (§4.1 requiredPermission); held ones are snapshotted. */
 const VOTE_PERMISSIONS = ['case.review', 'exception.approve'] as const;
 
@@ -38,7 +36,7 @@ export function isSelfApproval(db: Db, c: CaseRow, userId: string): boolean {
   return justified !== undefined || revised !== undefined;
 }
 
-export interface Eligibility {
+interface Eligibility {
   boards: string[];
   permissions: string[];
 }

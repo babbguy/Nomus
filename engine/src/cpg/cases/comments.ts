@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgComments } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
@@ -18,7 +18,6 @@ import { addCaseEvent, assertLatestFingerprints, getCase, openCase, openChangeRe
  * Everything is append-only: resolving is a reply plus a case event.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type CommentRow = typeof cpgComments.$inferSelect;
 
 interface CommentBase {

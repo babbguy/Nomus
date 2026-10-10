@@ -15,11 +15,8 @@ import { cpgIntegrationRoutes } from './integrations.js';
 
 /**
  * Corporate Policy Governance API, mounted at /api/v1/cpg (design spec §9).
- *
- * Every route applies, in order: requireSessionOrApiKey(...) (so the
- * temporary-password block fires first), rateLimit(), then
- * requireCpgPermission(...). Responses are parsed with their zod contract
- * from cpg/contracts.ts before they are sent.
+ * Every route is guarded by cpgAuth() (helpers.ts), and responses are parsed
+ * with their zod contract from cpg/contracts.ts before they are sent.
  */
 export const cpgRoutes = new Hono<AppEnv>();
 

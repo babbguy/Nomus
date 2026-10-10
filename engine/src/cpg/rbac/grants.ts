@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalRepoPattern, isCanonicalRepo } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgRolePermissions, cpgRoles, cpgTeams, cpgUserRoles } from '../../db/schema-cpg.js';
@@ -16,9 +16,7 @@ import { isScopable } from './catalog.js';
  * transaction.
  */
 
-type Db = BetterSQLite3Database<any>;
-
-export type ScopeType = 'org' | 'team' | 'repo';
+type ScopeType = 'org' | 'team' | 'repo';
 export type GrantRow = typeof cpgUserRoles.$inferSelect;
 export type RoleRow = typeof cpgRoles.$inferSelect;
 
@@ -35,7 +33,7 @@ export function rolePermissionKeys(db: Db, roleId: string): string[] {
     .where(eq(cpgRolePermissions.roleId, roleId)).all().map((r) => r.key).sort();
 }
 
-export function getGrant(db: Db, orgId: string, grantId: string): GrantRow | undefined {
+function getGrant(db: Db, orgId: string, grantId: string): GrantRow | undefined {
   return db.select().from(cpgUserRoles).where(and(eq(cpgUserRoles.id, grantId), eq(cpgUserRoles.orgId, orgId))).get();
 }
 
@@ -69,54 +67,33 @@ export function isLastOrgAdmin(db: Db, orgId: string, userId: string): boolean {
   return admins.some((a) => a.userId === userId) && admins.every((a) => a.userId === userId);
 }
 
+interface GrantInput { orgId: string; userId: string; role: RoleRow; scopeType: ScopeType; scopeId: string | null; actor: string }
+
 /** Insert a grant row and its audit event. No validation: callers validate. */
-export function insertGrant(db: Db, input: {
-  orgId: string; userId: string; role: RoleRow; scopeType: ScopeType; scopeId: string | null; actor: string;
-}): GrantRow {
+export function insertGrant(db: Db, input: GrantInput): GrantRow {
+  const { orgId, userId, role, scopeType, scopeId, actor } = input;
   const row: GrantRow = {
-    id: randomUUID(),
-    orgId: input.orgId,
-    userId: input.userId,
-    roleId: input.role.id,
-    scopeType: input.scopeType,
-    scopeId: input.scopeId,
-    grantedBy: input.actor,
-    grantedAt: new Date().toISOString(),
-    revokedAt: null,
-    revokedBy: null,
-    revokeReason: null,
+    id: randomUUID(), orgId, userId, roleId: role.id, scopeType, scopeId, grantedBy: actor, grantedAt: new Date().toISOString(),
+    revokedAt: null, revokedBy: null, revokeReason: null,
   };
   rawSqlite(db).transaction(() => {
     db.insert(cpgUserRoles).values(row).run();
     appendAuditEvent(db, {
-      orgId: input.orgId,
-      actor: input.actor,
-      action: 'grant.created',
-      targetType: 'grant',
-      targetId: row.id,
-      payload: { userId: input.userId, roleId: input.role.id, roleKey: input.role.key, scopeType: input.scopeType, scopeId: input.scopeId },
+      orgId, actor, action: 'grant.created', targetType: 'grant', targetId: row.id,
+      payload: { userId, roleId: role.id, roleKey: role.key, scopeType, scopeId },
     });
   })();
   return row;
 }
 
 /** Grant a role unless an identical active grant exists. Returns the grant either way. */
-export function grantIfMissing(db: Db, input: {
-  orgId: string; userId: string; role: RoleRow; scopeType: ScopeType; scopeId: string | null; actor: string;
-}): { grant: GrantRow; created: boolean } {
+export function grantIfMissing(db: Db, input: GrantInput): { grant: GrantRow; created: boolean } {
   const existing = findActiveGrant(db, input.userId, input.role.id, input.scopeType, input.scopeId);
   if (existing) return { grant: existing, created: false };
   return { grant: insertGrant(db, input), created: true };
 }
 
-export interface CreateGrantInput {
-  orgId: string;
-  userId: string;
-  roleId: string;
-  scopeType: ScopeType;
-  scopeId?: string | null;
-  actor: string;
-}
+type CreateGrantInput = Omit<GrantInput, 'role' | 'scopeId'> & { roleId: string; scopeId?: string | null };
 
 /**
  * Validated grant creation (E10, E18). Idempotent: an identical active grant
@@ -182,16 +159,10 @@ export function revokeGrant(db: Db, input: { orgId: string; grantId: string; act
 
 function writeRevocation(db: Db, grant: GrantRow, roleKey: string | null, actor: string, reason: string): GrantRow {
   const now = new Date().toISOString();
-  db.update(cpgUserRoles)
-    .set({ revokedAt: now, revokedBy: actor, revokeReason: reason })
-    .where(and(eq(cpgUserRoles.id, grant.id), isNull(cpgUserRoles.revokedAt)))
-    .run();
+  db.update(cpgUserRoles).set({ revokedAt: now, revokedBy: actor, revokeReason: reason })
+    .where(and(eq(cpgUserRoles.id, grant.id), isNull(cpgUserRoles.revokedAt))).run();
   appendAuditEvent(db, {
-    orgId: grant.orgId,
-    actor,
-    action: 'grant.revoked',
-    targetType: 'grant',
-    targetId: grant.id,
+    orgId: grant.orgId, actor, action: 'grant.revoked', targetType: 'grant', targetId: grant.id,
     payload: { userId: grant.userId, roleId: grant.roleId, roleKey, scopeType: grant.scopeType, scopeId: grant.scopeId, reason },
   });
   return { ...grant, revokedAt: now, revokedBy: actor, revokeReason: reason };

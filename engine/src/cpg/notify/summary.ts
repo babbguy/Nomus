@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { organizations } from '../../db/schema.js';
 import { cpgBoards, cpgPolicies, cpgPolicyVersions } from '../../db/schema-cpg.js';
 import { env } from '../../config/env.js';
@@ -18,8 +18,6 @@ import { boardIdsOf } from '../policies/service.js';
  * The strict schema is parsed before anything is stored or rendered, so an
  * unknown key cannot reach an email, a Jira issue or a webhook.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export const CPG_EVENTS = [
   'case.review_requested', 'case.changes_requested', 'case.replied', 'decision.recorded', 'case.closed',
