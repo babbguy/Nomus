@@ -5,12 +5,8 @@ import type { AppEnv } from '../../app.js';
 import { getDb, type Db } from '../../../db/client.js';
 import { users } from '../../../db/schema.js';
 import { cpgDeliveryAttempts, cpgNotificationDeliveries } from '../../../db/schema-cpg.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
 import { appendAuditEvent } from '../../../cpg/audit/log.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
-import { can } from '../../../cpg/rbac/can.js';
 import { CpgError, notFound } from '../../../cpg/errors.js';
 import {
   createIntegration, getIntegration, integrationCreateSchema, integrationPatchSchema, listIntegrations, patchIntegration, rotateSecret,
@@ -18,7 +14,7 @@ import {
 } from '../../../cpg/notify/integrations.js';
 import { enqueueRetry, enqueueTest, type DeliveryRow } from '../../../cpg/notify/outbox.js';
 import { attemptDelivery } from '../../../cpg/notify/worker.js';
-import { actorFrom, auditActor, handle, parseBody, parseQuery, pathParam } from './helpers.js';
+import { actorFrom, auditActor, cpgAuth, handle, parseBody, parseQuery, pathParam, requireEither } from './helpers.js';
 
 /**
  * E64 to E70 (design spec §9.2, §12): integrations and the delivery log.
@@ -26,7 +22,7 @@ import { actorFrom, auditActor, handle, parseBody, parseQuery, pathParam } from 
  */
 export const cpgIntegrationRoutes = new Hono<AppEnv>();
 
-const manage = [requireSessionOrApiKey(), rateLimit(), requireCpgPermission('integrations.manage')] as const;
+const manage = cpgAuth('integrations.manage');
 
 const deliveryQuerySchema = z.object({
   integrationId: z.string().uuid().optional(),
@@ -85,9 +81,9 @@ cpgIntegrationRoutes.post('/integrations/:id/test', ...manage, handle(async (c) 
 }));
 
 // E69: integrations.manage or audit.read.
-cpgIntegrationRoutes.get('/deliveries', requireSessionOrApiKey(), rateLimit(), requireCpgPermission(null), handle((c) => {
+cpgIntegrationRoutes.get('/deliveries', ...cpgAuth(null), handle((c) => {
   const actor = actorFrom(c);
-  if (!can(actor, 'integrations.manage') && !can(actor, 'audit.read')) throw new CpgError(403, 'forbidden', 'Missing permission integrations.manage or audit.read', { permission: 'audit.read' });
+  requireEither(actor, 'integrations.manage', 'audit.read', 'audit.read');
   const q = parseQuery(c, deliveryQuerySchema);
   const db = getDb();
   const where: SQL[] = [eq(cpgNotificationDeliveries.orgId, actor.orgId)];

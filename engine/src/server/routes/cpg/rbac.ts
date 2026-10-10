@@ -6,10 +6,7 @@ import { getDb, type Db } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
 import { organizations, users } from '../../../db/schema.js';
 import { cpgPermissions, cpgRolePermissions, cpgRoles, cpgTeamRepos, cpgTeams, cpgUserRoles } from '../../../db/schema-cpg.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
-import { ORG_ADMIN_LOCKED_PERMISSIONS, isScopable, type PermissionKey } from '../../../cpg/rbac/catalog.js';
+import { ORG_ADMIN_LOCKED_PERMISSIONS, isScopable } from '../../../cpg/rbac/catalog.js';
 import {
   createGrant, getRole, getRoleByKey, grantIfMissing, isLastOrgAdmin, revokeGrant, rolePermissionKeys,
 } from '../../../cpg/rbac/grants.js';
@@ -25,7 +22,7 @@ import {
 import { CpgError, notFound } from '../../../cpg/errors.js';
 import { invitationMessage, makeTemporaryPassword, sendInvitationEmail } from '../../../services/invitations.js';
 import { logger } from '../../../logger.js';
-import { actorFrom, auditActor, handle, parseBody, pathParam } from './helpers.js';
+import { actorFrom, auditActor, cpgAuth, handle, parseBody, pathParam } from './helpers.js';
 
 /**
  * Org-scoped RBAC (design spec §3, endpoints E2 to E14): the permission
@@ -34,11 +31,9 @@ import { actorFrom, auditActor, handle, parseBody, pathParam } from './helpers.j
  */
 export const cpgRbacRoutes = new Hono<AppEnv>();
 
-const session = (permission: PermissionKey) => [requireSessionOrApiKey(), rateLimit(), requireCpgPermission(permission)] as const;
-
 // ─── E2 permissions ────────────────────────────────────────────────────
 
-cpgRbacRoutes.get('/permissions', ...session('org.members.read'), handle((c) => {
+cpgRbacRoutes.get('/permissions', ...cpgAuth('org.members.read'), handle((c) => {
   const items = getDb().select().from(cpgPermissions).orderBy(asc(cpgPermissions.key)).all()
     .map((p) => ({ key: p.key, category: p.category, scopable: p.scopable, description: p.description }));
   return c.json(listOf(permissionResponseSchema).parse({ items }));
@@ -46,7 +41,7 @@ cpgRbacRoutes.get('/permissions', ...session('org.members.read'), handle((c) => 
 
 // ─── E3–E6 roles ───────────────────────────────────────────────────────
 
-cpgRbacRoutes.get('/roles', ...session('org.members.read'), handle((c) => {
+cpgRbacRoutes.get('/roles', ...cpgAuth('org.members.read'), handle((c) => {
   const db = getDb();
   const items = db.select().from(cpgRoles)
     .where(eq(cpgRoles.orgId, actorFrom(c).orgId))
@@ -56,7 +51,7 @@ cpgRbacRoutes.get('/roles', ...session('org.members.read'), handle((c) => {
   return c.json(listOf(roleResponseSchema).parse({ items }));
 }));
 
-cpgRbacRoutes.post('/roles', ...session('rbac.roles.manage'), handle(async (c) => {
+cpgRbacRoutes.post('/roles', ...cpgAuth('rbac.roles.manage'), handle(async (c) => {
   const body = await parseBody(c, createRoleRequestSchema);
   const db = getDb();
   const orgId = actorFrom(c).orgId;
@@ -85,7 +80,7 @@ function hasScopedGrants(db: Db, roleId: string): boolean {
     .some((g) => !g.revokedAt && g.scopeType !== 'org');
 }
 
-cpgRbacRoutes.patch('/roles/:id', ...session('rbac.roles.manage'), handle(async (c) => {
+cpgRbacRoutes.patch('/roles/:id', ...cpgAuth('rbac.roles.manage'), handle(async (c) => {
   const body = await parseBody(c, patchRoleRequestSchema);
   const db = getDb();
   const orgId = actorFrom(c).orgId;
@@ -137,7 +132,7 @@ cpgRbacRoutes.patch('/roles/:id', ...session('rbac.roles.manage'), handle(async 
   return c.json(roleResponseSchema.parse(serializeRole(db, updated)));
 }));
 
-cpgRbacRoutes.post('/roles/:id/archive', ...session('rbac.roles.manage'), handle(async (c) => {
+cpgRbacRoutes.post('/roles/:id/archive', ...cpgAuth('rbac.roles.manage'), handle(async (c) => {
   await parseBody(c, emptyRequestSchema);
   const db = getDb();
   const orgId = actorFrom(c).orgId;
@@ -168,7 +163,7 @@ function orgUser(db: Db, orgId: string, userId: string) {
   return u;
 }
 
-cpgRbacRoutes.get('/users', ...session('org.members.read'), handle((c) => {
+cpgRbacRoutes.get('/users', ...cpgAuth('org.members.read'), handle((c) => {
   const db = getDb();
   const orgId = actorFrom(c).orgId;
   const items = db.select(userColumns).from(users)
@@ -179,7 +174,7 @@ cpgRbacRoutes.get('/users', ...session('org.members.read'), handle((c) => {
   return c.json(listOf(orgUserResponseSchema).parse({ items }));
 }));
 
-cpgRbacRoutes.post('/users', ...session('rbac.users.manage'), handle(async (c) => {
+cpgRbacRoutes.post('/users', ...cpgAuth('rbac.users.manage'), handle(async (c) => {
   const body = await parseBody(c, createUserRequestSchema);
   const db = getDb();
   const orgId = actorFrom(c).orgId;
@@ -224,7 +219,7 @@ cpgRbacRoutes.post('/users', ...session('rbac.users.manage'), handle(async (c) =
   return c.json({ user: orgUserResponseSchema.parse(user), tempPassword }, 201);
 }));
 
-cpgRbacRoutes.patch('/users/:id', ...session('rbac.users.manage'), handle(async (c) => {
+cpgRbacRoutes.patch('/users/:id', ...cpgAuth('rbac.users.manage'), handle(async (c) => {
   const body = await parseBody(c, patchUserRequestSchema);
   const db = getDb();
   const actorInfo = actorFrom(c);
@@ -256,7 +251,7 @@ cpgRbacRoutes.patch('/users/:id', ...session('rbac.users.manage'), handle(async 
   return c.json(orgUserResponseSchema.parse(serializeOrgUser(db, orgId, orgUser(db, orgId, userId))));
 }));
 
-cpgRbacRoutes.post('/users/:id/grants', ...session('rbac.users.manage'), handle(async (c) => {
+cpgRbacRoutes.post('/users/:id/grants', ...cpgAuth('rbac.users.manage'), handle(async (c) => {
   const body = await parseBody(c, createGrantRequestSchema);
   const db = getDb();
   const orgId = actorFrom(c).orgId;
@@ -266,7 +261,7 @@ cpgRbacRoutes.post('/users/:id/grants', ...session('rbac.users.manage'), handle(
   return c.json(grantResponseSchema.parse(serializeGrant(db, grant)), created ? 201 : 200);
 }));
 
-cpgRbacRoutes.post('/grants/:id/revoke', ...session('rbac.users.manage'), handle(async (c) => {
+cpgRbacRoutes.post('/grants/:id/revoke', ...cpgAuth('rbac.users.manage'), handle(async (c) => {
   const body = await parseBody(c, revokeGrantRequestSchema);
   const db = getDb();
   const grant = revokeGrant(db, { orgId: actorFrom(c).orgId, grantId: pathParam(c, 'id'), actor: auditActor(c), reason: body.reason });
@@ -286,7 +281,7 @@ function getTeam(db: Db, orgId: string, teamId: string) {
   return team;
 }
 
-cpgRbacRoutes.get('/teams', ...session('org.members.read'), handle((c) => {
+cpgRbacRoutes.get('/teams', ...cpgAuth('org.members.read'), handle((c) => {
   const db = getDb();
   const items = db.select().from(cpgTeams)
     .where(eq(cpgTeams.orgId, actorFrom(c).orgId))
@@ -296,7 +291,7 @@ cpgRbacRoutes.get('/teams', ...session('org.members.read'), handle((c) => {
   return c.json(listOf(teamResponseSchema).parse({ items }));
 }));
 
-cpgRbacRoutes.post('/teams', ...session('rbac.teams.manage'), handle(async (c) => {
+cpgRbacRoutes.post('/teams', ...cpgAuth('rbac.teams.manage'), handle(async (c) => {
   const body = await parseBody(c, createTeamRequestSchema);
   validatePatterns(body.repoPatterns);
   const db = getDb();
@@ -321,7 +316,7 @@ cpgRbacRoutes.post('/teams', ...session('rbac.teams.manage'), handle(async (c) =
   return c.json(teamResponseSchema.parse(serializeTeam(db, team)), 201);
 }));
 
-cpgRbacRoutes.patch('/teams/:id', ...session('rbac.teams.manage'), handle(async (c) => {
+cpgRbacRoutes.patch('/teams/:id', ...cpgAuth('rbac.teams.manage'), handle(async (c) => {
   const body = await parseBody(c, patchTeamRequestSchema);
   if (body.repoPatterns) validatePatterns(body.repoPatterns);
   const db = getDb();

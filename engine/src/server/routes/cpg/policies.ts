@@ -3,10 +3,6 @@ import { and, eq } from 'drizzle-orm';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import { cpgCompileRecords } from '../../../db/schema-cpg.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
-import { can } from '../../../cpg/rbac/can.js';
 import { compilePolicy, compileRequestSchema } from '../../../cpg/policies/compile.js';
 import {
   castVote, getPolicy, getVersion, proposeRetirement, proposeVersion, votesOf, userNames, withdrawVersion,
@@ -18,7 +14,7 @@ import {
   proposeVersionRequestSchema, retirePolicyRequestSchema, voteRequestSchema, voteResponseSchema,
 } from '../../../cpg/contracts.js';
 import { CpgError, notFound } from '../../../cpg/errors.js';
-import { actorFrom, handle, parseBody, parseQuery, pathParam } from './helpers.js';
+import { actorFrom, cpgAuth, handle, parseBody, parseQuery, pathParam, requireEither } from './helpers.js';
 
 /**
  * The corporate policy registry (design spec §8, E29 to E37 and E39):
@@ -29,11 +25,10 @@ import { actorFrom, handle, parseBody, parseQuery, pathParam } from './helpers.j
  */
 export const cpgPolicyRoutes = new Hono<AppEnv>();
 
-const session = (permission: Parameters<typeof requireCpgPermission>[0]) => [requireSessionOrApiKey(), rateLimit(), requireCpgPermission(permission)] as const;
-const readable = [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission('policy.read', { allowUserKey: true })] as const;
+const readable = cpgAuth('policy.read', { scope: 'read:policies', allowUserKey: true });
 
 // E29 compile
-cpgPolicyRoutes.post('/compile', ...session('policy.author'), handle(async (c) => {
+cpgPolicyRoutes.post('/compile', ...cpgAuth('policy.author'), handle(async (c) => {
   const request = await parseBody(c, compileRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();
@@ -43,11 +38,9 @@ cpgPolicyRoutes.post('/compile', ...session('policy.author'), handle(async (c) =
 }));
 
 // E30
-cpgPolicyRoutes.get('/compile/:id', ...session(null), handle((c) => {
+cpgPolicyRoutes.get('/compile/:id', ...cpgAuth(null), handle((c) => {
   const actor = actorFrom(c);
-  if (!can(actor, 'policy.author') && !can(actor, 'policy.approve')) {
-    throw new CpgError(403, 'forbidden', 'Missing permission policy.author or policy.approve', { permission: 'policy.author' });
-  }
+  requireEither(actor, 'policy.author', 'policy.approve');
   const record = getDb().select().from(cpgCompileRecords)
     .where(and(eq(cpgCompileRecords.id, pathParam(c, 'id')), eq(cpgCompileRecords.orgId, actor.orgId))).get();
   if (!record) throw notFound('Compile record');
@@ -55,7 +48,7 @@ cpgPolicyRoutes.get('/compile/:id', ...session(null), handle((c) => {
 }));
 
 // E39 export (registered before /policies/:id)
-cpgPolicyRoutes.get('/policies/export', ...session('audit.export'), handle((c) => {
+cpgPolicyRoutes.get('/policies/export', ...cpgAuth('audit.export'), handle((c) => {
   const format = c.req.query('format') ?? 'json';
   if (format !== 'json') throw new CpgError(400, 'invalid_input', 'format must be json', [{ path: ['format'], message: 'only json is supported' }]);
   return c.json(buildPolicyExport(getDb(), actorFrom(c).orgId));
@@ -68,7 +61,7 @@ cpgPolicyRoutes.get('/policies', ...readable, handle((c) => {
 }));
 
 // E32 propose a new policy
-cpgPolicyRoutes.post('/policies', ...session('policy.author'), handle(async (c) => {
+cpgPolicyRoutes.post('/policies', ...cpgAuth('policy.author'), handle(async (c) => {
   const body = await parseBody(c, proposePolicyRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();
@@ -81,7 +74,7 @@ cpgPolicyRoutes.get('/policies/:id', ...readable, handle((c) =>
   c.json(serializePolicyDetail(getDb(), actorFrom(c).orgId, pathParam(c, 'id')))));
 
 // E34 propose a new version
-cpgPolicyRoutes.post('/policies/:id/versions', ...session('policy.author'), handle(async (c) => {
+cpgPolicyRoutes.post('/policies/:id/versions', ...cpgAuth('policy.author'), handle(async (c) => {
   const body = await parseBody(c, proposeVersionRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();
@@ -92,7 +85,7 @@ cpgPolicyRoutes.post('/policies/:id/versions', ...session('policy.author'), hand
 }));
 
 // E35 propose retirement
-cpgPolicyRoutes.post('/policies/:id/retire', ...session('policy.author'), handle(async (c) => {
+cpgPolicyRoutes.post('/policies/:id/retire', ...cpgAuth('policy.author'), handle(async (c) => {
   const body = await parseBody(c, retirePolicyRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();
@@ -102,7 +95,7 @@ cpgPolicyRoutes.post('/policies/:id/retire', ...session('policy.author'), handle
 }));
 
 // E36 vote
-cpgPolicyRoutes.post('/policy-versions/:id/votes', ...session('policy.approve'), handle(async (c) => {
+cpgPolicyRoutes.post('/policy-versions/:id/votes', ...cpgAuth('policy.approve'), handle(async (c) => {
   const body = await parseBody(c, voteRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();
@@ -121,7 +114,7 @@ cpgPolicyRoutes.post('/policy-versions/:id/votes', ...session('policy.approve'),
 }));
 
 // E37 withdraw (the author only)
-cpgPolicyRoutes.post('/policy-versions/:id/withdraw', ...session(null), handle(async (c) => {
+cpgPolicyRoutes.post('/policy-versions/:id/withdraw', ...cpgAuth(null), handle(async (c) => {
   await parseBody(c, emptyRequestSchema);
   const actor = actorFrom(c);
   const db = getDb();

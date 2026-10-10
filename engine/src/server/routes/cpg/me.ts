@@ -4,15 +4,12 @@ import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import { users } from '../../../db/schema.js';
 import { cpgRoles } from '../../../db/schema-cpg.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
 import { summarizePermissions } from '../../../cpg/rbac/can.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
 import { boardsOfUser } from '../../../cpg/boards/service.js';
 import { meResponseSchema } from '../../../cpg/contracts.js';
 import { notFound } from '../../../cpg/errors.js';
-import { actorFrom, handle } from './helpers.js';
+import { actorFrom, cpgAuth, handle } from './helpers.js';
 
 /**
  * E1 GET /api/v1/cpg/me: who the caller is in CPG terms. Sessions and
@@ -34,7 +31,7 @@ function rolesOf(db: ReturnType<typeof getDb>, roleIds: string[]): Array<{ id: s
     .sort((a, b) => a.key.localeCompare(b.key));
 }
 
-cpgMeRoutes.get('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission(null, { allowUserKey: true }), handle((c) => {
+cpgMeRoutes.get('/', ...cpgAuth(null, { allowUserKey: true }), handle((c) => {
   const db = getDb();
   const actor = actorFrom(c);
   const user = db.select({ id: users.id, name: users.name, email: users.email, role: users.role })

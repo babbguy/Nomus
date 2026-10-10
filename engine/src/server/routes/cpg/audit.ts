@@ -3,14 +3,11 @@ import { and, desc, eq, gte, lt, lte, type SQL } from 'drizzle-orm';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import { cpgAuditEvents } from '../../../db/schema-cpg.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
 import { verifyAuditChain } from '../../../cpg/audit/log.js';
 import { buildGovernanceExport } from '../../../cpg/audit/export.js';
 import { auditListResponseSchema, auditQuerySchema } from '../../../cpg/contracts.js';
 import { CpgError } from '../../../cpg/errors.js';
-import { actorFrom, handle, parseQuery } from './helpers.js';
+import { actorFrom, cpgAuth, handle, parseQuery } from './helpers.js';
 
 /**
  * E17 GET /api/v1/cpg/audit: the org's hash-chained audit log, newest first,
@@ -33,13 +30,13 @@ function decodeCursor(cursor: string): number {
 }
 
 // E73 the signed governance audit export (registered before the list; the policy log export is E39)
-cpgAuditRoutes.get('/export', requireSessionOrApiKey(), rateLimit(), requireCpgPermission('audit.export'), handle((c) => {
+cpgAuditRoutes.get('/export', ...cpgAuth('audit.export'), handle((c) => {
   const orgId = actorFrom(c).orgId;
   c.header('Content-Disposition', `attachment; filename="nomus-governance-audit-${new Date().toISOString().slice(0, 10)}.json"`);
   return c.json(buildGovernanceExport(getDb(), orgId));
 }));
 
-cpgAuditRoutes.get('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission('audit.read'), handle((c) => {
+cpgAuditRoutes.get('/', ...cpgAuth('audit.read'), handle((c) => {
   const q = parseQuery(c, auditQuerySchema);
   const db = getDb();
   const orgId = actorFrom(c).orgId;

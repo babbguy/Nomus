@@ -5,15 +5,12 @@ import { getDb, type Db } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
 import { cpgOrgSettings } from '../../../db/schema-cpg.js';
 import { isLlmProviderConfigured } from '../../../llm/provider.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { requireCpgPermission } from '../../../cpg/rbac/middleware.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
 import { appendAuditEvent } from '../../../cpg/audit/log.js';
 import { invalidateCorporateBundle } from '../../../cpg/bundle/build.js';
 import { cpgSettingsResponseSchema, patchSettingsRequestSchema, type CpgSettingsResponse } from '../../../cpg/contracts.js';
 import { notFound } from '../../../cpg/errors.js';
-import { actorFrom, auditActor, handle, parseBody } from './helpers.js';
+import { actorFrom, auditActor, cpgAuth, handle, parseBody } from './helpers.js';
 
 /** E15 GET and E16 PATCH /api/v1/cpg/settings. */
 export const cpgSettingsRoutes = new Hono<AppEnv>();
@@ -32,11 +29,10 @@ function loadSettings(db: Db, orgId: string): CpgSettingsResponse {
   });
 }
 
-cpgSettingsRoutes.get('/', requireSessionOrApiKey('read:policies'), rateLimit(),
-  requireCpgPermission('policy.read', { allowUserKey: true }),
+cpgSettingsRoutes.get('/', ...cpgAuth('policy.read', { scope: 'read:policies', allowUserKey: true }),
   handle((c) => c.json(loadSettings(getDb(), actorFrom(c).orgId))));
 
-cpgSettingsRoutes.patch('/', requireSessionOrApiKey(), rateLimit(), requireCpgPermission('org.settings.manage'),
+cpgSettingsRoutes.patch('/', ...cpgAuth('org.settings.manage'),
   handle(async (c) => {
     const body = await parseBody(c, patchSettingsRequestSchema);
     const db = getDb();

@@ -8,9 +8,7 @@ import { getDb, type Db } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
 import { cpgCaseFindings, cpgCaseRevisions, cpgCases } from '../../../db/schema-cpg.js';
 import { CPG_REVIEWER_CONTEXT_PROMPT_VERSION } from '../../../llm/prompts/cpg-reviewer-context.js';
-import { requireSessionOrApiKey } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
-import { identityOf, requireCpgPermission } from '../../../cpg/rbac/middleware.js';
+import { identityOf } from '../../../cpg/rbac/middleware.js';
 import { can, type CpgActor } from '../../../cpg/rbac/can.js';
 import type { PermissionKey } from '../../../cpg/rbac/catalog.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
@@ -30,7 +28,7 @@ import {
   emptyRequestSchema, justificationResponseSchema, requestChangesRequestSchema,
 } from '../../../cpg/contracts.js';
 import { CpgError, notFound } from '../../../cpg/errors.js';
-import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission, uploadBodyLimit } from './helpers.js';
+import { actorFrom, cpgAuth, decodeKeyset, encodeKeyset, handle, parseBody, parseQuery, pathParam, requireEnabled, requirePermission, uploadBodyLimit } from './helpers.js';
 
 /**
  * Review cases (design spec §5, E40 to E53). Permissions are checked against
@@ -43,9 +41,9 @@ import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, re
 export const cpgCaseRoutes = new Hono<AppEnv>();
 
 /** `userKey`: also accept the VS Code user-bound key (the "UK" of the endpoint table). */
-const auth = (userKey: boolean) => [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: userKey })] as const;
+const auth = (userKey: boolean) => cpgAuth(null, { scope: 'read:policies', allowUserKey: userKey });
 /** Reads the CI action also makes: an org key with read:policies is accepted ("K[read:policies]"). */
-const readAuth = [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: true, allowOrgKey: true })] as const;
+const readAuth = cpgAuth(null, { scope: 'read:policies', allowUserKey: true, allowOrgKey: true });
 
 /** The case named by :id, with `permission` checked on its repository. */
 function caseFor(c: Context<AppEnv>, permission: PermissionKey): { db: Db; actor: CpgActor; kase: CaseRow } {
@@ -126,12 +124,7 @@ cpgCaseRoutes.get('/cases', ...auth(true), handle((c) => {
       where f.case_id = ${cpgCases.id} and r.revision = ${cpgCases.latestRevision} and b.value = ${q.boardId})`);
   }
   if (q.mine === 'true') where.push(eq(cpgCases.openedBy, `user:${actor.userId}`));
-  let after: [string, string] | null = null;
-  if (q.cursor) {
-    const [at, id] = Buffer.from(q.cursor, 'base64url').toString('utf8').split('|');
-    if (!at || !id) throw new CpgError(400, 'invalid_input', 'Invalid cursor', [{ path: ['cursor'], message: 'not a cursor of this list' }]);
-    after = [at, id];
-  }
+  let after = q.cursor ? decodeKeyset(q.cursor) : null;
   // Permission is checked per row (repo and team globs), so read in batches until the page is
   // filled: a repo-scoped reader gets full pages, and a null cursor only on the last one.
   const visible: CaseRow[] = [];
@@ -147,7 +140,7 @@ cpgCaseRoutes.get('/cases', ...auth(true), handle((c) => {
   const last = page[page.length - 1];
   return c.json(caseListResponseSchema.parse({
     items: caseSummaries(db, actor.orgId, page),
-    nextCursor: visible.length > q.limit ? Buffer.from(`${last.openedAt}|${last.id}`).toString('base64url') : null,
+    nextCursor: visible.length > q.limit ? encodeKeyset(last.openedAt, last.id) : null,
   }));
 }));
 
