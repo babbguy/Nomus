@@ -159,3 +159,8 @@ export function formatSarifReport(findings: Finding[], rootDir: string): SarifLo
     }],
   };
 }
+
+export {
+  formatCorporateSarif, formatCorporateSarifRun, CORPORATE_SARIF_CATEGORY, CORPORATE_SARIF_TOOL,
+  type CorporateSarifOptions, type CorporateSarifRun,
+} from './sarif-corporate.js';

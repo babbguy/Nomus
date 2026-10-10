@@ -142,36 +142,58 @@ export function getResendApiKey(): string | undefined {
   return env().NOMUS_RESEND_API_KEY || undefined;
 }
 
-export async function sendEmail(to: string[], subject: string, html: string): Promise<boolean> {
-  const config = env();
+/** The Resend send-email endpoint (NOMUS_RESEND_API_URL, default https://api.resend.com). */
+export function resendEndpoint(): string {
+  return `${env().NOMUS_RESEND_API_URL.replace(/\/+$/, '')}/emails`;
+}
+
+export interface EmailMessage {
+  to: string[];
+  subject: string;
+  /** Body HTML; wrapped in the Nomus email layout. */
+  html: string;
+  text?: string;
+  /** Sent as Resend's Idempotency-Key, so a retried send is delivered once. */
+  idempotencyKey?: string;
+}
+
+/** What Resend answered: the HTTP status (null when no response) and the error or response excerpt. */
+export interface EmailResult { status: number | null; error: string | null; excerpt: string | null }
+
+/** Send one email through Resend and report exactly what happened. Never throws. */
+export async function sendEmailDetailed(msg: EmailMessage): Promise<EmailResult> {
   const apiKey = getResendApiKey();
-  if (!apiKey) {
+  if (!apiKey) return { status: null, error: 'No Resend API key is configured', excerpt: null };
+  try {
+    const res = await fetch(resendEndpoint(), {
+      method: 'POST',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
+      headers: {
+        Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json',
+        ...(msg.idempotencyKey ? { 'Idempotency-Key': msg.idempotencyKey } : {}),
+      },
+      body: JSON.stringify({ from: env().NOMUS_FROM_EMAIL, to: msg.to, subject: msg.subject, html: wrapEmailHtml(msg.subject, msg.html), text: msg.text }),
+    });
+    const excerpt = (await res.text()).slice(0, 500);
+    return res.ok ? { status: res.status, error: null, excerpt } : { status: res.status, error: `Resend answered ${res.status}`, excerpt };
+  } catch (err) {
+    return { status: null, error: (err as Error).message.slice(0, 500), excerpt: null };
+  }
+}
+
+export async function sendEmail(to: string[], subject: string, html: string): Promise<boolean> {
+  if (!getResendApiKey()) {
     logger.warn('Notification email skipped — no Resend API key');
     return false;
   }
-
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: config.NOMUS_FROM_EMAIL,
-        to,
-        subject,
-        html: wrapEmailHtml(subject, html),
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      logger.error({ status: res.status, err: err.slice(0, 200) }, 'Resend email failed');
-      return false;
-    }
-    logger.info({ to, subject }, 'Notification email sent');
-    return true;
-  } catch (err) {
-    logger.error({ error: (err as Error).message }, 'Notification email error');
+  const result = await sendEmailDetailed({ to, subject, html });
+  if (result.error !== null) {
+    logger.error({ status: result.status, err: (result.excerpt ?? result.error).slice(0, 200) }, 'Resend email failed');
     return false;
   }
+  logger.info({ to, subject }, 'Notification email sent');
+  return true;
 }
 
 // ─── Push Notifications (ntfy — free, self-hostable) ─────────
@@ -467,6 +489,6 @@ function wrapEmailHtml(title: string, content: string): string {
 </body></html>`;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

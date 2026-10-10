@@ -38,6 +38,22 @@ Every finding includes:
 
 Click any finding to jump directly to the offending line.
 
+### Corporate Policies
+
+If your organization defines its own engineering policies in Nomus, the extension downloads the
+organization's signed policy bundle after you sign in, verifies it, and checks your files against it
+locally (nothing is uploaded, and no AI model is involved). Corporate findings are shown next to
+regulatory ones but are easy to tell apart: their source is **Nomus Policy**, the message starts
+with `[Policy · PROHIBITED]` (or the policy's tier), the whole matched range is underlined, and the
+code links to the policy page in the dashboard. Blocking prohibited findings are errors, blocking
+review-required findings are warnings, and advisory or grace-period findings are information.
+
+The **Corporate Policies** view lists the findings by group, the repository and branch, and the
+bundle status (`verified`, or `offline (cached …)`). When the bundle cannot be used (offline with no
+or an expired cache, refused, or failing verification) corporate findings are cleared and the
+extension says why: it never shows an empty list as if nothing were wrong. See
+[Corporate Policies in the CLI and VS Code](../../docs/user-guide/corporate-policies.md).
+
 ### AI Bill of Materials (AI-BOM)
 
 Generate a complete inventory of every AI system in your codebase — models used, providers, capabilities detected, and risk classifications. Useful as an inventory for legal and audit review.
@@ -77,6 +93,7 @@ Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and type `Nomus`:
 | **Clear All Diagnostics** | Clear all Nomus findings from the editor |
 | **Show Compliance Overview** | Focus the compliance status sidebar |
 | **Refresh All Views** | Refresh all sidebar panels |
+| **Refresh Corporate Policies** | Revalidate your organization's policy bundle now and re-check the open file |
 
 ---
 
@@ -91,8 +108,10 @@ Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and type `Nomus`:
 | `nomus.apiUrl` | `http://localhost:3100` | Nomus engine API URL |
 | `nomus.apiKey` | empty | Optional API key (an alternative to Sign In) |
 | `nomus.dashboardUrl` | empty | Dashboard URL (derived from the API URL if empty) |
+| `nomus.corporate.enabled` | `true` | Show your organization's corporate policy findings (local and advisory; CI enforces) |
+| `nomus.corporate.maxCacheAgeHours` | `72` | How long a verified, cached policy bundle may be used while the server is unreachable |
 
-If the workspace folder contains a `.nomus.yml` (or `.nomus.yaml` / `.nomus.json`), it takes precedence over `nomus.jurisdictions`: the extension scans with that file's `jurisdictions`, `sector`, `data_types` and `ignore`, exactly as the Nomus CLI and GitHub Action do, so the editor and CI agree. The API key and API URL still come from Sign In and the settings above. An invalid `.nomus.yml` is reported as an error instead of being ignored.
+If the workspace folder contains a `.nomus.yml` (or `.nomus.yaml` / `.nomus.json`), it takes precedence over `nomus.jurisdictions`: the extension scans with that file's `jurisdictions`, `sector`, `data_types` and `ignore`, exactly as the Nomus CLI and GitHub Action do, so the editor and CI agree. The API key and API URL still come from Sign In and the settings above. Sign In issues a key bound to you: a teammate signing in to the same organization does not sign you out, and signing in again replaces only your own key. An invalid `.nomus.yml` is reported as an error instead of being ignored.
 
 ---
 

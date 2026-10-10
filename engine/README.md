@@ -63,6 +63,8 @@ npm run start -w engine    # node dist/index.js
 
 SQLite (better-sqlite3) via Drizzle ORM, WAL mode. The database file (`NOMUS_DB_PATH`, default `./data/nomus.db`) is created on startup, and the engine creates missing tables and adds missing columns itself (`src/db/migrate.ts`). Use a single engine process per database file.
 
+Corporate policy governance tables (`cpg_*`) use numbered raw-SQL migrations in `src/db/migrations/` (foreign keys, CHECK constraints, indexes and the triggers that make append-only tables refuse updates and deletes). Each applied migration is recorded with a checksum in `schema_migrations`; editing an applied migration makes the engine refuse to start. Never edit a migration that has shipped: add a new one.
+
 ```bash
 npm run db:generate -w engine    # drizzle-kit: generate SQL files into engine/drizzle (not used at runtime)
 npm run db:migrate -w engine     # drizzle-kit: apply those files (the repo ships none; normal runs do not need this)
@@ -81,6 +83,7 @@ The engine exposes a REST API on `NOMUS_PORT` (default 3100). Main endpoint grou
 - `/api/v1/scout/*` -- regulatory prediction
 - `/api/v1/benchmarks/*` -- AI model benchmarking
 - `/api/v1/dashboard/*` -- dashboard data
+- `/api/v1/cpg/*` -- corporate policy governance: roles, permissions, org users, teams, settings, audit log; review boards, the versioned approval quorum, the policy compile step, the corporate policy log (four-eyes approval) and the signed policy bundle
 
 Reference documentation: [docs/api-reference](../docs/api-reference/README.md).
 

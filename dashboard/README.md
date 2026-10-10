@@ -63,7 +63,23 @@ Routes are defined in `src/App.tsx`.
 | `BadgePage` | Badge embed codes |
 | `FeedbackSubmit` | Submit rule quality feedback |
 | `Team` | Team member management |
-| `Profile` / `Settings` | User profile and organization settings |
+| `Profile` / `Settings` | User profile and organization settings (API keys only with `org.api_keys.manage`) |
+
+### Governance pages (`src/pages/governance/`)
+
+Shown according to the user's organization permissions from `GET /api/v1/cpg/me`.
+
+| Page | Route | Needs | Purpose |
+|------|-------|-------|---------|
+| `GovernanceOverview` | `/governance` | any signed-in user | Governance status, links to the pages you can open, your permissions; explains a redirect |
+| `GovernanceAccess` | `/governance/access` | `org.members.read` and a `rbac.*.manage` permission | Users and grants (org, team or repository scope), role permission matrix and editor, teams |
+| `GovernanceAudit` | `/governance/audit` | `audit.read` | Hash-chained governance audit log with the chain-verification result |
+| `GovernanceSettings` | `/governance/settings` | `policy.read` (changes: `org.settings.manage`) | Turn governance on, reviewer-context generation with its data disclosure |
+| `GovernancePolicies` | `/governance/policies` | `policy.read` | The corporate policy log: state, tier, owning boards, versions, grace period or enforcement date |
+| `PolicyNew` | `/governance/policies/new` (`?policy=<id>` for a new version) | `policy.read` and `policy.author` | Plain-English authoring with code examples, compile (generated output labelled), rejection reasons, propose |
+| `PolicyDetail` | `/governance/policies/:id` | `policy.read` (votes: `policy.approve`, never the author or compile requester) | Versions, votes, signatures, supersede history, version diff, four-eyes status, withdraw, new version, retirement |
+| `GovernanceBoards` | `/governance/boards` | `policy.read` (changes: `boards.manage`) | Boards, members and the policies each board owns |
+| `GovernanceQuorum` | `/governance/quorum` | `policy.read` (edit: `quorum.manage`; history: `audit.read` or `quorum.manage`) | The signed quorum in force, a validating editor that saves new versions, version history with changes |
 
 ### Public and auth pages
 
@@ -80,14 +96,23 @@ Routes are defined in `src/App.tsx`.
 - `authStore.ts` -- authentication state (user, session, role-based access)
 - `appStore.ts` -- global application state
 - `pipelineStore.ts` -- live pipeline monitoring (Server-Sent Events)
+- `cpgStore.ts` -- the signed-in user's governance identity and permissions (`GET /cpg/me`, loaded once per user)
 
 ### API layer (`src/api/`)
 
 Typed clients built on a shared Axios base client (`client.ts`), including `admin.ts`, `auth.ts`, `dashboard.ts`, `scans.ts`, `policies.ts`, `attestations.ts`, `scout.ts`, `radar.ts`, `radar-v2.ts`, `simulate.ts`, `sources.ts`, `tenants.ts`, `diffs.ts`, `clause-map.ts`, `verify.ts` and `transparency-accuracy.ts`.
 
+`cpg.ts` is the governance client (`/api/v1/cpg`). Every response is parsed with the zod schemas in
+`cpg-schemas.ts` and `cpg-quorum.ts` before a page uses it; a response that does not match shows as
+a load error naming the endpoint and field. The engine's `dashboard-api-contract.test.ts` and
+`routes/cpg/dashboard-registry-contract.test.ts` parse real engine responses with the same schemas.
+`cpg-quorum.ts` mirrors the engine's quorum schema for the quorum editor's validation; a contract
+test runs both over the same accept and reject cases. The corporate rule schema is mirrored by
+structure only: the engine validates vocabularies, regex safety and globs.
+
 ### Routing
 
-Role-based routing with `AdminRoute` and `ProtectedRoute` wrappers. Admin pages require the `platform_admin` role. Users flagged `mustChangePassword` are redirected to a forced password change page.
+Role-based routing with `AdminRoute` and `ProtectedRoute` wrappers. Admin pages require the `platform_admin` role. Governance pages use `PermissionRoute` (`src/components/layout/PermissionRoute.tsx`), which redirects to `/governance` with an explanation when a permission is missing, so a page never makes a call the API would refuse. Users flagged `mustChangePassword` are redirected to a forced password change page.
 
 ### Optional error tracking
 

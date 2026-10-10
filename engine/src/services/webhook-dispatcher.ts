@@ -125,7 +125,7 @@ function signPayloadLegacy(body: string, secret: string): string {
  * V2 signature: HMAC-SHA256 over `${timestamp}.${body}` (spec §6.2).
  * The timestamp MUST be the exact string sent in X-Nomus-Timestamp.
  */
-function signPayloadV2(timestamp: string, body: string, secret: string): string {
+export function signPayloadV2(timestamp: string, body: string, secret: string): string {
   return createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
 }
 

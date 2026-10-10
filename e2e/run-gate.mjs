@@ -28,6 +28,7 @@ import { freePort, startEngine, run, killAll } from './lib/procs.mjs';
 import { startFakeLlm } from './lib/fake-llm.mjs';
 import { startWebServer } from './lib/web-server.mjs';
 import { startSink } from './lib/fake-sink.mjs';
+import { startFakeJira } from './lib/fake-jira.mjs';
 
 import { bringUp } from './checks/bring-up.mjs';
 import { scannerChecks } from './checks/scanner.mjs';
@@ -40,6 +41,18 @@ import { pipelineChecks } from './checks/pipeline.mjs';
 import { browserChecks } from './checks/browser.mjs';
 import { logChecks } from './checks/server-logs.mjs';
 import { resourceChecks, readProbe } from './checks/resources.mjs';
+import { cpgSetup } from './checks/cpg-setup.mjs';
+import { cpgRbacChecks } from './checks/cpg-rbac.mjs';
+import { cpgPolicyChecks } from './checks/cpg-policy.mjs';
+import { cpgScannerChecks } from './checks/cpg-scanner.mjs';
+import { cpgVscodeChecks } from './checks/cpg-vscode.mjs';
+import { cpgCasesChecks } from './checks/cpg-cases.mjs';
+import { cpgBrowserChecks } from './checks/cpg-browser.mjs';
+import { cpgApprovalsChecks } from './checks/cpg-approvals.mjs';
+import { cpgVscodeDecisionsChecks } from './checks/cpg-vscode-decisions.mjs';
+import { cpgActionChecks } from './checks/cpg-action.mjs';
+import { cpgIntegrationsChecks } from './checks/cpg-integrations.mjs';
+import { cpgAttestationsChecks } from './checks/cpg-attestations.mjs';
 
 const gateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -59,6 +72,8 @@ let engine = null;
 let llm = null;
 let web = null;
 let slack = null;
+let notifySink = null;
+let jira = null;
 
 async function main() {
   // ── Build ────────────────────────────────────────────────────────────
@@ -78,6 +93,12 @@ async function main() {
   // ── Fakes, engine and dashboard ─────────────────────────────────────
   llm = await startFakeLlm({ logFile: path.join(outDir, 'fake-llm.log') });
   slack = await startSink({ logFile: path.join(outDir, 'slack-webhook.log') });
+  // CPG integrations: the fake Resend API (under /resend) and the webhook receiver share one sink; Jira has its own fake.
+  notifySink = await startSink({
+    logFile: path.join(outDir, 'notify-sink.log'),
+    respond: (e) => (e.path.startsWith('/resend/') ? { status: 200, json: { id: crypto.randomUUID() } } : null),
+  });
+  jira = await startFakeJira({ email: 'jira-bot@gate.example.org', token: `jira-${crypto.randomBytes(12).toString('hex')}` });
   const enginePort = await freePort();
   const webPort = await freePort();
   const webOrigin = `http://127.0.0.1:${webPort}`;
@@ -120,13 +141,18 @@ async function main() {
     // Alerts go to a local Slack incoming-webhook sink (alerting configured,
     // nothing leaves the machine).
     NOMUS_SLACK_WEBHOOK_URL: `${slack.url}/services/gate/alerts`,
+    // CPG integrations reach only the local fakes: email through the fake
+    // Resend API (no Resend key is set until the cpg-integrations area), and
+    // Jira and webhook targets on 127.0.0.1.
+    NOMUS_RESEND_API_URL: `${notifySink.url}/resend`,
+    NOMUS_CPG_ALLOW_PRIVATE_TARGETS: 'true',
   };
   const probeFile = path.join(outDir, 'engine-probe.jsonl');
   engine = startEngine({ repoRoot, workDir: path.join(outDir, 'work'), env: engineEnv, logFile: path.join(outDir, 'engine.log'), probeFile });
   web = await startWebServer({ port: webPort, distDir: path.join(repoRoot, 'dashboard', 'dist'), engineUrl: `http://127.0.0.1:${enginePort}` });
 
   const ctx = {
-    gate, repoRoot, gateRoot, outDir, secrets, engine, llm, slack, probeFile,
+    gate, repoRoot, gateRoot, outDir, secrets, engine, llm, slack, notifySink, jira, probeFile,
     engineUrl: `http://127.0.0.1:${enginePort}`,
     webUrl: webOrigin,
     shotsDir: path.join(outDir, 'screenshots'),
@@ -141,9 +167,41 @@ async function main() {
     const areas = [
       ['scanner', scannerChecks], ['action', actionChecks], ['mcp', mcpChecks], ['vscode', vscodeChecks],
       ['attestations', attestationChecks], ['rules-sse', rulesSseChecks], ['pipeline', pipelineChecks], ['browser', browserChecks],
+      // Corporate Policy Governance (v1.2.0): after every v1.1.0 area, against a
+      // second org created by cpg-setup.mjs, so no existing expectation changes.
+      ['cpg-rbac', cpgRbacChecks],
+      ['cpg-policy', cpgPolicyChecks],
+      ['cpg-scanner', cpgScannerChecks],
+      ['cpg-vscode', cpgVscodeChecks],
+      ['cpg-cases', cpgCasesChecks],
+      ['cpg-browser', cpgBrowserChecks],
+      // Last: decisions bind (repo, fingerprint), so they would change what later areas see.
+      ['cpg-approvals', cpgApprovalsChecks],
+      // The extension shows those decisions (hints and errors) on a branch of the same repository.
+      ['cpg-vscode-decisions', cpgVscodeDecisionsChecks],
+      // The Action as the enforcement gate, against the decisions cpg-approvals made.
+      ['cpg-action', cpgActionChecks],
+      // Corporate policy records in attestations, from the case cpg-approvals closed (before integrations, so no delivery is queued).
+      ['cpg-attestations', cpgAttestationsChecks],
+      // Email, Jira and webhook deliveries to local fakes; sets the Resend key, so it runs last.
+      ['cpg-integrations', cpgIntegrationsChecks],
     ];
     for (const [area, fn] of areas) {
       if (!wants(area)) continue;
+      // The shared CPG setup runs once, before the first selected cpg-* area.
+      if (area.startsWith('cpg-')) {
+        let ready = false;
+        try {
+          ready = await cpgSetup(ctx);
+        } catch (err) {
+          gate.check('cpg-setup completed', false, 'no exception', errText(err));
+          console.error(err);
+        }
+        if (!ready) {
+          gate.blocked(`${area} checks`, 'the shared CPG setup (cpg-setup.mjs) failed');
+          continue;
+        }
+      }
       gate.section(area);
       try {
         await fn(ctx);
@@ -187,6 +245,8 @@ try {
   if (web) await web.close().catch(() => {});
   if (llm) await llm.close().catch(() => {});
   if (slack) await slack.close().catch(() => {});
+  if (notifySink) await notifySink.close().catch(() => {});
+  if (jira) await jira.close().catch(() => {});
   if (ctx?.closers) for (const c of ctx.closers) await c().catch(() => {});
   killAll();
 }

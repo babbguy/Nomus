@@ -47,13 +47,21 @@ import { templateRoutes } from './routes/templates.js';
 import { auditExportRoutes } from './routes/audit-export.js';
 import { verifyPublicRoutes } from './routes/verify.js';
 import { adminRuleRoutes } from './routes/admin-rules.js';
+import { cpgRoutes } from './routes/cpg/index.js';
+import type { CpgActor, Identity } from '../cpg/rbac/can.js';
 
 export type AppEnv = {
   Variables: {
     orgId?: string;
     apiKeyId?: string;
-    /** Set for session (browser) auth: the signed-in user's id. */
+    /** The acting user's id: set for sessions and for user-bound API keys. */
     userId?: string;
+    /** How the caller authenticated: browser session, user-bound key or org key. */
+    identity?: Identity;
+    /** users.role of a session user (platform_admin keeps legacy /org access). */
+    userRole?: 'platform_admin' | 'member';
+    /** CPG identity and effective grants, computed once per request. */
+    cpgActor?: CpgActor;
     scopes?: string[];
     rateLimitRpm?: number;
     /** Per-org SSE connection cap (NOMUS_MAX_SSE_CONNECTIONS_PER_ORG) */
@@ -127,6 +135,8 @@ export function createApp(): Hono<AppEnv> {
   app.route('/api/v1/admin/forge', forgeAdminRoutes);
   app.route('/api/v1/templates', templateRoutes);
   app.route('/api/v1/audit-export', auditExportRoutes);
+  // Corporate Policy Governance (org-scoped RBAC, settings, audit)
+  app.route('/api/v1/cpg', cpgRoutes);
 
   // OAuth providers
   app.route('/api/v1/auth/oauth', oauthRoutes);

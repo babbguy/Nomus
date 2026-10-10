@@ -14,6 +14,7 @@ import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import ComplianceStatusBadge from '../../components/domain/ComplianceStatusBadge';
 import LifecycleBadge from '../../components/domain/LifecycleBadge';
+import CorporateGovernanceBadge from '../../components/domain/CorporateGovernanceBadge';
 import JurisdictionTag from '../../components/domain/JurisdictionTag';
 import DataFreshness from '../../components/ui/DataFreshness';
 import { formatDateTime } from '../../lib/formatters';
@@ -181,7 +182,10 @@ export default function Attestations() {
                     <tr key={a.id} className="hover:bg-surface-hover transition">
                       <td className="px-4 py-3"><ComplianceStatusBadge status={a.result} /></td>
                       <td className="px-4 py-3">
-                        <LifecycleBadge lifecycle={lifecycle} reason={a.revocationReason} />
+                        <div className="flex flex-col items-start gap-1">
+                          <LifecycleBadge lifecycle={lifecycle} reason={a.revocationReason} />
+                          <CorporateGovernanceBadge governance={a.corporateGovernance} />
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-text-primary">{a.actionContext.action || '—'}</td>
                       <td className="px-4 py-3"><JurisdictionTag code={a.jurisdiction} /></td>

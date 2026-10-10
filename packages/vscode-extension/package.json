@@ -88,6 +88,18 @@
           ],
           "default": "medium",
           "description": "Minimum severity to flag as error"
+        },
+        "nomus.corporate.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show your organization's corporate policy findings (from its signed policy bundle) next to regulatory findings. Local and advisory: CI enforces corporate policies."
+        },
+        "nomus.corporate.maxCacheAgeHours": {
+          "type": "number",
+          "default": 72,
+          "minimum": 1,
+          "maximum": 720,
+          "description": "How long a verified, cached corporate policy bundle may be used while the Nomus server is unreachable. Older caches are not used and corporate findings are hidden."
         }
       }
     },
@@ -139,6 +151,30 @@
       {
         "command": "nomus.refreshViews",
         "title": "Nomus: Refresh All Views"
+      },
+      {
+        "command": "nomus.cpg.refresh",
+        "title": "Nomus: Refresh Corporate Policies",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "nomus.cpg.requestReview",
+        "title": "Nomus: Request Policy Review",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "nomus.cpg.replyToChangeRequest",
+        "title": "Nomus: Reply to Change Request",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "nomus.cpg.resubmit",
+        "title": "Nomus: Resubmit Policy Review"
+      },
+      {
+        "command": "nomus.cpg.openCase",
+        "title": "Nomus: Open Review Case in Dashboard",
+        "icon": "$(link-external)"
       }
     ],
     "viewsContainers": {
@@ -167,6 +203,36 @@
         {
           "id": "nomus.radar",
           "name": "Regulatory Radar"
+        },
+        {
+          "id": "nomus.corporate",
+          "name": "Corporate Policies"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "nomus.cpg.requestReview",
+          "when": "view == nomus.corporate",
+          "group": "navigation"
+        },
+        {
+          "command": "nomus.cpg.refresh",
+          "when": "view == nomus.corporate",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "nomus.cpg.replyToChangeRequest",
+          "when": "view == nomus.corporate && viewItem == nomus.corporate.changeRequest",
+          "group": "inline"
+        },
+        {
+          "command": "nomus.cpg.openCase",
+          "when": "view == nomus.corporate && viewItem == nomus.corporate.case",
+          "group": "inline"
         }
       ]
     }
@@ -179,7 +245,8 @@
     "package": "npx --yes @vscode/vsce@3 package --no-dependencies"
   },
   "dependencies": {
-    "@nomus/scanner": "*"
+    "@nomus/scanner": "*",
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",

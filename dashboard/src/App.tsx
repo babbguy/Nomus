@@ -4,6 +4,11 @@ import { useAuthStore } from './stores/authStore';
 import Spinner from './components/ui/Spinner';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import Shell from './components/layout/Shell';
+import PermissionRoute from './components/layout/PermissionRoute';
+import {
+  ACCESS_REQUIREMENT, AUDIT_REQUIREMENT, BOARDS_REQUIREMENT, POLICIES_REQUIREMENT, POLICY_AUTHOR_REQUIREMENT, QUORUM_REQUIREMENT, CASES_REQUIREMENT,
+  SETTINGS_REQUIREMENT, INTEGRATIONS_REQUIREMENT,
+} from './lib/cpg-permissions';
 import Login from './pages/Login';
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const TenantList = lazy(() => import('./pages/admin/TenantList'));
@@ -42,6 +47,19 @@ const Templates = lazy(() => import('./pages/customer/Templates'));
 const AuditExport = lazy(() => import('./pages/customer/AuditExport'));
 const RadarV2 = lazy(() => import('./pages/customer/RadarV2'));
 const BillDetail = lazy(() => import('./pages/customer/BillDetail'));
+const GovernanceOverview = lazy(() => import('./pages/governance/GovernanceOverview'));
+const GovernanceAccess = lazy(() => import('./pages/governance/GovernanceAccess'));
+const GovernanceAudit = lazy(() => import('./pages/governance/GovernanceAudit'));
+const GovernanceSettings = lazy(() => import('./pages/governance/GovernanceSettings'));
+const GovernancePolicies = lazy(() => import('./pages/governance/GovernancePolicies'));
+const PolicyNew = lazy(() => import('./pages/governance/PolicyNew'));
+const PolicyDetail = lazy(() => import('./pages/governance/PolicyDetail'));
+const GovernanceIntegrations = lazy(() => import('./pages/governance/GovernanceIntegrations'));
+const GovernanceBoards = lazy(() => import('./pages/governance/GovernanceBoards'));
+const GovernanceQuorum = lazy(() => import('./pages/governance/GovernanceQuorum'));
+const GovernanceCases = lazy(() => import('./pages/governance/GovernanceCases'));
+const CaseDetail = lazy(() => import('./pages/governance/CaseDetail'));
+const GovernanceExceptions = lazy(() => import('./pages/governance/GovernanceExceptions'));
 const ScanAdmin = lazy(() => import('./pages/admin/ScanAdmin'));
 const ScoutFeeds = lazy(() => import('./pages/admin/ScoutFeeds'));
 const ScoutReview = lazy(() => import('./pages/admin/ScoutReview'));
@@ -143,6 +161,21 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
         <Route path="team" element={<Team />} />
+
+        {/* Corporate policy governance: guarded by GET /cpg/me permissions */}
+        <Route path="governance" element={<GovernanceOverview />} />
+        <Route path="governance/access" element={<PermissionRoute {...ACCESS_REQUIREMENT}><GovernanceAccess /></PermissionRoute>} />
+        <Route path="governance/audit" element={<PermissionRoute {...AUDIT_REQUIREMENT}><GovernanceAudit /></PermissionRoute>} />
+        <Route path="governance/settings" element={<PermissionRoute {...SETTINGS_REQUIREMENT}><GovernanceSettings /></PermissionRoute>} />
+        <Route path="governance/policies" element={<PermissionRoute {...POLICIES_REQUIREMENT}><GovernancePolicies /></PermissionRoute>} />
+        <Route path="governance/policies/new" element={<PermissionRoute {...POLICY_AUTHOR_REQUIREMENT}><PolicyNew /></PermissionRoute>} />
+        <Route path="governance/policies/:id" element={<PermissionRoute {...POLICIES_REQUIREMENT}><PolicyDetail /></PermissionRoute>} />
+        <Route path="governance/integrations" element={<PermissionRoute {...INTEGRATIONS_REQUIREMENT}><GovernanceIntegrations /></PermissionRoute>} />
+        <Route path="governance/boards" element={<PermissionRoute {...BOARDS_REQUIREMENT}><GovernanceBoards /></PermissionRoute>} />
+        <Route path="governance/quorum" element={<PermissionRoute {...QUORUM_REQUIREMENT}><GovernanceQuorum /></PermissionRoute>} />
+        <Route path="governance/cases" element={<PermissionRoute {...CASES_REQUIREMENT}><GovernanceCases /></PermissionRoute>} />
+        <Route path="governance/cases/:id" element={<PermissionRoute {...CASES_REQUIREMENT}><CaseDetail /></PermissionRoute>} />
+        <Route path="governance/exceptions" element={<PermissionRoute {...CASES_REQUIREMENT}><GovernanceExceptions /></PermissionRoute>} />
       </Route>
 
       {/* 404 */}

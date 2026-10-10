@@ -15,6 +15,7 @@ import { chainAnchors } from '../db/schema.js';
 import { notifySchedulerSummary, getConfiguredAlertChannels, sendSlack, sendPush, getPushTopics } from '../services/notifications.js';
 import { runFullAudit } from './data-auditor.js';
 import { checkSourceHealth } from './source-health-checker.js';
+import { startNotificationWorker, stopNotificationWorker } from '../cpg/notify/worker.js';
 
 const tasks: cron.ScheduledTask[] = [];
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -230,6 +231,21 @@ export function startScheduler(): void {
     }
   }));
 
+  // CPG decision sweep — daily at 3:30 AM UTC (design spec §7.5): expiry
+  // notices for approvals and standing exceptions, and case states re-derived.
+  tasks.push(cron.schedule('30 3 * * *', async () => {
+    try {
+      const { sweepDecisions } = await import('../cpg/decisions/sweep.js');
+      logger.info(sweepDecisions(getDb()), 'Scheduler: CPG decision sweep complete');
+    } catch (err) {
+      logger.error({ error: err }, 'Scheduler: CPG decision sweep failed');
+      captureError(err, { subsystem: 'scheduler', context: { job: 'cpg-decision-sweep' } });
+    }
+  }));
+
+  // CPG notification deliveries (design spec §12.4): the persistent outbox worker.
+  startNotificationWorker();
+
   // State hash — every 6 hours
   tasks.push(cron.schedule('0 */6 * * *', () => {
     logger.info('Scheduler: Computing state hash...');
@@ -333,6 +349,7 @@ export function stopScheduler(): void {
     task.stop();
   }
   tasks.length = 0;
+  stopNotificationWorker();
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;

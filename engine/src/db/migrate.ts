@@ -4,6 +4,8 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { getDb } from './client.js';
 import { logger } from '../logger.js';
 import * as schema from './schema.js';
+import { runCpgMigrations } from './migrations/runner.js';
+import { seedCpgRbac } from '../cpg/rbac/seed.js';
 
 /** All tables in dependency order (foreign keys respected). */
 function migratedTables() {
@@ -192,6 +194,8 @@ export function runMigrations(db: BetterSQLite3Database<any> = getDb()): void {
     { table: 'regulatory_sources', column: 'origin', type: 'TEXT' },
     { table: 'regulatory_sources', column: 'registry_key', type: 'TEXT' },
     { table: 'policy_rules', column: 'locked', type: 'INTEGER NOT NULL DEFAULT 0' },
+    // CPG: user-bound API keys (VS Code device sign-in). NULL = org key.
+    { table: 'api_keys', column: 'user_id', type: 'TEXT' },
   ];
 
   for (const alt of alterations) {
@@ -222,6 +226,12 @@ export function runMigrations(db: BetterSQLite3Database<any> = getDb()): void {
 
   // Indexes last: they may cover columns added by the alterations above.
   createDeclaredIndexes(db, tables);
+
+  // Corporate Policy Governance: numbered, checksummed raw-SQL migrations
+  // (constraints, indexes, triggers), then the RBAC catalog and per-org
+  // seeding. Throws on a modified applied migration: never silent drift.
+  runCpgMigrations(db);
+  seedCpgRbac(db);
 }
 
 export interface DeclaredIndex {

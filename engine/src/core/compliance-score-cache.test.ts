@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, posix as posixPath, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SRC = join(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -29,7 +29,8 @@ const posix = (p: string) => p.split(sep).join('/');
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) sourceFiles(full, out);
+    // __fixtures__ holds test-only helpers (e.g. cpg/__fixtures__), not runtime code.
+    if (entry.isDirectory()) { if (entry.name !== '__fixtures__') sourceFiles(full, out); }
     else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') && !entry.name.endsWith('.d.ts')) out.push(full);
   }
   return out;
@@ -121,8 +122,17 @@ describe('compliance score cache invalidation guard', () => {
   });
 
   it('seed files are only imported at startup (db/seed.ts and index.ts), never by runtime code', () => {
+    // Resolve each relative import and flag only those that land on db/seed*.ts
+    // (the startup regulation seeds). Other modules named seed.ts, such as
+    // cpg/rbac/seed.ts (per-org RBAC setup, which writes no score input), are
+    // runtime code by design.
+    const importsDbSeed = (f: { rel: string; text: string }) =>
+      [...f.text.matchAll(/from\s+['"](\.{1,2}\/[^'"]+)['"]/g)].some((m) => {
+        const target = posixPath.normalize(posixPath.join(posixPath.dirname(f.rel), m[1]));
+        return /^db\/seed(-[a-z0-9-]+)?\.js$/.test(target);
+      });
     const importers = files
-      .filter((f) => /from\s+['"][^'"]*\/seed(-[a-z0-9-]+)?\.js['"]/.test(f.text) || /from\s+['"]\.\/seed(-[a-z0-9-]+)?\.js['"]/.test(f.text))
+      .filter(importsDbSeed)
       .map((f) => f.rel)
       // seed.ts composes the per-regulation seeds and index.ts runs them at boot.
       .filter((rel) => rel !== 'db/seed.ts' && rel !== 'index.ts');

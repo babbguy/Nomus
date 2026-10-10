@@ -12,6 +12,7 @@ import { invalidateComplianceScore } from '../../core/compliance-score-cache.js'
 import { clearInstallationToken } from '../../github/token-manager.js';
 import { fetchRepoSourceFiles } from '../../github/scanner-runner.js';
 import { createCheckRun, postPrSummary } from '../../github/result-poster.js';
+import { applyCpgPullRequest } from '../../cpg/cases/github-hook.js';
 
 /** Minimal shape of a GitHub webhook payload (only fields we access). */
 interface GitHubWebhookPayload {
@@ -129,11 +130,24 @@ async function processWebhook(
     case 'installation':
       await handleInstallation(payload);
       break;
-    case 'pull_request':
+    case 'pull_request': {
+      // Review cases (CPG) first: attaching or closing a case must not wait for, or depend on, the scan.
+      let cpgFailure: unknown = null;
+      if (installationId) {
+        try {
+          const outcome = applyCpgPullRequest(db, installationId, payload);
+          if (outcome !== 'ignored') logger.info({ eventId, action: payload.action, outcome }, 'Review case updated from pull request');
+        } catch (err) {
+          logger.error({ eventId, action: payload.action, error: (err as Error).message }, 'Review case update from pull request failed');
+          cpgFailure = err;
+        }
+      }
       if (installationId && (payload.action === 'opened' || payload.action === 'synchronize')) {
         await handlePullRequest(installationId, payload);
       }
+      if (cpgFailure) throw cpgFailure;
       break;
+    }
     case 'push':
       if (installationId) {
         await handlePush(installationId, payload);

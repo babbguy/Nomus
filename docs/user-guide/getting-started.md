@@ -191,11 +191,66 @@ status, Scout feeds and review, the Modus integration, and the public Ledger.
   given set of capabilities and markets), Radar and Bill Tracker (pending legislation), Graph (the
   regulatory knowledge graph), AI-BOM, Posture, Templates.
 - **Scanner:** Scans (findings uploaded by scanners, by repository), Clause Map, Benchmarks.
+- **Governance:** shown when you hold a governance permission and corporate policy governance is
+  on, or you can turn it on (Org Admins). It lists only the pages your roles allow:
+  - **Overview** (`/governance`): whether governance is on, the governance pages you can open and
+    the permissions your roles give you. If you open a page you have no access to, you land here
+    with an explanation of the missing permission.
+  - **Policies** (`/governance/policies`): the corporate policy log. Each policy shows its state
+    (Awaiting approval, Active, Draft, Retired), tier, owning boards, active and pending versions,
+    and how it is enforced right now: in its grace period (advisory until a date, in UTC) or
+    enforced. Policy Authors see **New policy**; see
+    [Writing and approving a policy](#writing-and-approving-a-policy) below.
+  - **Boards** (`/governance/boards`): the review boards, their members and the policies each one
+    owns. Org Admins create, rename and archive boards and add or remove members; others see member
+    counts.
+  - **Quorum** (`/governance/quorum`): who must approve what, as the signed version in force. Org
+    Admins edit it (each save is a new version); Org Admins and Auditors also see the history and
+    what each version changed.
+  - **Access** (`/governance/access`, Org Admins): users and their roles, the role permission
+    matrix, and teams. See [Roles and permissions](../admin-guide/roles-and-permissions.md#managing-access-in-the-dashboard).
+  - **Audit log** (`/governance/audit`, Org Admins and Auditors): every access and settings change,
+    newest first, with the result of verifying the hash chain.
+  - **Settings** (`/governance/settings`): turn governance on and choose whether reviewer context
+    is generated. Everyone with `policy.read` can view it; only Org Admins can change it.
 - **Account:** Feedback, Audit Log export, Badge, Team, Profile, Settings (organization details, API
   keys, diagnostics), and the public Ledger. Team is a read-only list of your organization's
-  users; platform administrators add and change users under Admin, Users.
+  users; platform administrators add and change users under Admin, Users, and Org Admins manage
+  their organization's users and roles under Governance, Access. Settings shows API keys only to
+  users whose roles include `org.api_keys.manage`, and the organization details can be saved only
+  with `org.profile.update` (both are part of Developer unless an Org Admin removed them).
+
+The user card at the bottom of the sidebar shows your governance role when you hold one (for
+example "Org Admin", or "Policy Approver +2" when you hold three roles; hover it for the full list).
+Platform administrators see "Admin", and organization users without a governance role "Member".
 
 Public pages that need no login: `/ledger`, `/transparency` and `/verify/:verifyId`.
+
+### Writing and approving a policy
+
+Authors need the Policy Author role; approvers the Policy Approver role.
+
+1. **Policies > New policy.** Describe the policy in plain English (what code must not do, as
+   concretely as you can) and add at least one *violating* example (a file path and the code the
+   policy must flag). Add *compliant* examples for code that must not be flagged, such as an
+   approved gateway. Only the text is sent to the LLM provider; examples stay on the server.
+2. **Compile.** The result is either a rule or the reason it was rejected, shown word for word,
+   with each example's result. A rule is shown twice: as plain English read from the rule itself,
+   and as the exact JSON the scanner evaluates. Everything the model produced (the rule, the
+   suggested key, title and tier, its rationale and limitations) is labelled **Generated, may be
+   inaccurate**. If you change the text or the examples, compile again before proposing.
+3. **Propose.** Check the pre-filled key (`corp.…`, permanent), title and tier, choose the owning
+   boards, and choose the grace period: the quorum default, a number of days after approval, or an
+   enforce-from date (00:00 UTC). You can edit the compiled rule as JSON first; the server checks
+   it again and re-runs your examples. Proposing does **not** activate anything.
+4. **Approve.** On the policy's page a Policy Approver who did not propose or compile the version
+   sees **Approve** and **Reject** (with an optional comment). Everyone else sees why they cannot
+   vote; the author can withdraw the proposal instead. When enough approvals are in (the quorum's
+   policy approval count), the version is activated and signed at once.
+
+The policy page also lists every version with its votes, signature and enforcement date, shows
+which version superseded which, compares any two versions field by field, and offers **New
+version** and **Propose retirement** (a retirement needs the same approval).
 
 ---
 

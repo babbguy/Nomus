@@ -4,6 +4,7 @@ import { FindingsTreeProvider } from './sidebar/findings-provider';
 import { ComplianceStatusProvider } from './sidebar/compliance-status-provider';
 import { StatusBarManager } from './status-bar';
 import { loadWorkspaceConfig, WorkspaceConfigError } from './workspace-config';
+import { sentenceCase, type CorporateController } from './cpg/corporate-controller';
 
 const SUPPORTED_LANGUAGES = new Set([
   'typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java', 'go',
@@ -26,6 +27,38 @@ function isNomusApiError(err: unknown): err is Error {
   return err instanceof Error && err.name === 'NomusApiError';
 }
 
+const UNREACHABLE = 'Nomus API unreachable — results unavailable. Compliance status is unknown.';
+
+/** The error a failed scan reports (without the corporate part). */
+function scanError(err: unknown, prefix: string): string {
+  if (err instanceof WorkspaceConfigError) return `Nomus: cannot use the workspace configuration — ${err.message}`;
+  if (isNomusApiError(err)) {
+    console.error('Nomus API unreachable:', err);
+    return UNREACHABLE;
+  }
+  console.error(`${prefix}:`, err);
+  return `${prefix}: ${err instanceof Error ? err.message : String(err)}`;
+}
+
+/**
+ * Report a scan in one error notification: the regulatory error (if any)
+ * and the corporate notices held during the scan. When Nomus is unreachable
+ * and corporate findings are shown from the cached bundle, the message says
+ * which results are cached and which are unavailable.
+ */
+function reportScan(error: string | null, corporate: CorporateController | undefined): void {
+  const notices = (corporate?.releaseNotices() ?? []).map(sentenceCase);
+  const cached = error === UNREACHABLE ? corporate?.cachedNote() ?? null : null;
+  if (error === UNREACHABLE && (notices.length > 0 || cached)) {
+    error = 'Nomus is unreachable: regulatory results are unavailable and their compliance status is unknown.';
+    if (cached) notices.push(cached);
+  }
+  if (!error && notices.length === 0) return;
+  void vscode.window.showErrorMessage(error
+    ? [/[.!?]$/.test(error) ? error : `${error}.`, ...notices].join(' ')
+    : `Nomus: ${notices.join(' ')}`);
+}
+
 export async function scanCurrentFile(
   diagnostics: DiagnosticsProvider,
   findings: FindingsTreeProvider,
@@ -33,11 +66,25 @@ export async function scanCurrentFile(
   doc?: vscode.TextDocument,
   getApiKey?: ApiKeyGetter,
   complianceStatus?: ComplianceStatusProvider,
+  corporate?: CorporateController,
 ) {
   const document = doc ?? vscode.window.activeTextEditor?.document;
-  if (!document || !SUPPORTED_LANGUAGES.has(document.languageId)) return;
+  if (!document) return;
+  if (!SUPPORTED_LANGUAGES.has(document.languageId)) {
+    // Corporate policies can cover any file (a model name in a config file);
+    // regulatory scanning stays limited to the supported languages.
+    if (corporate) diagnostics.setCorporateFindings(document.uri, await corporate.evaluateDocument(document));
+    return;
+  }
 
+  // Corporate findings first: they do not depend on the regulatory API, so an
+  // API failure below still leaves them shown (they render in the same set call).
+  // Their error notices are held and reported with the scan's, in one message.
+  corporate?.holdNotices();
+  let error: string | null = null;
+  let corporateFindings: Awaited<ReturnType<CorporateController['evaluateDocument']>> | undefined;
   try {
+    corporateFindings = corporate ? await corporate.evaluateDocument(document) : undefined;
     const { detectImportsInContent } = await import('@nomus/scanner/detect');
     const { mapCapabilities, getAllCapabilities } = await import('@nomus/scanner/capabilities');
 
@@ -45,7 +92,7 @@ export async function scanCurrentFile(
     const imports = detectImportsInContent(content, document.fileName);
 
     if (imports.length === 0) {
-      diagnostics.setFindings(document.uri, []);
+      diagnostics.setFindings(document.uri, [], corporateFindings);
       findings.setFindings([]);
       statusBar.update(0);
       complianceStatus?.setLocalFindings([]);
@@ -102,24 +149,17 @@ export async function scanCurrentFile(
     }
 
     console.log(`Nomus: ${diagnosticFindings.length} finding(s) in ${document.fileName}`);
-    diagnostics.setFindings(document.uri, diagnosticFindings);
+    diagnostics.setFindings(document.uri, diagnosticFindings, corporateFindings);
     findings.setFindings(diagnosticFindings);
     statusBar.update(diagnosticFindings.length);
     complianceStatus?.setLocalFindings(diagnosticFindings);
   } catch (err) {
-    // Fail closed: leave existing diagnostics/status untouched (no green state).
-    if (err instanceof WorkspaceConfigError) {
-      vscode.window.showErrorMessage(`Nomus: cannot use the workspace configuration — ${err.message}`);
-      return;
-    }
-    if (isNomusApiError(err)) {
-      console.error('Nomus API unreachable:', err);
-      vscode.window.showErrorMessage('Nomus API unreachable — results unavailable. Compliance status is unknown.');
-      return;
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('Nomus scan error:', err);
-    vscode.window.showErrorMessage(`Nomus scan error: ${msg}`);
+    // Fail closed: leave existing regulatory diagnostics/status untouched (no
+    // green state). Corporate findings were computed independently.
+    if (corporateFindings) diagnostics.setCorporateFindings(document.uri, corporateFindings);
+    error = scanError(err, 'Nomus scan error');
+  } finally {
+    reportScan(error, corporate);
   }
 }
 
@@ -129,6 +169,7 @@ export async function scanWorkspace(
   statusBar: StatusBarManager,
   getApiKey?: ApiKeyGetter,
   complianceStatus?: ComplianceStatusProvider,
+  corporate?: CorporateController,
 ) {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
@@ -144,7 +185,12 @@ export async function scanWorkspace(
     title: 'Nomus: Scanning workspace...',
     cancellable: false,
   }, async () => {
+    corporate?.holdNotices();
+    let error: string | null = null;
     try {
+      // The verified bundle (or none): the scan never fetches one itself here,
+      // so an unusable bundle is reported once, with the scan's result.
+      const corporateBundle = corporate ? await corporate.bundleForWorkspaceScan() : null;
       const { runScan } = await import('@nomus/scanner');
       // The workspace's .nomus.yml takes precedence over the jurisdictions setting.
       const workspaceConfig = await loadWorkspaceConfig(
@@ -159,6 +205,7 @@ export async function scanWorkspace(
         apiUrl: config.get<string>('apiUrl'),
         failOn: config.get<string>('failOn', 'medium'),
         jurisdictions,
+        ...(corporateBundle ? { corporate: { mode: 'auto' as const, bundle: corporateBundle } } : {}),
         ...(workspaceConfig ? { config: workspaceConfig } : apiKey ? {
           config: {
             jurisdictions,
@@ -190,6 +237,8 @@ export async function scanWorkspace(
         diagnostics.setFindings(vscode.Uri.file(file), fileFindings);
       }
 
+      if (corporate && corporateBundle) corporate.applyWorkspaceFindings(result.corporateFindings);
+
       const allFindings = Array.from(byFile.values()).flat();
       findingsProvider.setFindings(allFindings);
       statusBar.update(result.counts.total);
@@ -200,15 +249,9 @@ export async function scanWorkspace(
       );
     } catch (err) {
       // Fail closed: leave existing diagnostics/status untouched (no green state).
-      if (err instanceof WorkspaceConfigError) {
-        vscode.window.showErrorMessage(`Nomus: cannot use the workspace configuration — ${err.message}`);
-        return;
-      }
-      if (isNomusApiError(err)) {
-        vscode.window.showErrorMessage('Nomus API unreachable — results unavailable. Compliance status is unknown.');
-        return;
-      }
-      vscode.window.showErrorMessage(`Nomus scan failed: ${(err as Error).message}`);
+      error = scanError(err, 'Nomus scan failed');
+    } finally {
+      reportScan(error, corporate);
     }
   });
 }

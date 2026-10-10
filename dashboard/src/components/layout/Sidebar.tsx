@@ -5,9 +5,12 @@ import {
   Users, UserCog, Database, Activity, ShieldCheck,
   ChevronLeft, ChevronRight, BookOpen, ScanSearch, Binoculars, Eye, Cpu, Bell,
   User, Server, Sun, Moon, Link2, Boxes, BarChart3, FlaskConical, Shield, ScrollText,
-  Layers, Download, Landmark, BookOpenCheck, ListChecks,
+  Layers, Download, Landmark, BookOpenCheck, ListChecks, Gavel, KeyRound, History, SlidersHorizontal, FileCheck2, UsersRound, Scale, FolderGit2, ShieldOff, Plug,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { useCpgMe } from '../../hooks/useCpgMe';
+import { showGovernanceNav, visibleGovernancePages } from '../../lib/cpg-permissions';
+import { userRoleLabel } from '../../lib/cpg-policy';
 import { useAppStore } from '../../stores/appStore';
 import { cn } from '../../lib/cn';
 
@@ -18,12 +21,15 @@ interface NavItemProps {
   icon: React.ReactNode;
   label: string;
   collapsed: boolean;
+  /** Active only on an exact match (for a parent path such as /governance). */
+  end?: boolean;
 }
 
-function NavItem({ to, icon, label, collapsed }: NavItemProps) {
+function NavItem({ to, icon, label, collapsed, end }: NavItemProps) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
@@ -37,6 +43,37 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
       {icon}
       {!collapsed && <span>{label}</span>}
     </NavLink>
+  );
+}
+
+const GOVERNANCE_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  '/governance': Gavel,
+  '/governance/policies': FileCheck2,
+  '/governance/cases': FolderGit2,
+  '/governance/exceptions': ShieldOff, Plug,
+  '/governance/boards': UsersRound,
+  '/governance/quorum': Scale,
+  '/governance/access': KeyRound,
+  '/governance/integrations': Plug,
+  '/governance/audit': History,
+  '/governance/settings': SlidersHorizontal,
+};
+
+/**
+ * Corporate policy governance links, from GET /cpg/me (spec §14.1): shown
+ * when the user holds a governance permission and governance is on or they
+ * can turn it on, listing only the pages the user can open.
+ */
+function GovernanceNav({ collapsed, iconSize }: { collapsed: boolean; iconSize: number }) {
+  const { me } = useCpgMe();
+  if (!showGovernanceNav(me)) return null;
+  return (
+    <NavGroup label="Governance" collapsed={collapsed}>
+      {visibleGovernancePages(me).map((p) => {
+        const Icon = GOVERNANCE_ICONS[p.to] ?? Gavel;
+        return <NavItem key={p.to} to={p.to} end={p.to === '/governance'} icon={<Icon size={iconSize} />} label={p.label} collapsed={collapsed} />;
+      })}
+    </NavGroup>
   );
 }
 
@@ -58,6 +95,9 @@ export default function Sidebar() {
   const { sidebarOpen, toggleSidebar, theme, toggleTheme } = useAppStore();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'platform_admin';
+  // The governance role for org users who hold one (brief §9); the legacy label otherwise.
+  const { me } = useCpgMe();
+  const roleLabel = userRoleLabel(user?.role, isAdmin ? null : me);
   const collapsed = !sidebarOpen;
   const iconSize = 18;
 
@@ -137,6 +177,7 @@ export default function Sidebar() {
               <NavItem to="/clause-map" icon={<BookOpenCheck size={iconSize} />} label="Clause Map" collapsed={collapsed} />
               <NavItem to="/benchmarks" icon={<BarChart3 size={iconSize} />} label="Benchmarks" collapsed={collapsed} />
             </NavGroup>
+            <GovernanceNav collapsed={collapsed} iconSize={iconSize} />
             <NavGroup label="Account" collapsed={collapsed}>
               <NavItem to="/feedback" icon={<MessageSquare size={iconSize} />} label="Feedback" collapsed={collapsed} />
               <NavItem to="/audit-log" icon={<Download size={iconSize} />} label="Audit Log" collapsed={collapsed} />
@@ -176,7 +217,7 @@ export default function Sidebar() {
               </div>
               <div className="min-w-0 text-left">
                 <p className="text-sm font-medium text-text-primary truncate">{user?.name}</p>
-                <p className="text-[10px] text-text-muted truncate">{user?.role === 'platform_admin' ? 'Admin' : 'Member'}</p>
+                <p className="text-[10px] text-text-muted truncate" data-testid="sidebar-role" title={me && !isAdmin && me.roles.length > 1 ? me.roles.map((r) => r.name).join(', ') : undefined}>{roleLabel}</p>
               </div>
             </button>
             <div className="flex items-center gap-1">

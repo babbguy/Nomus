@@ -6,6 +6,248 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
+  export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
+  every signed decision, revocation, case closure record and CI verdict, verifiable offline with the
+  published key. The case page lists the case's CI runs with their signature status. The CI
+  evaluate response gains `caseRef`, and the Action's PR comment and check run link the case by its
+  `CPG-…` reference.
+- Corporate policy governance, phase 8 (attestations): `POST /evaluate` accepts an optional
+  `governance` extra (`repo`, `branch`, closed `caseId`) and signs a separate manifest of the
+  approvals, standing exceptions, case closure record and CI runs in force at the attestation
+  instant. Its evidence export is `bundleVersion: 2` with a `corporateGovernance` section that
+  verifies offline with the published key; the Attestations page shows a governance badge and the
+  public verify page shows the counts. Receipts and attestations without governance are
+  unchanged, byte for byte.
+- Corporate policy governance, phase 7 (integrations, dashboard): the new Governance > Integrations
+  page (`integrations.manage`) creates and edits email, Jira and webhook integrations, shows
+  secrets only by their last four characters, shows a new webhook signing secret once after create
+  or rotate, sends a test with its result inline, and lists the delivery log with attempts, last
+  error and next retry. A banner flags deliveries that failed permanently, each with a Retry
+  button, and a help panel shows the exact webhook payload and how to verify its signature. The
+  test notification now links to this page.
+- Corporate policy governance, phase 7 (integrations, engine): review-case notifications by email
+  (through Resend), to Jira Cloud (one issue per case and owning board, then comments) and to a
+  generic JSON webhook signed with `X-Nomus-Signature: sha256=…` over the timestamp and body, for
+  review requests, change requests, replies, decisions, closed cases and expiring or expired
+  approvals. Notifications carry a summary and a link only, never code, snippets, justifications or
+  file paths. Deliveries are queued in the same transaction as the change, retried for about
+  21 hours across restarts, and listed with every attempt by `GET /api/v1/cpg/deliveries`; a
+  permanent failure is logged and audited. Configure them with `/api/v1/cpg/integrations` (secrets
+  are encrypted and never returned). New settings: `NOMUS_RESEND_API_URL` and
+  `NOMUS_CPG_ALLOW_PRIVATE_TARGETS`.
+- Corporate policy governance, phase 6 (CI gate, GitHub Action): when corporate policies are on,
+  the action scans the whole checkout after its regulatory scan, asks the engine for its verdict,
+  verifies the signature and fails the job unless every blocking finding has a valid decision.
+  It adds the check run "Nomus Corporate Policy Gate", a `nomus-corporate/` Code Scanning upload, a
+  `<!-- nomus-cpg -->` pull request comment without code, the outputs `corporate-status`,
+  `corporate-blocking` and `corporate-case-url`, and closes the review case when the pull request
+  closes. It fails closed on any error, and the new `corporate-gate` input cannot switch the gate
+  off while the organization enforces it. Organizations without corporate policies see no change.
+- Corporate policy governance, phase 6 (CI gate, engine): `POST /api/v1/cpg/ci/evaluate` gives the
+  server's pass or fail verdict on a CI scan, taken with an organization key with the `evaluate`
+  scope. Findings must name a policy version of the current bundle and blocking findings must carry
+  their snippet; stale bundles, unknown fingerprints, mismatched snippets and suspicious empty scans
+  are refused. A failing scan opens or updates the branch's review case from CI and attaches the
+  pull request; a scan whose blocking findings were fixed posts a new revision, so the case moves
+  on. Each run is stored with a verdict signed by the instance key (`verifyCiVerdict()` in
+  `@nomus/scanner/corporate` verifies it offline) and listed by `GET /api/v1/cpg/ci/runs`; a case's
+  closure record now lists its CI runs. `POST /api/v1/cpg/ci/pr-closed` closes the case as merged
+  or closed unmerged.
+- Corporate policy governance, phase 5 (decisions and exceptions, dashboard): the case page shows
+  each blocking finding's decision (the signed decision with its verified signature and expiry, a
+  covering standing exception, or the pending proposal with the boards still needed), the case's
+  proposals with their votes, vetoes and revocations, and lets eligible reviewers propose snippet or
+  bulk decisions (never bulk on prohibited policies), vote and revoke; the people who opened,
+  justified or revised a case are never offered a decision on it. New **Governance > Exceptions**
+  page lists standing exceptions (pending, active, expired, revoked, lapsed, not approved), with
+  filters, proposing, voting and revocation. The new-version page warns how many standing
+  exceptions the version will lapse. The API adds `GET /api/v1/cpg/proposals?scope=standing`
+  without a case, `revocations` on proposals, the `lapsed` exception status, and the case viewer's
+  `revoke` and `selfApproval` flags; the proposer of a standing exception can no longer vote on it.
+- Corporate policy governance, phase 5 (standing exceptions and revocation, engine): an Exception
+  Approver or Case Reviewer proposes a standing exception (repositories or teams, path globs, one
+  policy version, optional branch, language, size and snippet conditions, a required expiry within
+  the configured maximum), approved under the quorum's standing rules; matching findings report
+  `excepted`, after any rejection or unexpired approval. Teams are resolved when a finding is
+  checked, and a new policy version ends the exception. Decisions and exceptions can be revoked
+  once, with a signed, append-only record, and their findings return to review. A daily sweep
+  records expiry notices (7 days, 1 day, expired) and moves cases out of `decided` when an approval
+  expires. In VS Code, approved and excepted findings show as hints and rejected ones as errors,
+  and the Corporate Policies view shows each finding's decision. Adds `GET /api/v1/cpg/exceptions`
+  and `POST /api/v1/cpg/decisions/:id/revoke`.
+- Corporate policy governance, phase 5 (approvals, engine): reviewers propose snippet and bulk
+  decisions on a case's blocking findings and vote on them under the configured quorum (approvals per
+  tier and scope, per-policy overrides, required boards, an optional required permission). One
+  eligible rejection vetoes an approval, a rejection is final at once, approvals expire within the
+  configured maximum, and bulk is never allowed on prohibited policies. Self-approval (the case
+  opener, a justification author or a revision creator) is refused by the API and by the database.
+  Each finalized finding gets a decision signed with the instance key that records the quorum
+  version in force at finalization; finding status reports `approved`, `rejected` and `pending`, and
+  the case becomes `decided` once every blocking finding has a decision. Endpoints under
+  `/api/v1/cpg/proposals` and `/api/v1/cpg/decisions` (see the API reference).
+- Corporate policy governance, phase 4 (review case pages): **Governance > Cases** lists the review
+  cases of the repositories you can read, filtered by state and board and paged (a page shortened
+  by repository access says so), and each case shows its people, lanes, revisions, findings
+  (policy, tier, status, location, snippet and justification), reviewer context on request (always
+  labelled as generated, with disabled, failed and retry states), and change requests and comments
+  with replies. Lane members request changes, commenters comment and reply, and the opener or a
+  user with `case.close` closes the case; a closed case is read-only and shows its signed,
+  verified closure record. The case API adds the opener and lanes to list items, and the opener,
+  the closure record, the caller's permitted actions and each finding's policy to the case detail.
+- Corporate policy governance, phase 4 (review cases in VS Code): **Nomus: Request Policy Review**
+  scans the workspace, lists the branch's blocking findings that still need review, asks for a
+  justification for each (or one for all) and opens or updates the branch's review case; drafts are
+  kept until the server accepts them, so a cancelled, offline or refused request loses nothing. The
+  Corporate Policies view shows the case (state, lanes, open change requests) and what to do next,
+  with a warning when a reviewer requests changes, and replying and resubmitting work from the
+  editor. Offline, the last case status is shown marked "as of". The engine adds
+  `POST /api/v1/cpg/findings/status`, organization-key reads of the case by branch, the `boardId`
+  filter on the case list and a 4 MiB limit on review requests, and the GitHub App attaches a pull
+  request to its branch's case when it opens and closes the case when it closes.
+- Corporate policy governance, phase 4 (review cases API): developers request review for a branch's
+  corporate findings (one case per branch; unchanged findings add no revision) with a justification per
+  finding; board members request changes on their lane, and the developer replies, resolves and
+  resubmits. Reviewer context explains each flagged snippet with the configured LLM provider, always
+  labelled with provider and model, on by default when a provider is configured and switchable off;
+  failures are recorded and can be retried. Closing a case signs a closure record that the stored
+  history reproduces. Endpoints under `/api/v1/cpg/cases` (see the API reference).
+- Corporate policy governance, phase 4 (review cases, engine core): the review case store, with
+  one open case per organization, repository and branch, and revisions that snapshot the branch's
+  corporate findings (no new revision when nothing changed; new, carried and resolved counts). The
+  derived case state follows the review state machine, and findings split into one lane per owning
+  board. A closed case and everything attached to it can no longer be changed, which the database
+  enforces. No API or UI yet.
+- Corporate policy governance, phase 3 (scanner CLI and VS Code): corporate policy findings where
+  developers work. The CLI fetches the organization's signed policy bundle, verifies every signature
+  and hash before using any rule, and evaluates the rules locally and deterministically (no LLM, no
+  code uploaded). Findings carry their line range, status (needs review, or advisory during a grace
+  period) and fingerprint, in a separate console section, in new JSON fields (`corporate`,
+  `corporateFindings`) and in a second SARIF run (`nomus-corporate/`); the regulatory findings,
+  counts, status, SARIF run and exit codes are unchanged, and an organization without corporate
+  policies gets exactly the previous output. `--no-corporate` skips them. A bundle that does not
+  verify fails the scan closed (exit code 3) and nothing is reported; a bundle that cannot be fetched
+  is reported as "corporate policies were NOT checked" and the regulatory scan runs as before. The VS Code
+  extension shows corporate findings as `Nomus Policy` diagnostics over the full matched range, with
+  their own severity mapping and a link to the policy page, adds a **Corporate Policies** view
+  (findings by group, repository and branch, bundle status), revalidates the bundle with its ETag,
+  and makes every failure visible: offline it uses a re-verified cache and says so, an expired,
+  missing, refused or tampered bundle clears corporate diagnostics and shows an error. New settings
+  `nomus.corporate.enabled` and `nomus.corporate.maxCacheAgeHours`; new command
+  `nomus.cpg.refresh`. See `docs/user-guide/corporate-policies.md`.
+- Corporate policy governance, phase 2 (dashboard): the policy registry pages under
+  **Governance**. Policies (`/governance/policies`: the policy log with state, tier, owning boards,
+  active and pending versions, and the grace period or enforce-from date); New policy
+  (`/governance/policies/new`: write a policy in plain English with violating and compliant code
+  examples, compile it, read the rule both as plain English and as the exact JSON, see every
+  rejection reason and each example's result, then propose it with a key, title, tier, owning
+  boards and a grace period or enforce-from date, optionally editing the rule; compiled output is
+  labelled as generated and the page states that nothing is active until someone other than the
+  author approves it); a policy page (`/governance/policies/:id`: versions with their status,
+  approval votes, activation signatures and supersede history, a diff between any two versions,
+  the four-eyes status of a pending version with Approve and Reject only for eligible approvers and
+  the reason for everyone else, withdraw, new version and proposed retirement); Boards
+  (`/governance/boards`: create, rename, archive, add and remove members, and the policies each
+  board owns); and Quorum (`/governance/quorum`: the signed configuration in force, an editor that
+  validates with the engine's own rules as you type and lists every change before saving a new
+  version with a change note, and the version history with the changes of each version). The
+  rules no setting can change (no self-approval, no bulk decisions on the prohibited tier,
+  advisory never blocks) are shown and cannot be configured.
+- Corporate policy governance, phase 2 (scanner library): `@nomus/scanner/corporate`, the pure
+  library the engine, the VS Code extension and the GitHub Action share for corporate policies: the
+  rule schema and closed vocabularies, globs, regex safety, the deterministic matcher, the finding
+  fingerprint, repository and language helpers, and the signed-bundle client. Scans stay
+  deterministic: nothing in it calls an LLM. The SDK-usage detector now reports the last line of
+  each call (`endLine`).
+- Corporate policy governance, phase 2 (engine): the corporate policy registry. Review boards
+  and their members; a versioned, signed approval quorum (defaults from the brief: 1 approver for
+  review-required, 2 from each owning board for prohibited, no bulk decisions on prohibited, 14-day
+  grace for new policies); a compile step that turns a plain-English policy into a deterministic
+  rule with the configured LLM provider, sending only the policy text (never example code), then
+  validating the rule and checking it against the author's examples, and recording every attempt;
+  an append-only policy log where a version becomes active only after approval by someone other
+  than its author and the person who compiled it (enforced in code and by the database), with a
+  grace period, retirement through the same approval, and an Ed25519-signed activation; and a
+  signed per-organization policy bundle (`GET /api/v1/cpg/bundle`, ETag) for scanners, plus a
+  signed export of the whole log. Policies that cannot be decided deterministically are rejected
+  with the reason. New endpoints under `/api/v1/cpg`: `/boards`, `/quorum`, `/compile`,
+  `/policies`, `/policy-versions/:id/votes`, `/policy-versions/:id/withdraw`, `/bundle` and
+  `/policies/export`. See `docs/admin-guide/corporate-policies.md` and
+  `docs/api-reference/policy-registry.md`.
+- Corporate policy governance, phase 1 (engine): per-organization role-based access control.
+  Seven system roles (Org Admin, Policy Author, Policy Approver, Case Reviewer, Exception Approver,
+  Developer, Auditor), custom roles, org-, team- and repository-scoped grants, teams with
+  repository patterns, per-organization governance settings (off by default) and a hash-chained,
+  append-only audit log. New endpoints under `/api/v1/cpg` (`/me`, `/permissions`, `/roles`,
+  `/users`, `/grants/:id/revoke`, `/teams`, `/settings`, `/audit`) and
+  `POST /api/v1/tenants/:id/org-admins` for platform administrators to restore an Org Admin. See
+  `docs/admin-guide/roles-and-permissions.md` and `docs/api-reference/governance.md`.
+- Corporate policy governance, phase 1 (dashboard): a **Governance** sidebar group with
+  Overview (`/governance`: status, your permissions, why a page was not available), Access
+  (`/governance/access`: invite users, grant roles org-wide or per team or repository, revoke with
+  a reason, deactivate; a role permission matrix with a role editor; teams and their repository
+  patterns), Audit log (`/governance/audit`: filterable, with the hash-chain verification result)
+  and Settings (`/governance/settings`: turn governance on, and reviewer-context generation with a
+  disclosure that flagged snippets are sent to the configured LLM provider). Pages and menu items
+  follow the user's permissions from `GET /api/v1/cpg/me`, so they never call an endpoint the
+  user may not use. Every governance response is validated against its contract in the browser.
+- Numbered, checksummed database migrations for the new tables, with foreign keys, CHECK
+  constraints and triggers that refuse updates and deletes on append-only tables. An edited
+  migration stops the engine at startup instead of drifting.
+
+### Changed
+- Scanner CLI: exit codes are now set with `process.exitCode` instead of `process.exit()`, so the
+  process ends after its output is flushed and its connections are closed (the codes themselves are
+  unchanged). `.nomus.yml` `ignore` and detector settings apply to regulatory scanning only; corporate
+  policies check every file except `.git`, `node_modules`, files over 2 MB and binary files.
+- Live events can now be private to one organization: corporate-policy events (`cpg.bundle.changed`)
+  reach only that organization's stream clients. Existing events are unchanged.
+- `GET /api/v1/cpg/me` and `GET /api/v1/cpg/users` now list each user's review boards.
+- `GET /api/v1/cpg/me` now lists the caller's active roles (`roles`), and the sidebar's user card
+  shows the user's governance role (for example "Org Admin", or "Org Admin +1" with several roles)
+  instead of "Member". Platform administrators and users without governance roles keep the
+  previous label.
+- The policy log (`GET /api/v1/cpg/policies` and the policy detail) now says whether a pending
+  version defines the policy or retires it (`pendingVersionKind`).
+- On upgrade, each organization's earliest member becomes Org Admin and every member becomes
+  Developer; platform administrators get no organization role. Developer keeps the v1.1.0 member
+  abilities (`PATCH /org`, organization API keys) as grants an Org Admin can remove.
+- Settings shows API-key management only to users with `org.api_keys.manage`, and saves the
+  organization profile only with `org.profile.update`, instead of failing with 403.
+- `PATCH /api/v1/org`, `/api/v1/org/api-keys` and `GET /api/v1/org/members` now check the
+  `org.profile.update`, `org.api_keys.manage` and `org.members.read` permissions. Members keep
+  access through Developer, and platform administrator sessions keep v1.1.0 access.
+- A new member created in an organization with no active Org Admin also becomes its Org Admin.
+  Moving a user to another organization revokes their grants in the old one.
+- The VS Code extension key from device sign-in is now bound to the user who signed in. It stops
+  working when that user is deactivated or moved, and is refused with `password_change_required`
+  while the user has a temporary password.
+
+### Fixed
+- A second developer signing in to VS Code in the same organization revoked the first
+  developer's key. Signing in now replaces only your own extension key.
+- Corporate policy governance: a repository named as `github.com/owner/name` and as `owner/name`
+  had two identities, so cases, decisions, standing exceptions and CI runs recorded under one form
+  did not apply under the other. Every repository input (review requests, case and run filters,
+  findings status, CI evaluate and pr-closed) is now canonicalised, so every form names one
+  repository; team and standing-exception repository patterns and repository-scoped grants drop a
+  leading `github.com/` host.
+- Scanner: the fix suggestion for a Python file was a JavaScript snippet naming a fixed model
+  (`model: 'claude-sonnet'`). Suggestions now follow the file's language (Python, or
+  JavaScript/TypeScript; prose for other languages) and log the model the request used.
+- Scanner CLI: with corporate policies on, the console says what each file count is ("Found 5
+  source files for the regulatory scan", "6 files checked for corporate policies (every repository
+  file in a policy's scope, of any type)"). Output without corporate policies is unchanged.
+- VS Code: offline, the regulatory error now says which results are unavailable and that the
+  corporate findings shown come from the cached bundle; a tampered cache while offline gives one
+  error message instead of three.
+- Dashboard: the review case list is denser (relative times with the UTC time on hover, the opening
+  time in the case column, narrower lanes), and on narrow screens the sidebar starts closed and
+  closes after you pick a page instead of covering it.
+- Corporate policy governance: the review case list checked repository permissions after taking a
+  page, so a reader limited to some repositories could get short or empty pages while more of
+  their cases existed. Pages are now filled before they are returned.
 ### Fixed
 - Scanner: two scans of the same repository could list findings in a different order, because the
   file walk returns files in no guaranteed order. Files are now sorted before detection, so the

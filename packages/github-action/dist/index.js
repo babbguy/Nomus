@@ -259884,7 +259884,7 @@ class ParseStatus {
         const arrayValue = [];
         for (const s of results) {
             if (s.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (s.status === "dirty")
                 status.dirty();
             arrayValue.push(s.value);
@@ -259908,9 +259908,9 @@ class ParseStatus {
         for (const pair of pairs) {
             const { key, value } = pair;
             if (key.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (value.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (key.status === "dirty")
                 status.dirty();
             if (value.status === "dirty")
@@ -259922,7 +259922,7 @@ class ParseStatus {
         return { status: status.value, value: finalObject };
     }
 }
-const parseUtil_INVALID = Object.freeze({
+const INVALID = Object.freeze({
     status: "aborted",
 });
 const DIRTY = (value) => ({ status: "dirty", value });
@@ -260422,7 +260422,7 @@ class ZodString extends ZodType {
                 expected: ZodParsedType.string,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const status = new ParseStatus();
         let ctx = undefined;
@@ -261014,7 +261014,7 @@ class ZodNumber extends ZodType {
                 expected: ZodParsedType.number,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         let ctx = undefined;
         const status = new ParseStatus();
@@ -261308,7 +261308,7 @@ class ZodBigInt extends ZodType {
             expected: ZodParsedType.bigint,
             received: ctx.parsedType,
         });
-        return parseUtil_INVALID;
+        return INVALID;
     }
     gte(value, message) {
         return this.setLimit("min", value, true, errorUtil.toString(message));
@@ -261423,7 +261423,7 @@ class ZodBoolean extends ZodType {
                 expected: ZodParsedType.boolean,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261448,14 +261448,14 @@ class ZodDate extends ZodType {
                 expected: ZodParsedType.date,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (Number.isNaN(input.data.getTime())) {
             const ctx = this._getOrReturnCtx(input);
             addIssueToContext(ctx, {
                 code: ZodIssueCode.invalid_date,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const status = new ParseStatus();
         let ctx = undefined;
@@ -261556,7 +261556,7 @@ class ZodSymbol extends ZodType {
                 expected: ZodParsedType.symbol,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261577,7 +261577,7 @@ class ZodUndefined extends ZodType {
                 expected: ZodParsedType.undefined,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261598,7 +261598,7 @@ class ZodNull extends ZodType {
                 expected: ZodParsedType.null,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261649,7 +261649,7 @@ class ZodNever extends ZodType {
             expected: ZodParsedType.never,
             received: ctx.parsedType,
         });
-        return parseUtil_INVALID;
+        return INVALID;
     }
 }
 ZodNever.create = (params) => {
@@ -261668,7 +261668,7 @@ class ZodVoid extends ZodType {
                 expected: ZodParsedType.void,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -261689,7 +261689,7 @@ class ZodArray extends ZodType {
                 expected: ZodParsedType.array,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (def.exactLength !== null) {
             const tooBig = ctx.data.length > def.exactLength.value;
@@ -261875,7 +261875,7 @@ class ZodObject extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const { status, ctx } = this._processInputParams(input);
         const { shape, keys: shapeKeys } = this._getCached();
@@ -262223,7 +262223,7 @@ class ZodUnion extends ZodType {
                 code: ZodIssueCode.invalid_union,
                 unionErrors,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (ctx.common.async) {
             return Promise.all(options.map(async (option) => {
@@ -262281,7 +262281,7 @@ class ZodUnion extends ZodType {
                 code: ZodIssueCode.invalid_union,
                 unionErrors,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
     }
     get options() {
@@ -262356,7 +262356,7 @@ class ZodDiscriminatedUnion extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const discriminator = this.discriminator;
         const discriminatorValue = ctx.data[discriminator];
@@ -262367,7 +262367,7 @@ class ZodDiscriminatedUnion extends ZodType {
                 options: Array.from(this.optionsMap.keys()),
                 path: [discriminator],
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (ctx.common.async) {
             return option._parseAsync({
@@ -262473,14 +262473,14 @@ class ZodIntersection extends ZodType {
         const { status, ctx } = this._processInputParams(input);
         const handleParsed = (parsedLeft, parsedRight) => {
             if (isAborted(parsedLeft) || isAborted(parsedRight)) {
-                return parseUtil_INVALID;
+                return INVALID;
             }
             const merged = mergeValues(parsedLeft.value, parsedRight.value);
             if (!merged.valid) {
                 addIssueToContext(ctx, {
                     code: ZodIssueCode.invalid_intersection_types,
                 });
-                return parseUtil_INVALID;
+                return INVALID;
             }
             if (isDirty(parsedLeft) || isDirty(parsedRight)) {
                 status.dirty();
@@ -262532,7 +262532,7 @@ class ZodTuple extends ZodType {
                 expected: ZodParsedType.array,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (ctx.data.length < this._def.items.length) {
             addIssueToContext(ctx, {
@@ -262542,7 +262542,7 @@ class ZodTuple extends ZodType {
                 exact: false,
                 type: "array",
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const rest = this._def.rest;
         if (!rest && ctx.data.length > this._def.items.length) {
@@ -262608,7 +262608,7 @@ class ZodRecord extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const pairs = [];
         const keyType = this._def.keyType;
@@ -262662,7 +262662,7 @@ class ZodMap extends ZodType {
                 expected: ZodParsedType.map,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const keyType = this._def.keyType;
         const valueType = this._def.valueType;
@@ -262679,7 +262679,7 @@ class ZodMap extends ZodType {
                     const key = await pair.key;
                     const value = await pair.value;
                     if (key.status === "aborted" || value.status === "aborted") {
-                        return parseUtil_INVALID;
+                        return INVALID;
                     }
                     if (key.status === "dirty" || value.status === "dirty") {
                         status.dirty();
@@ -262695,7 +262695,7 @@ class ZodMap extends ZodType {
                 const key = pair.key;
                 const value = pair.value;
                 if (key.status === "aborted" || value.status === "aborted") {
-                    return parseUtil_INVALID;
+                    return INVALID;
                 }
                 if (key.status === "dirty" || value.status === "dirty") {
                     status.dirty();
@@ -262723,7 +262723,7 @@ class ZodSet extends ZodType {
                 expected: ZodParsedType.set,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const def = this._def;
         if (def.minSize !== null) {
@@ -262757,7 +262757,7 @@ class ZodSet extends ZodType {
             const parsedSet = new Set();
             for (const element of elements) {
                 if (element.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (element.status === "dirty")
                     status.dirty();
                 parsedSet.add(element.value);
@@ -262813,7 +262813,7 @@ class ZodFunction extends ZodType {
                 expected: ZodParsedType.function,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         function makeArgsIssue(args, error) {
             return makeIssue({
@@ -262940,7 +262940,7 @@ class ZodLiteral extends ZodType {
                 code: ZodIssueCode.invalid_literal,
                 expected: this._def.value,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return { status: "valid", value: input.data };
     }
@@ -262972,7 +262972,7 @@ class ZodEnum extends ZodType {
                 received: ctx.parsedType,
                 code: ZodIssueCode.invalid_type,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (!this._cache) {
             this._cache = new Set(this._def.values);
@@ -262985,7 +262985,7 @@ class ZodEnum extends ZodType {
                 code: ZodIssueCode.invalid_enum_value,
                 options: expectedValues,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -263038,7 +263038,7 @@ class ZodNativeEnum extends ZodType {
                 received: ctx.parsedType,
                 code: ZodIssueCode.invalid_type,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         if (!this._cache) {
             this._cache = new Set(util.getValidEnumValues(this._def.values));
@@ -263050,7 +263050,7 @@ class ZodNativeEnum extends ZodType {
                 code: ZodIssueCode.invalid_enum_value,
                 options: expectedValues,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return OK(input.data);
     }
@@ -263077,7 +263077,7 @@ class ZodPromise extends ZodType {
                 expected: ZodParsedType.promise,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         const promisified = ctx.parsedType === ZodParsedType.promise ? ctx.data : Promise.resolve(ctx.data);
         return OK(promisified.then((data) => {
@@ -263127,14 +263127,14 @@ class ZodEffects extends ZodType {
             if (ctx.common.async) {
                 return Promise.resolve(processed).then(async (processed) => {
                     if (status.value === "aborted")
-                        return parseUtil_INVALID;
+                        return INVALID;
                     const result = await this._def.schema._parseAsync({
                         data: processed,
                         path: ctx.path,
                         parent: ctx,
                     });
                     if (result.status === "aborted")
-                        return parseUtil_INVALID;
+                        return INVALID;
                     if (result.status === "dirty")
                         return DIRTY(result.value);
                     if (status.value === "dirty")
@@ -263144,14 +263144,14 @@ class ZodEffects extends ZodType {
             }
             else {
                 if (status.value === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 const result = this._def.schema._parseSync({
                     data: processed,
                     path: ctx.path,
                     parent: ctx,
                 });
                 if (result.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (result.status === "dirty")
                     return DIRTY(result.value);
                 if (status.value === "dirty")
@@ -263177,7 +263177,7 @@ class ZodEffects extends ZodType {
                     parent: ctx,
                 });
                 if (inner.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (inner.status === "dirty")
                     status.dirty();
                 // return value is ignored
@@ -263187,7 +263187,7 @@ class ZodEffects extends ZodType {
             else {
                 return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
                     if (inner.status === "aborted")
-                        return parseUtil_INVALID;
+                        return INVALID;
                     if (inner.status === "dirty")
                         status.dirty();
                     return executeRefinement(inner.value).then(() => {
@@ -263204,7 +263204,7 @@ class ZodEffects extends ZodType {
                     parent: ctx,
                 });
                 if (!isValid(base))
-                    return parseUtil_INVALID;
+                    return INVALID;
                 const result = effect.transform(base.value, checkCtx);
                 if (result instanceof Promise) {
                     throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
@@ -263214,7 +263214,7 @@ class ZodEffects extends ZodType {
             else {
                 return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
                     if (!isValid(base))
-                        return parseUtil_INVALID;
+                        return INVALID;
                     return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
                         status: status.value,
                         value: result,
@@ -263374,7 +263374,7 @@ class ZodNaN extends ZodType {
                 expected: ZodParsedType.nan,
                 received: ctx.parsedType,
             });
-            return parseUtil_INVALID;
+            return INVALID;
         }
         return { status: "valid", value: input.data };
     }
@@ -263411,7 +263411,7 @@ class ZodPipeline extends ZodType {
                     parent: ctx,
                 });
                 if (inResult.status === "aborted")
-                    return parseUtil_INVALID;
+                    return INVALID;
                 if (inResult.status === "dirty") {
                     status.dirty();
                     return DIRTY(inResult.value);
@@ -263433,7 +263433,7 @@ class ZodPipeline extends ZodType {
                 parent: ctx,
             });
             if (inResult.status === "aborted")
-                return parseUtil_INVALID;
+                return INVALID;
             if (inResult.status === "dirty") {
                 status.dirty();
                 return {
@@ -263625,7 +263625,7 @@ const coerce = {
     date: ((arg) => ZodDate.create({ ...arg, coerce: true })),
 };
 
-const NEVER = (/* unused pure expression or super */ null && (INVALID));
+const NEVER = INVALID;
 
 ;// CONCATENATED MODULE: ../scanner/dist/config/schema.js
 
@@ -264767,6 +264767,7 @@ function findCallsAst(sf, lines, bindings) {
                 if (resolved && (chain.parts.length > 0 || chain.dynamic)) {
                     const { spec, binding } = resolved;
                     const line = lineOf(node, sf);
+                    const endLine = sf.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
                     const evidence = lineTextAt(lines, line);
                     let hit;
                     if (chain.dynamic) {
@@ -264776,6 +264777,7 @@ function findCallsAst(sf, lines, bindings) {
                             capabilities: spec.defaultCapabilities,
                             confidence: 0.3,
                             line,
+                            endLine,
                             evidence,
                             binding: 'dynamic',
                         };
@@ -264801,6 +264803,7 @@ function findCallsAst(sf, lines, bindings) {
                             capabilities: known ?? spec.defaultCapabilities,
                             confidence: known ? 0.95 : 0.6,
                             line,
+                            endLine,
                             evidence,
                             binding,
                         };
@@ -264879,12 +264882,14 @@ function findCallsRegex(content) {
             if (CLASS_INDEX.has(method))
                 continue;
             const known = methods[method];
+            const line = offsetToLine(content, m.index);
             push({
                 sdk,
                 method,
                 capabilities: known ?? defaults,
                 confidence: known ? 0.95 : 0.6,
-                line: offsetToLine(content, m.index),
+                line,
+                endLine: line,
                 evidence: content.slice(m.index, Math.min(m.index + 200, content.length)).split('\n')[0],
                 binding: 'name-heuristic',
             });
@@ -264900,12 +264905,14 @@ function findCallsRegex(content) {
     DYNAMIC_RE.lastIndex = 0;
     let dm;
     while ((dm = DYNAMIC_RE.exec(content)) !== null) {
+        const line = offsetToLine(content, dm.index);
         hits.push({
             sdk: dm[1],
             method: null,
             capabilities: ['text_generation'],
             confidence: 0.3,
-            line: offsetToLine(content, dm.index),
+            line,
+            endLine: line,
             evidence: content.slice(dm.index, Math.min(dm.index + 200, content.length)).split('\n')[0],
             binding: 'dynamic',
         });
@@ -264951,6 +264958,7 @@ class SdkUsageDetector {
                     metadata: {
                         sdk: hit.sdk,
                         method: hit.method,
+                        endLine: hit.endLine,
                         narrowed: true,
                         engine,
                         binding: hit.binding,
@@ -273439,8 +273447,7 @@ axios.default = axios;
 // this module should only have a default export
 /* harmony default export */ const lib_axios = (axios);
 
-;// CONCATENATED MODULE: ../scanner/dist/match/rule-matcher.js
-
+;// CONCATENATED MODULE: ../scanner/dist/errors.js
 /**
  * Thrown when the Nomus API cannot be reached, returns a non-2xx status,
  * or returns a response the scanner cannot interpret.
@@ -273448,6 +273455,10 @@ axios.default = axios;
  * Consumers MUST treat this as "compliance status UNKNOWN" and fail closed —
  * never as an empty (passing) scan result. A backend outage must never turn
  * a CI compliance gate green.
+ *
+ * Lives in its own module (re-exported by match/rule-matcher.ts) so the
+ * corporate bundle client can throw it without importing the HTTP client of
+ * the regulatory matcher.
  */
 class NomusApiError extends Error {
     /** Underlying error or offending response payload, for diagnostics. */
@@ -273465,6 +273476,13 @@ class NomusApiError extends Error {
 function isNomusApiError(err) {
     return err instanceof Error && err.name === 'NomusApiError';
 }
+//# sourceMappingURL=errors.js.map
+;// CONCATENATED MODULE: ../scanner/dist/match/rule-matcher.js
+
+
+// NomusApiError lives in ../errors.ts so the corporate bundle client can use it
+// without importing this module's HTTP client; re-exported for existing importers.
+
 /** The engine's generic action condition — satisfied by any AI capability. */
 const GENERIC_AI_ACTION = 'ai_operation';
 /** The SDK a signal is about, or undefined for signals that describe data, not an SDK. */
@@ -273635,15 +273653,25 @@ async function matchRulesToCode(imports, capabilities, config) {
 //# sourceMappingURL=rule-matcher.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/fix/suggestions.js
 /**
- * Generate auto-fix suggestions for findings.
+ * Generate auto-fix suggestions for findings. Code examples match the
+ * finding's file language and never name a model: the audit record logs the
+ * model the call actually used.
  */
 function suggestions_generateSuggestions(findings) {
     return findings.map((f) => ({
         ...f,
-        suggestion: getSuggestionForEffect(f.rule.effect, f.sdk, f.rule.ruleKey),
+        suggestion: getSuggestionForEffect(f.rule.effect, f.sdk, f.rule.ruleKey, languageOf(f.file)),
     }));
 }
-function getSuggestionForEffect(effect, sdk, ruleKey) {
+function languageOf(file) {
+    const ext = /\.([A-Za-z0-9]+)$/.exec(file)?.[1]?.toLowerCase();
+    if (ext === 'py')
+        return 'python';
+    if (ext && ['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'mts', 'cts'].includes(ext))
+        return 'javascript';
+    return 'other';
+}
+function getSuggestionForEffect(effect, sdk, ruleKey, lang) {
     switch (effect) {
         case 'deny':
             return `This AI operation may be prohibited under ${ruleKey}. Consider:\n` +
@@ -273651,20 +273679,9 @@ function getSuggestionForEffect(effect, sdk, ruleKey) {
                 `2. Implementing a conformity assessment process\n` +
                 `3. Consulting legal counsel about this specific use case`;
         case 'require_disclosure':
-            return `Add AI disclosure to responses from this ${sdk} call:\n\n` +
-                `// Add header to HTTP responses:\n` +
-                `res.header('X-AI-Generated', 'true');\n\n` +
-                `// Or add to response body:\n` +
-                `{ ...response, _ai_disclosure: 'This content was generated by an AI system.' }`;
+            return `Add AI disclosure to responses from this ${sdk} call:\n\n` + disclosureExample(lang);
         case 'allow_with_audit':
-            return `Wrap this ${sdk} call with audit logging:\n\n` +
-                `import { auditLog } from './compliance/audit';\n\n` +
-                `const result = await ${getCallExample(sdk)};\n` +
-                `await auditLog({\n` +
-                `  action: 'ai_inference',\n` +
-                `  model: '${getModelExample(sdk)}',\n` +
-                `  timestamp: new Date().toISOString(),\n` +
-                `});`;
+            return `Wrap this ${sdk} call with audit logging:\n\n` + auditExample(sdk, lang);
         case 'flag':
             return `This AI operation is flagged for review under ${ruleKey}.\n` +
                 `No action required, but consider documenting your compliance rationale.`;
@@ -273672,26 +273689,1749 @@ function getSuggestionForEffect(effect, sdk, ruleKey) {
             return `Review ${ruleKey} for compliance requirements.`;
     }
 }
-function getCallExample(sdk) {
-    const examples = {
-        '@anthropic-ai/sdk': 'anthropic.messages.create({ ... })',
-        'anthropic': 'anthropic.messages.create({ ... })',
-        'openai': 'openai.chat.completions.create({ ... })',
-        '@google/generative-ai': 'model.generateContent({ ... })',
-    };
-    return examples[sdk] ?? 'aiClient.generate({ ... })';
+function disclosureExample(lang) {
+    switch (lang) {
+        case 'python':
+            return `# Add header to HTTP responses:\n` +
+                `response.headers["X-AI-Generated"] = "true"\n\n` +
+                `# Or add to response body:\n` +
+                `{**body, "_ai_disclosure": "This content was generated by an AI system."}`;
+        case 'javascript':
+            return `// Add header to HTTP responses:\n` +
+                `res.header('X-AI-Generated', 'true');\n\n` +
+                `// Or add to response body:\n` +
+                `{ ...response, _ai_disclosure: 'This content was generated by an AI system.' }`;
+        default:
+            return `- Set the HTTP response header X-AI-Generated: true, or\n` +
+                `- Add an _ai_disclosure field to the response body stating that the content was generated by an AI system.`;
+    }
 }
-function getModelExample(sdk) {
+function auditExample(sdk, lang) {
+    switch (lang) {
+        case 'python':
+            return `from datetime import datetime, timezone\n` +
+                `from compliance.audit import audit_log  # your audit logger\n\n` +
+                `result = ${pythonCall(sdk)}\n` +
+                `audit_log(\n` +
+                `    action="ai_inference",\n` +
+                `    model=request["model"],\n` +
+                `    timestamp=datetime.now(timezone.utc).isoformat(),\n` +
+                `)`;
+        case 'javascript':
+            return `import { auditLog } from './compliance/audit'; // your audit logger\n\n` +
+                `const result = await ${javascriptCall(sdk)};\n` +
+                `await auditLog({\n` +
+                `  action: 'ai_inference',\n` +
+                `  model: request.model,\n` +
+                `  timestamp: new Date().toISOString(),\n` +
+                `});`;
+        default:
+            return `After the call returns, write an audit record with the action (ai_inference), ` +
+                `the model the request used and a UTC ISO-8601 timestamp.`;
+    }
+}
+function javascriptCall(sdk) {
     const examples = {
-        '@anthropic-ai/sdk': 'claude-sonnet',
-        'anthropic': 'claude-sonnet',
-        'openai': 'gpt-4',
-        '@google/generative-ai': 'gemini-pro',
+        '@anthropic-ai/sdk': 'anthropic.messages.create(request)',
+        'openai': 'openai.chat.completions.create(request)',
+        '@google/generative-ai': 'genAI.getGenerativeModel({ model: request.model }).generateContent(request.contents)',
     };
-    return examples[sdk] ?? 'ai-model';
+    return examples[sdk] ?? 'aiClient.generate(request)';
+}
+function pythonCall(sdk) {
+    const examples = {
+        'anthropic': 'anthropic_client.messages.create(**request)',
+        'openai': 'openai_client.chat.completions.create(**request)',
+        'google.generativeai': 'genai.GenerativeModel(request["model"]).generate_content(request["contents"])',
+    };
+    return examples[sdk] ?? 'ai_client.generate(**request)';
 }
 //# sourceMappingURL=suggestions.js.map
+// EXTERNAL MODULE: external "node:crypto"
+var external_node_crypto_ = __nccwpck_require__(7598);
+;// CONCATENATED MODULE: ../scanner/dist/corporate/canonical.js
+
+/**
+ * Canonical JSON for signed and hashed CPG payloads: keys sorted at every
+ * depth, no whitespace. Byte-identical to the engine's `canonicalJSON`
+ * (engine/src/core/policy-compiler.ts); an engine test pins the parity, so a
+ * hash or signature the server computes verifies in the client.
+ */
+function canonicalJson(value) {
+    return JSON.stringify(sortKeysDeep(value));
+}
+function sortKeysDeep(value) {
+    if (Array.isArray(value))
+        return value.map(sortKeysDeep);
+    if (value !== null && typeof value === 'object') {
+        const sorted = {};
+        for (const key of Object.keys(value).sort()) {
+            sorted[key] = sortKeysDeep(value[key]);
+        }
+        return sorted;
+    }
+    return value;
+}
+function sha256Hex(text) {
+    return (0,external_node_crypto_.createHash)('sha256').update(text, 'utf8').digest('hex');
+}
+//# sourceMappingURL=canonical.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/glob.js
+/**
+ * The one glob engine of Corporate Policy Governance (design spec §7.1),
+ * shared by team repository patterns, standing-exception patterns and the
+ * file scope of corporate rules. A glob compiles to an anchored RegExp.
+ *
+ * - `/` is the only separator; a glob containing `\` is rejected (inputs are
+ *   repo-relative POSIX paths; {@link toPosixPath} converts `\` first).
+ * - `*` matches a run of characters other than `/`; `?` exactly one.
+ * - `**` must be a whole segment and matches zero or more segments.
+ * - `{a,b}` alternation, not nested, at most 10 alternatives.
+ * - No character classes, no `!` negation, no extglobs, no leading `./` or `/`.
+ * - Paths are case-sensitive. Dotfiles match like any other name.
+ * - At most 200 characters per glob and 50 globs per list.
+ */
+const MAX_GLOB_LENGTH = 200;
+const MAX_GLOBS_PER_LIST = 50;
+const MAX_ALTERNATIVES = 10;
+class InvalidGlobError extends Error {
+    glob;
+    constructor(glob, reason) {
+        super(`Invalid glob "${glob}": ${reason}`);
+        this.glob = glob;
+        this.name = 'InvalidGlobError';
+    }
+}
+function escapeRe(ch) {
+    return /[.+^${}()|[\]\\]/.test(ch) ? `\\${ch}` : ch;
+}
+function segmentToRe(glob, seg) {
+    if (seg.length === 0)
+        throw new InvalidGlobError(glob, 'empty path segment');
+    if (seg.includes('**'))
+        throw new InvalidGlobError(glob, '** must be a whole segment');
+    let out = '';
+    for (const ch of seg) {
+        if (ch === '*')
+            out += '[^/]*';
+        else if (ch === '?')
+            out += '[^/]';
+        else
+            out += escapeRe(ch);
+    }
+    return out;
+}
+function alternativeToRe(glob, alt) {
+    const segs = alt.split('/');
+    let re = '';
+    let needSep = false;
+    for (let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        const last = i === segs.length - 1;
+        if (seg === '**') {
+            if (last) {
+                re += needSep ? '(?:/[^/]+)*' : '(?:[^/]+(?:/[^/]+)*)?';
+                needSep = true;
+            }
+            else {
+                re += needSep ? '(?:/[^/]+)*/' : '(?:[^/]+/)*';
+                needSep = false;
+            }
+            continue;
+        }
+        if (needSep)
+            re += '/';
+        re += segmentToRe(glob, seg);
+        needSep = true;
+    }
+    return re;
+}
+function expandBraces(glob) {
+    const open = glob.indexOf('{');
+    if (open === -1) {
+        if (glob.includes('}'))
+            throw new InvalidGlobError(glob, 'unbalanced }');
+        return [glob];
+    }
+    const close = glob.indexOf('}', open);
+    if (close === -1)
+        throw new InvalidGlobError(glob, 'unbalanced {');
+    const inner = glob.slice(open + 1, close);
+    if (inner.includes('{'))
+        throw new InvalidGlobError(glob, 'nested alternation is not supported');
+    const options = inner.split(',');
+    if (options.length < 2)
+        throw new InvalidGlobError(glob, 'alternation needs at least two options');
+    if (options.length > MAX_ALTERNATIVES)
+        throw new InvalidGlobError(glob, `at most ${MAX_ALTERNATIVES} alternatives`);
+    const prefix = glob.slice(0, open);
+    const rest = expandBraces(glob.slice(close + 1));
+    const out = [];
+    for (const o of options)
+        for (const r of rest)
+            out.push(prefix + o + r);
+    if (out.length > MAX_ALTERNATIVES * MAX_ALTERNATIVES)
+        throw new InvalidGlobError(glob, 'too many alternatives');
+    return out;
+}
+/** Compile a glob to an anchored RegExp, or throw InvalidGlobError. */
+function compileGlob(glob) {
+    if (typeof glob !== 'string' || glob.length === 0)
+        throw new InvalidGlobError(String(glob), 'empty');
+    if (glob.length > MAX_GLOB_LENGTH)
+        throw new InvalidGlobError(glob, `longer than ${MAX_GLOB_LENGTH} characters`);
+    if (glob.includes('\\'))
+        throw new InvalidGlobError(glob, 'backslashes are not allowed; use /');
+    if (glob.startsWith('./'))
+        throw new InvalidGlobError(glob, 'leading ./ is not allowed');
+    if (glob.startsWith('/'))
+        throw new InvalidGlobError(glob, 'leading / is not allowed');
+    if (glob.startsWith('!'))
+        throw new InvalidGlobError(glob, 'negation is not supported');
+    if (/[[\]]/.test(glob))
+        throw new InvalidGlobError(glob, 'character classes are not supported');
+    if (/[@!+]\(/.test(glob))
+        throw new InvalidGlobError(glob, 'extglobs are not supported');
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u001f]/.test(glob))
+        throw new InvalidGlobError(glob, 'control characters are not allowed');
+    const alts = expandBraces(glob).map((a) => alternativeToRe(glob, a));
+    return new RegExp(`^(?:${alts.join('|')})$`);
+}
+/** null when the glob compiles, otherwise the reason. */
+function glob_globError(glob) {
+    try {
+        compileGlob(glob);
+        return null;
+    }
+    catch (err) {
+        return err.message;
+    }
+}
+/** Validate a repository pattern (a lowercase glob). Returns null when valid, else the reason. */
+function repoPatternError(pattern) {
+    if (pattern !== pattern.toLowerCase())
+        return `Invalid glob "${pattern}": repository patterns must be lowercase`;
+    return glob_globError(pattern);
+}
+function globMatches(glob, value) {
+    const re = typeof glob === 'string' ? compileGlob(glob) : glob;
+    return re.test(value);
+}
+/** A compiled glob list: matches when any glob matches. Throws InvalidGlobError on the first bad glob. */
+function compileGlobList(globs) {
+    if (globs.length > MAX_GLOBS_PER_LIST)
+        throw new InvalidGlobError(globs[0] ?? '', `at most ${MAX_GLOBS_PER_LIST} globs per list`);
+    const res = globs.map(compileGlob);
+    return (value) => res.some((re) => re.test(value));
+}
+/** `\` → `/` (Windows paths), for matching repo-relative paths. */
+function glob_toPosixPath(path) {
+    return path.replace(/\\/g, '/');
+}
+//# sourceMappingURL=glob.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/regex-safety.js
+/**
+ * Regex safety for author-supplied `line_regex` patterns (design spec §8.4.3).
+ *
+ * Corporate rules run in every developer's editor and in CI, so a pattern
+ * that can backtrack catastrophically is a denial of service. JavaScript has
+ * no linear-time regex engine, so the defence is static and conservative:
+ *
+ * - at most 200 characters; flags '' or 'i' only;
+ * - no backreferences (`\1`–`\9`, `\k<…>`), no lookaround, no named groups;
+ * - star height at most 1: no quantifier on a group that itself contains a
+ *   quantifier or an alternation (`(a+)+`, `(a|aa)*`, `(\w+\s?)*`);
+ * - at most 10 quantifiers, at most 2 of them unbounded (`*`, `+`, `{n,}`),
+ *   and bounded repetitions of at most {@link MAX_BOUNDED_REPEAT};
+ * - the pattern must compile and must not match an empty line (it would
+ *   flag every line of every file).
+ *
+ * Matching is per line, and lines longer than {@link MAX_REGEX_LINE_LENGTH}
+ * characters are skipped and counted, never matched. There is no multi-line
+ * matching. A fuzz test runs every accepted pattern of the test corpus
+ * against random and adversarial 4,096-character lines.
+ */
+const MAX_REGEX_SOURCE_LENGTH = 200;
+const MAX_REGEX_LINE_LENGTH = 4096;
+const MAX_QUANTIFIERS = 10;
+const MAX_UNBOUNDED_QUANTIFIERS = 2;
+const MAX_BOUNDED_REPEAT = 100;
+const REGEX_FLAGS = (/* unused pure expression or super */ null && (['', 'i']));
+const BRACE_QUANTIFIER = /^\{(\d+)(,(\d*))?\}/;
+/** Check a pattern against the static safety rules. Never throws. */
+function regex_safety_checkRegexSafety(source, flags) {
+    const reasons = [];
+    if (typeof source !== 'string' || source.length === 0)
+        return { ok: false, reasons: ['the pattern is empty'] };
+    if (source.length > MAX_REGEX_SOURCE_LENGTH)
+        reasons.push(`the pattern is longer than ${MAX_REGEX_SOURCE_LENGTH} characters`);
+    if (typeof flags !== 'string' || !REGEX_FLAGS.includes(flags))
+        reasons.push("flags must be '' or 'i'");
+    const stack = [{ hasQuantifier: false, hasAlternation: false }];
+    let last = null;
+    let quantifiers = 0;
+    let unbounded = 0;
+    const add = (r) => { if (!reasons.includes(r))
+        reasons.push(r); };
+    let i = 0;
+    while (i < source.length) {
+        const ch = source[i];
+        if (ch === '\\') {
+            const next = source[i + 1] ?? '';
+            if (/[1-9]/.test(next))
+                add('backreferences are not allowed');
+            if (next === 'k' && source[i + 2] === '<')
+                add('named backreferences are not allowed');
+            last = { kind: 'simple' };
+            i += 2;
+            continue;
+        }
+        if (ch === '[') {
+            let j = i + 1;
+            if (source[j] === '^')
+                j++;
+            if (source[j] === ']')
+                j++; // a leading ] is literal
+            while (j < source.length && source[j] !== ']')
+                j += source[j] === '\\' ? 2 : 1;
+            if (j >= source.length)
+                add('unterminated character class');
+            last = { kind: 'simple' };
+            i = j + 1;
+            continue;
+        }
+        if (ch === '(') {
+            if (source[i + 1] === '?') {
+                const head = source.slice(i, i + 4);
+                if (head.startsWith('(?:')) {
+                    i += 3;
+                }
+                else {
+                    if (head.startsWith('(?=') || head.startsWith('(?!') || head.startsWith('(?<=') || head.startsWith('(?<!'))
+                        add('lookahead and lookbehind are not allowed');
+                    else if (head.startsWith('(?<'))
+                        add('named groups are not allowed; use (?: … )');
+                    else
+                        add('unsupported group syntax');
+                    i += 2;
+                }
+            }
+            else {
+                i += 1;
+            }
+            stack.push({ hasQuantifier: false, hasAlternation: false });
+            last = null;
+            continue;
+        }
+        if (ch === ')') {
+            if (stack.length === 1) {
+                add('unbalanced )');
+                i += 1;
+                continue;
+            }
+            const frame = stack.pop();
+            const parent = stack[stack.length - 1];
+            // A quantifier anywhere inside makes the enclosing group "quantified" too.
+            if (frame.hasQuantifier)
+                parent.hasQuantifier = true;
+            last = { kind: 'group', risky: frame.hasQuantifier || frame.hasAlternation };
+            i += 1;
+            continue;
+        }
+        if (ch === '|') {
+            stack[stack.length - 1].hasAlternation = true;
+            last = null;
+            i += 1;
+            continue;
+        }
+        let qLen = 0;
+        let isUnbounded = false;
+        if (ch === '*' || ch === '+') {
+            qLen = 1;
+            isUnbounded = true;
+        }
+        else if (ch === '?') {
+            qLen = 1;
+        }
+        else if (ch === '{') {
+            const m = BRACE_QUANTIFIER.exec(source.slice(i));
+            if (m) {
+                qLen = m[0].length;
+                const min = Number(m[1]);
+                const hasComma = m[2] !== undefined;
+                const max = hasComma ? (m[3] === '' ? null : Number(m[3])) : min;
+                if (max === null)
+                    isUnbounded = true;
+                else if (max > MAX_BOUNDED_REPEAT || min > MAX_BOUNDED_REPEAT)
+                    add(`bounded repetitions may not exceed {${MAX_BOUNDED_REPEAT}}`);
+            }
+        }
+        if (qLen > 0) {
+            if (last === null) {
+                add('a quantifier must follow something to repeat');
+            }
+            else {
+                quantifiers++;
+                if (isUnbounded)
+                    unbounded++;
+                if (last.kind === 'group' && last.risky)
+                    add('nested quantifiers (star height above 1) are not allowed, e.g. (a+)+ or (a|b)*');
+            }
+            stack[stack.length - 1].hasQuantifier = true;
+            i += qLen;
+            if (source[i] === '?')
+                i += 1; // lazy modifier
+            last = null; // a quantified atom cannot be quantified again
+            continue;
+        }
+        last = { kind: 'simple' };
+        i += 1;
+    }
+    if (stack.length > 1)
+        add('unbalanced (');
+    if (quantifiers > MAX_QUANTIFIERS)
+        add(`at most ${MAX_QUANTIFIERS} quantifiers are allowed`);
+    if (unbounded > MAX_UNBOUNDED_QUANTIFIERS)
+        add(`at most ${MAX_UNBOUNDED_QUANTIFIERS} unbounded quantifiers (*, +, {n,}) are allowed; use a bounded {m,n}`);
+    if (reasons.length === 0) {
+        let re = null;
+        try {
+            re = new RegExp(source, flags);
+        }
+        catch (err) {
+            add(`the pattern does not compile: ${err.message}`);
+        }
+        if (re && re.test(''))
+            add('the pattern matches an empty line, so it would flag every line');
+    }
+    return { ok: reasons.length === 0, reasons };
+}
+/** Compile a pattern that passed {@link checkRegexSafety}; throws with the reasons otherwise. */
+function compileSafeRegex(source, flags) {
+    const result = regex_safety_checkRegexSafety(source, flags);
+    if (!result.ok)
+        throw new Error(`Unsafe regex /${source}/${flags}: ${result.reasons.join('; ')}`);
+    return new RegExp(source, flags);
+}
+//# sourceMappingURL=regex-safety.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/vocab.js
+/**
+ * The closed vocabularies a corporate rule may use (design spec §8.4.1).
+ *
+ * Every term here is something a built-in detector emits deterministically.
+ * The compile prompt shows these lists to the LLM, the rule schema accepts
+ * nothing else, and vocab.test.ts fails if a detector starts emitting a
+ * capability or SDK name that is missing here (vocabulary drift).
+ */
+/**
+ * SDK families a rule can name. Detectors report SDKs under several spellings
+ * (the package name, the Python module, the Go module, the SDK family); every
+ * spelling maps to exactly one family through {@link canonicalSdkFamily}.
+ */
+const KNOWN_SDKS = [
+    'openai',
+    'anthropic',
+    'google-genai',
+    'cohere',
+    'aws-bedrock',
+    'huggingface',
+    'replicate',
+];
+/** Every SDK spelling a detector can emit → its family. */
+const SDK_ALIASES = {
+    // import-detector targets (package / module names)
+    openai: 'openai',
+    'com.openai': 'openai',
+    'openai-go': 'openai',
+    '@anthropic-ai/sdk': 'anthropic',
+    anthropic: 'anthropic',
+    'com.anthropic': 'anthropic',
+    'anthropic-sdk-go': 'anthropic',
+    '@google/generative-ai': 'google-genai',
+    'google.generativeai': 'google-genai',
+    '@aws-sdk/client-bedrock-runtime': 'aws-bedrock',
+    'boto3-bedrock': 'aws-bedrock',
+    'aws-bedrock': 'aws-bedrock',
+    '@huggingface/inference': 'huggingface',
+    huggingface_hub: 'huggingface',
+    replicate: 'replicate',
+    'cohere-ai': 'cohere',
+    cohere: 'cohere',
+    // sdk-usage-detector dynamic-call names (regex engine)
+    bedrock: 'aws-bedrock',
+    genai: 'google-genai',
+    generativeai: 'google-genai',
+};
+/** The family of a detector SDK name, or null when it is not a known AI SDK. */
+function canonicalSdkFamily(name) {
+    return Object.prototype.hasOwnProperty.call(SDK_ALIASES, name) ? SDK_ALIASES[name] : null;
+}
+/**
+ * Capabilities emitted by the behavioural detectors (sdk-usage, data-flow,
+ * PHI/PII, risk classifier, transparency). The import detector's capabilities
+ * are what an SDK *could* do, so the `capability` matcher does not use them
+ * (§8.4.2; use `sdk_import` to match imports).
+ */
+const EMITTED_CAPABILITIES = [
+    // sdk-usage-detector: narrowed per called method
+    'text_generation', 'embeddings', 'image_generation', 'speech_to_text', 'text_to_speech',
+    'content_moderation', 'model_finetuning', 'classification', 'rerank', 'processes_user_input',
+    // data-flow-detector
+    'returns_ai_to_user', 'logs_ai_output', 'stores_ai_output', 'sends_to_third_party',
+    // phi-pattern-detector
+    'contains_phi', 'handles_phi', 'contains_pii', 'handles_pii', 'contains_financial', 'handles_financial',
+    'phi_in_ai_call', 'pii_in_ai_call', 'logs_phi', 'logs_pii',
+    // risk-classifier (EU AI Act Annex III)
+    'high_risk_biometric', 'high_risk_critical_infra', 'high_risk_education', 'high_risk_employment',
+    'high_risk_essential_services', 'high_risk_law_enforcement', 'high_risk_migration', 'high_risk_justice',
+    'handles_biometric',
+    // transparency-detector (EU AI Act Article 50)
+    'ai_user_interaction', 'generates_ai_content', 'generates_synthetic_media', 'emotion_recognition',
+];
+const DATA_CATEGORIES = ['phi', 'pii', 'financial'];
+const DATA_LABELS = ['ssn', 'dob', 'email', 'phone', 'mrn', 'credit_card', 'phi_var', 'pii_var', 'fin_var'];
+const FLOW_SOURCES = ['user_input', 'db_read', 'fs_read', 'env_var'];
+const FLOW_SINKS = ['returns_to_user', 'logs_output', 'stores_output', 'third_party'];
+const LANGUAGES = ['typescript', 'javascript', 'python', 'java', 'go', 'other'];
+const TIERS = ['advisory', 'review-required', 'prohibited'];
+/** Policy keys: `corp.` + lowercase letters, digits, `.`, `_`, `-`; never `:` (it separates fingerprint parts). */
+const POLICY_KEY_RE = /^corp\.[a-z0-9][a-z0-9._-]{0,84}$/;
+//# sourceMappingURL=vocab.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/rule-schema.js
+
+
+
+
+/**
+ * The corporate rule schema (design spec §8.4.1). A compiled corporate
+ * policy is this JSON: data, not code. The deterministic matcher
+ * (matcher.ts) interprets it; nothing at scan time calls an LLM.
+ *
+ * The same schema validates the compile step's LLM output in the engine,
+ * the rules in the signed bundle, and the rules the scanner evaluates.
+ */
+const CORPORATE_RULE_SCHEMA_VERSION = 1;
+const rule_schema_glob = stringType().min(1).max(200);
+const safeRegexSchema = objectType({
+    source: stringType().min(1).max(MAX_REGEX_SOURCE_LENGTH),
+    flags: enumType(['', 'i']),
+    /** Match against the line with comments blanked out (detect/file-content.ts stripComments). */
+    ignoreComments: booleanType().default(true),
+}).strict();
+const methodName = stringType().regex(/^[A-Za-z_][A-Za-z0-9_.]{0,99}$/);
+const matcherSchema = discriminatedUnionType('kind', [
+    objectType({
+        kind: literalType('sdk_call'),
+        sdks: arrayType(enumType(KNOWN_SDKS)).min(1).max(20),
+        /** Method paths as the SDK-usage detector reports them, e.g. `chat.completions.create`. */
+        methods: arrayType(methodName).min(1).max(50).optional(),
+    }).strict(),
+    objectType({
+        kind: literalType('sdk_import'),
+        sdks: arrayType(enumType(KNOWN_SDKS)).min(1).max(20),
+    }).strict(),
+    objectType({
+        kind: literalType('capability'),
+        capabilities: arrayType(enumType(EMITTED_CAPABILITIES)).min(1).max(20),
+    }).strict(),
+    objectType({
+        kind: literalType('data_pattern'),
+        categories: arrayType(enumType(DATA_CATEGORIES)).min(1).max(3),
+        labels: arrayType(enumType(DATA_LABELS)).min(1).max(9).optional(),
+    }).strict(),
+    objectType({
+        kind: literalType('data_flow'),
+        sources: arrayType(enumType(FLOW_SOURCES)).min(1).max(4).optional(),
+        sinks: arrayType(enumType(FLOW_SINKS)).min(1).max(4).optional(),
+    }).strict(),
+    objectType({
+        kind: literalType('line_regex'),
+        pattern: safeRegexSchema,
+    }).strict(),
+]);
+const corporateRuleSchema = objectType({
+    schemaVersion: literalType(CORPORATE_RULE_SCHEMA_VERSION),
+    match: objectType({
+        /** Every matcher must hit; hits of all[0] are the anchors. */
+        all: arrayType(matcherSchema).min(1).max(4),
+        /** Companion hits must be within this many lines of the anchor; null = anywhere in the same file. */
+        withinLines: numberType().int().min(0).max(200).nullable().default(null),
+        /** An anchor is suppressed when any of these hits in the window (or the file). */
+        unless: arrayType(matcherSchema).max(4).default([]),
+        unlessScope: enumType(['window', 'file']).default('file'),
+    }).strict(),
+    files: objectType({
+        include: arrayType(rule_schema_glob).min(1).max(MAX_GLOBS_PER_LIST).default(['**/*']),
+        exclude: arrayType(rule_schema_glob).max(MAX_GLOBS_PER_LIST).default([]),
+        languages: arrayType(enumType(LANGUAGES)).min(1).max(LANGUAGES.length).optional(),
+    }).strict(),
+    snippet: objectType({
+        contextBefore: numberType().int().min(0).max(20).default(0),
+        contextAfter: numberType().int().min(0).max(20).default(0),
+    }).strict().default({}),
+    /** Shown to developers on every finding; plain text, no placeholders. */
+    message: stringType().min(10).max(300),
+}).strict();
+const PLACEHOLDER_RE = /\{\{|\}\}|\$\{|<%|%>|\{[A-Za-z_][A-Za-z0-9_]*\}/;
+function issuePath(path) {
+    return path.length === 0 ? 'rule' : `rule.${path.join('.')}`;
+}
+/**
+ * Deterministic validation of a corporate rule (compile pipeline step 5):
+ * the schema and closed vocabularies, regex safety, globs that compile,
+ * limits, and a message without template placeholders. Every reason is
+ * returned, not just the first. Never throws.
+ */
+function validateCorporateRule(input) {
+    const parsed = corporateRuleSchema.safeParse(input);
+    if (!parsed.success) {
+        return { ok: false, rule: null, reasons: parsed.error.issues.map((i) => `${issuePath(i.path)}: ${i.message}`) };
+    }
+    const rule = parsed.data;
+    const reasons = [];
+    const matchers = [
+        ...rule.match.all.map((m, i) => [`rule.match.all.${i}`, m]),
+        ...rule.match.unless.map((m, i) => [`rule.match.unless.${i}`, m]),
+    ];
+    for (const [path, m] of matchers) {
+        if (m.kind === 'line_regex') {
+            const safety = checkRegexSafety(m.pattern.source, m.pattern.flags);
+            for (const r of safety.reasons)
+                reasons.push(`${path}.pattern: ${r}`);
+        }
+        if (m.kind === 'data_flow' && (m.sources?.length ?? 0) + (m.sinks?.length ?? 0) === 0) {
+            reasons.push(`${path}: a data_flow matcher needs at least one source or sink`);
+        }
+        for (const list of ['sdks', 'capabilities', 'categories', 'labels', 'methods', 'sources', 'sinks']) {
+            const values = m[list];
+            if (Array.isArray(values) && new Set(values).size !== values.length)
+                reasons.push(`${path}.${list}: values must not repeat`);
+        }
+    }
+    if (rule.match.unlessScope === 'window' && rule.match.withinLines === null) {
+        reasons.push('rule.match.unlessScope: "window" needs match.withinLines (null means the whole file; use "file")');
+    }
+    if (rule.match.unless.length === 0 && rule.match.unlessScope === 'window') {
+        reasons.push('rule.match.unlessScope: "window" has no effect without match.unless');
+    }
+    for (const [path, list] of [['rule.files.include', rule.files.include], ['rule.files.exclude', rule.files.exclude]]) {
+        list.forEach((g, i) => {
+            const err = globError(g);
+            if (err)
+                reasons.push(`${path}.${i}: ${err}`);
+        });
+        if (new Set(list).size !== list.length)
+            reasons.push(`${path}: globs must not repeat`);
+    }
+    if (PLACEHOLDER_RE.test(rule.message))
+        reasons.push('rule.message: must be plain text without template placeholders');
+    if (/[\r\n]/.test(rule.message))
+        reasons.push('rule.message: must be a single line');
+    return reasons.length === 0 ? { ok: true, rule, reasons: [] } : { ok: false, rule: null, reasons };
+}
+//# sourceMappingURL=rule-schema.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/fingerprint.js
+
+/**
+ * The corporate finding fingerprint (design spec §6). This is the only
+ * implementation: the engine, the VS Code extension and the GitHub Action
+ * all import it, so an approval recorded by the server matches the finding
+ * the editor and CI compute.
+ *
+ *   fingerprint = sha256(normalizeSnippet(snippet)) + ':' + policyKey + ':' + policyVersion
+ *
+ * The file path and line numbers are deliberately not part of it (owner
+ * decision D10): moving code does not re-flag it, editing it does.
+ */
+/** The largest snippet range, in lines; longer ranges are truncated and flagged. */
+const MAX_SNIPPET_LINES = 400;
+/**
+ * Exactly three operations (§6.2): CRLF and lone CR become LF; trailing
+ * whitespace is stripped from every line; runs of blank lines collapse to
+ * one. Comments, indentation, case and Unicode form are left alone, so any
+ * semantic edit changes the hash.
+ */
+function normalizeSnippet(s) {
+    const lines = s.replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((l) => l.trimEnd());
+    const out = [];
+    for (const l of lines) {
+        if (l === '' && out.length > 0 && out[out.length - 1] === '')
+            continue;
+        out.push(l);
+    }
+    return out.join('\n');
+}
+/** sha256 of the UTF-8 bytes of the normalized snippet, lowercase hex. */
+function snippetHash(snippet) {
+    return (0,external_node_crypto_.createHash)('sha256').update(normalizeSnippet(snippet), 'utf8').digest('hex');
+}
+function fingerprintOf(snippet, policyKey, policyVersion) {
+    if (policyKey.includes(':'))
+        throw new Error(`policyKey may not contain ':' (${policyKey})`);
+    if (!Number.isInteger(policyVersion) || policyVersion < 1)
+        throw new Error(`policyVersion must be a positive integer (${policyVersion})`);
+    return `${snippetHash(snippet)}:${policyKey}:${policyVersion}`;
+}
+const FINGERPRINT_RE = /^[0-9a-f]{64}:corp\.[a-z0-9][a-z0-9._-]{0,84}:[1-9][0-9]{0,6}$/;
+/** Split a fingerprint on its first and last ':' (§6.3). Returns null when malformed. */
+function parseFingerprint(fp) {
+    if (!FINGERPRINT_RE.test(fp))
+        return null;
+    const first = fp.indexOf(':');
+    const last = fp.lastIndexOf(':');
+    return { snippetHash: fp.slice(0, first), policyKey: fp.slice(first + 1, last), policyVersion: Number(fp.slice(last + 1)) };
+}
+/** Drop one leading U+FEFF (§6.1): `readFileSync` keeps a BOM that VS Code's `getText()` never has. */
+function stripBom(content) {
+    return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+}
+/** Split file content into lines on CRLF, CR or LF (§6.1); line N is element N-1. */
+function splitLines(content) {
+    return content.split(/\r\n|\r|\n/);
+}
+/**
+ * The snippet of a matched range (§6.1): widen by the context lines, clamp
+ * to the file, cap at {@link MAX_SNIPPET_LINES} lines. `lines` comes from
+ * {@link splitLines} of BOM-stripped content.
+ */
+function extractSnippet(lines, start, end, contextBefore = 0, contextAfter = 0) {
+    const total = Math.max(lines.length, 1);
+    let s = Math.max(1, Math.min(start, end) - contextBefore);
+    let e = Math.min(total, Math.max(start, end) + contextAfter);
+    if (s > total)
+        s = total;
+    if (e < s)
+        e = s;
+    let truncated = false;
+    if (e - s + 1 > MAX_SNIPPET_LINES) {
+        e = s + MAX_SNIPPET_LINES - 1;
+        truncated = true;
+    }
+    return { startLine: s, endLine: e, snippet: lines.slice(s - 1, e).join('\n'), truncated };
+}
+//# sourceMappingURL=fingerprint.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/repo.js
+/**
+ * Repository identity (design spec §2.2): lowercase `owner/name` for
+ * github.com, `host/owner/name` for any other host. The engine, the
+ * extension and the action all canonicalise through {@link canonicalRepo},
+ * so a case opened from the editor and a CI run of the same repository land
+ * on the same record.
+ */
+const CANONICAL_REPO_RE = /^[a-z0-9.-]+(\/[a-z0-9._-]+){1,2}$/;
+/**
+ * Canonicalise a repository reference: `owner/name`, `host/owner/name`,
+ * `https://host/owner/name(.git)`, `git@host:owner/name(.git)` or
+ * `ssh://git@host[:port]/owner/name(.git)`. Returns null when the input is
+ * not a repository reference.
+ */
+function canonicalRepo(input) {
+    if (typeof input !== 'string')
+        return null;
+    let s = input.trim();
+    if (s.length === 0 || s.length > 400)
+        return null;
+    let host = null;
+    let path;
+    const scp = /^[\w.-]+@([\w.-]+):(?!\/)(.+)$/.exec(s); // git@host:owner/name
+    if (scp) {
+        host = scp[1];
+        path = scp[2];
+    }
+    else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+        let url;
+        try {
+            url = new URL(s);
+        }
+        catch {
+            return null;
+        }
+        if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol))
+            return null;
+        host = url.hostname;
+        path = url.pathname;
+    }
+    else {
+        path = s;
+    }
+    s = path.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+    const parts = s.split('/');
+    if (host !== null) {
+        if (parts.length !== 2)
+            return null;
+        parts.unshift(host);
+    }
+    if (parts.length < 2 || parts.length > 3)
+        return null;
+    if (parts.length === 3 && parts[0].toLowerCase() === 'github.com')
+        parts.shift();
+    if (parts.some((p) => p === '' || p === '.' || p === '..'))
+        return null;
+    const repo = parts.join('/').toLowerCase();
+    return CANONICAL_REPO_RE.test(repo) && repo.length <= 200 ? repo : null;
+}
+function isCanonicalRepo(repo) {
+    return canonicalRepo(repo) === repo;
+}
+/**
+ * Canonicalise a repository pattern (a glob over canonical ids; a literal id
+ * is a pattern without wildcards): a leading `github.com/` host is dropped,
+ * as canonicalRepo() drops it, so `github.com/acme/*` and `acme/*` are one
+ * pattern. Returns null when `github.com/` is not followed by exactly an owner
+ * and a name segment (`github.com/*`, `github.com/**`): github.com ids have
+ * no host segment, so no canonical id could match such a pattern. Case is
+ * kept; callers refuse uppercase patterns.
+ */
+function canonicalRepoPattern(pattern) {
+    if (!pattern.startsWith('github.com/'))
+        return pattern;
+    const rest = pattern.slice('github.com/'.length);
+    return rest.split('/').length === 2 && !rest.includes('**') ? rest : null;
+}
+//# sourceMappingURL=repo.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/contracts.js
+
+
+
+
+
+
+/**
+ * Client contracts shared by the engine, the VS Code extension and the
+ * GitHub Action (design spec §8.6, §9.3): the bundle (Phase 2) and the
+ * review-case contracts (Phase 4) and the CI gate contracts (Phase 6).
+ *
+ * The signed payload builders live here too, so the server that signs and
+ * the client that verifies build byte-identical canonical JSON.
+ */
+const isoDate = stringType().datetime();
+const sha256 = stringType().regex(/^[0-9a-f]{64}$/);
+const bundlePolicySchema = objectType({
+    policyId: stringType().uuid(),
+    policyKey: stringType().regex(/^corp\.[a-z0-9][a-z0-9._-]{0,84}$/),
+    version: numberType().int().min(1),
+    title: stringType().min(3).max(120),
+    tier: enumType(TIERS),
+    /** In the order they were signed (sorted by id). */
+    owningBoards: arrayType(objectType({ id: stringType().uuid(), name: stringType() }).strict()).min(1),
+    /** Before this instant the policy is advisory everywhere (grace period). */
+    enforceFrom: isoDate,
+    activatedAt: isoDate,
+    rule: corporateRuleSchema,
+    ruleHash: sha256,
+    activationSignature: stringType().min(1),
+}).strict();
+const corporateBundleSchema = objectType({
+    kind: literalType('nomus.cpg-bundle.v1'),
+    /** cpg_org_settings.enabled; policies is [] when false. */
+    enabled: booleanType(),
+    orgId: stringType().uuid(),
+    generatedAt: isoDate,
+    /** sha256(canonicalJson({policies})) over the policies sorted by key, without activationSignature. */
+    bundleHash: sha256,
+    policies: arrayType(bundlePolicySchema),
+    minScannerVersion: literalType('1.2.0'),
+    /** Ed25519 over canonicalJson({kind, orgId, enabled, bundleHash, generatedAt}). */
+    signature: stringType().min(1),
+}).strict();
+const BUNDLE_KIND = 'nomus.cpg-bundle.v1';
+const POLICY_ACTIVATION_KIND = 'nomus.cpg-policy.v1';
+/** sha256 of a rule's canonical JSON (the `ruleHash` of a version). */
+function ruleHashOf(rule) {
+    return sha256Hex(canonicalJson(rule));
+}
+function byKey(a, b) {
+    return a.policyKey < b.policyKey ? -1 : a.policyKey > b.policyKey ? 1 : 0;
+}
+/** Policies in bundle order: sorted by policyKey (code-unit order, locale-independent). */
+function sortBundlePolicies(policies) {
+    return [...policies].sort(byKey);
+}
+/** The bundle hash: over the sorted policies without their activation signatures. */
+function bundleHashOf(policies) {
+    const content = sortBundlePolicies(policies).map(({ activationSignature: _sig, ...rest }) => rest);
+    return sha256Hex(canonicalJson({ policies: content }));
+}
+/** The canonical text the bundle signature covers. */
+function bundleSignedText(b) {
+    return canonicalJson({ kind: BUNDLE_KIND, orgId: b.orgId, enabled: b.enabled, bundleHash: b.bundleHash, generatedAt: b.generatedAt });
+}
+// ─── Review cases (§9.3): request review, case status, finding resolutions ──
+const repo = stringType().regex(CANONICAL_REPO_RE);
+/**
+ * A repository named in a request: any reference canonicalRepo() accepts
+ * (`owner/name`, `github.com/owner/name`, a remote URL, any case), replaced by
+ * its canonical id. The engine stores and compares only that id, so one
+ * repository has one identity for its cases, decisions, exceptions and CI runs.
+ */
+const repoInputSchema = stringType().transform((s, ctx) => {
+    const id = canonicalRepo(s);
+    if (id === null)
+        ctx.addIssue({ code: ZodIssueCode.custom, message: 'not a repository: expected owner/name, host/owner/name or a git remote URL' });
+    return id ?? NEVER;
+});
+/** A repository pattern in a request, canonicalised by canonicalRepoPattern() (a leading `github.com/` host is dropped). */
+const repoPatternInputSchema = stringType().min(1).max(200).transform((s, ctx) => {
+    const pattern = canonicalRepoPattern(s);
+    if (pattern === null)
+        ctx.addIssue({ code: ZodIssueCode.custom, message: 'a github.com pattern names owner/name after the host, e.g. github.com/owner/*' });
+    return pattern ?? NEVER;
+});
+const branch = stringType().min(1).max(255).refine((b) => !b.startsWith('refs/') && !/[\u0000-\u001f]/.test(b), 'a branch name without refs/ or control characters');
+const fingerprint = stringType().regex(FINGERPRINT_RE);
+const relPath = stringType().min(1).max(500).refine((p) => !p.startsWith('/') && !p.includes('..') && !p.includes('\\'), 'a repo-relative path');
+const findingUploadSchema = objectType({
+    fingerprint,
+    policyKey: stringType().regex(POLICY_KEY_RE),
+    policyVersion: numberType().int().min(1),
+    filePath: relPath,
+    startLine: numberType().int().min(1),
+    endLine: numberType().int().min(1),
+    language: enumType(LANGUAGES),
+    /** Normalized snippet text; may be left out when the server already stores it. */
+    snippet: stringType().max(32768).optional(),
+}).strict().refine((f) => f.endLine >= f.startLine, 'endLine must be >= startLine');
+const justificationInputSchema = objectType({ fingerprint, body: stringType().trim().min(20).max(4000) }).strict();
+const requestReviewRequestSchema = objectType({
+    repo: repoInputSchema,
+    branch,
+    headSha: stringType().regex(/^[0-9a-f]{40}$/).nullable(),
+    bundleHash: sha256,
+    findings: arrayType(findingUploadSchema).min(1).max(500),
+    justifications: arrayType(justificationInputSchema).max(500),
+}).strict();
+const findingResolutionSchema = objectType({
+    fingerprint,
+    status: enumType(['advisory', 'grace', 'approved', 'excepted', 'rejected', 'expired', 'pending', 'changes_requested', 'needs_review']),
+    blocking: booleanType(),
+    tier: enumType(TIERS),
+    /** Null only for a finding of a retired policy. */
+    enforceFrom: isoDate.nullable(),
+    decisionId: stringType().uuid().nullable(),
+    exceptionDecisionId: stringType().uuid().nullable(),
+    expiresAt: isoDate.nullable(),
+}).strict();
+const caseStatusSchema = objectType({
+    id: stringType().uuid(),
+    ref: stringType(),
+    repo,
+    branch,
+    prNumber: numberType().int().nullable(),
+    state: enumType(['open', 'in_review', 'changes_requested', 'decided', 'closed']),
+    closeReason: stringType().nullable(),
+    latestRevision: numberType().int(),
+    url: stringType().url(),
+    lanes: arrayType(objectType({
+        boardId: stringType().uuid(),
+        boardName: stringType(),
+        state: enumType(['needs_review', 'changes_requested', 'decided']),
+        blocking: numberType().int(),
+        decided: numberType().int(),
+    }).strict()),
+    openChangeRequests: arrayType(objectType({
+        commentId: stringType().uuid(),
+        boardName: stringType(),
+        authorName: stringType(),
+        body: stringType(),
+        fingerprints: arrayType(fingerprint),
+        createdAt: isoDate,
+    }).strict()),
+    resolutions: arrayType(findingResolutionSchema),
+    updatedAt: isoDate,
+}).strict();
+const requestReviewResponseSchema = objectType({
+    created: booleanType(),
+    revisionCreated: booleanType(),
+    case: caseStatusSchema,
+}).strict();
+const caseByBranchResponseSchema = objectType({ case: caseStatusSchema.nullable() }).strict();
+const findingsStatusRequestSchema = objectType({ repo: repoInputSchema, branch, fingerprints: arrayType(fingerprint).min(1).max(1000) }).strict();
+const findingsStatusResponseSchema = objectType({ items: arrayType(findingResolutionSchema), evaluatedAt: isoDate }).strict();
+// ─── CI gate (§9.3, §11.2): evaluate a CI scan, close a case with its PR ──
+const sha = stringType().regex(/^[0-9a-f]{40}$/);
+const prNumber = numberType().int().positive();
+const ciEvaluateRequestSchema = objectType({
+    repo: repoInputSchema,
+    branch,
+    prNumber: prNumber.nullable(),
+    headSha: sha,
+    eventName: stringType().max(50),
+    bundleHash: sha256,
+    scannedFileCount: numberType().int().min(0),
+    /** Send every finding's snippet: blocking tiers must (422 snippet_required), and a case revision stores them all. */
+    findings: arrayType(findingUploadSchema).max(2000),
+}).strict();
+const ciCountsSchema = objectType({
+    blocking: numberType().int().min(0),
+    pending: numberType().int().min(0),
+    rejected: numberType().int().min(0),
+    approved: numberType().int().min(0),
+    excepted: numberType().int().min(0),
+    /** Advisory and grace-period findings. */
+    advisory: numberType().int().min(0),
+}).strict();
+const CI_RUN_KIND = 'nomus.cpg-ci-run.v1';
+/** What the CI verdict signature covers: `signedPayload` is the canonical JSON of this object. */
+const ciRunPayloadSchema = objectType({
+    kind: literalType(CI_RUN_KIND),
+    runId: stringType().uuid(),
+    orgId: stringType().uuid(),
+    repo,
+    branch,
+    prNumber: prNumber.nullable(),
+    headSha: sha,
+    bundleHash: sha256,
+    verdict: enumType(['pass', 'fail']),
+    counts: ciCountsSchema,
+    /** sha256 of the sorted uploaded fingerprints joined with newlines (§5.4). */
+    findingsDigest: sha256,
+    evaluatedAt: isoDate,
+}).strict();
+const ciEvaluateResponseSchema = objectType({
+    runId: stringType().uuid(),
+    verdict: enumType(['pass', 'fail']),
+    /** One line per blocking finding: `corp.x @ path:line: status`. */
+    reasons: arrayType(stringType()),
+    caseId: stringType().uuid().nullable(),
+    /** The case's `CPG-…` reference. Display only: like `caseId`, it is outside the signed payload. */
+    caseRef: stringType().nullable(),
+    caseUrl: stringType().url().nullable(),
+    findings: arrayType(findingResolutionSchema.extend({ filePath: relPath, startLine: numberType().int(), endLine: numberType().int() }).strict()),
+    counts: ciCountsSchema,
+    evaluatedAt: isoDate,
+    signedPayload: stringType(),
+    signature: stringType(),
+}).strict();
+const prClosedRequestSchema = objectType({ repo: repoInputSchema, branch, prNumber, merged: booleanType(), mergeSha: sha.optional() }).strict();
+const prClosedResponseSchema = objectType({ caseId: stringType().uuid().nullable(), closed: booleanType() }).strict();
+/** The activation payload of a bundle policy, as the server signed it (§8.5). */
+function policyActivationPayload(orgId, p) {
+    return {
+        kind: POLICY_ACTIVATION_KIND,
+        orgId,
+        policyId: p.policyId,
+        policyKey: p.policyKey,
+        version: p.version,
+        title: p.title,
+        tier: p.tier,
+        owningBoardIds: p.owningBoards.map((b) => b.id),
+        ruleHash: p.ruleHash,
+        enforceFrom: p.enforceFrom,
+        activatedAt: p.activatedAt,
+    };
+}
+//# sourceMappingURL=contracts.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/bundle-client.js
+
+
+
+
+/** A NomusApiError (same name, same fail-closed handling) that says why the bundle is unusable. */
+class CorporateBundleError extends NomusApiError {
+    failure;
+    constructor(failure, message, detail) {
+        super(message, detail);
+        this.failure = failure;
+    }
+}
+/** The failure behind an error thrown by this module; anything unexpected counts as `invalid`. */
+function bundleFailureOf(err) {
+    const f = err?.failure;
+    if (f && typeof f === 'object' && (f.kind === 'unreachable' || f.kind === 'invalid' || (f.kind === 'http' && typeof f.status === 'number')))
+        return f;
+    return { kind: 'invalid' };
+}
+const unreachable = (message, detail) => new CorporateBundleError({ kind: 'unreachable' }, message, detail);
+const invalid = (message, detail) => new CorporateBundleError({ kind: 'invalid' }, message, detail);
+function httpError(what, status, detail) {
+    const hint = status === 401 ? ': the API key was rejected (401)' : status === 403 ? ': the API key lacks the read:policies scope (403)' : '';
+    return new CorporateBundleError({ kind: 'http', status }, `${what} answered ${status}${hint}`, detail);
+}
+const DEFAULT_TIMEOUT_MS = 30_000;
+/** The instance public key (base64 SPKI DER) from /.well-known/nomus-keys. */
+async function fetchSigningKey(apiUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS) {
+    let res;
+    try {
+        res = await fetchImpl(`${apiUrl.replace(/\/+$/, '')}/.well-known/nomus-keys`, { signal: AbortSignal.timeout(timeoutMs) });
+    }
+    catch (err) {
+        throw unreachable('Could not reach the Nomus signing-key endpoint', err);
+    }
+    if (!res.ok)
+        throw httpError('The Nomus signing-key endpoint', res.status, res.status);
+    let body;
+    try {
+        body = await res.json();
+    }
+    catch (err) {
+        throw invalid('The Nomus signing-key endpoint returned invalid JSON', err);
+    }
+    const key = body?.keys?.[0]?.spki;
+    if (typeof key !== 'string' || key.length === 0)
+        throw invalid('The Nomus signing-key endpoint returned no key', body);
+    return key;
+}
+function verifyEd25519(text, signatureB64, spkiB64) {
+    try {
+        const key = (0,external_node_crypto_.createPublicKey)({ key: Buffer.from(spkiB64, 'base64'), format: 'der', type: 'spki' });
+        return (0,external_node_crypto_.verify)(null, Buffer.from(text, 'utf8'), key, Buffer.from(signatureB64, 'base64'));
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Verify a bundle offline against the instance public key: the contract,
+ * the bundle signature, the recomputed bundle hash, every rule hash and
+ * every activation signature. Throws NomusApiError on the first failure.
+ */
+function verifyCorporateBundle(raw, spkiB64) {
+    const parsed = corporateBundleSchema.safeParse(raw);
+    if (!parsed.success)
+        throw invalid('The corporate policy bundle does not match the contract', parsed.error.issues);
+    const bundle = parsed.data;
+    if (!verifyEd25519(bundleSignedText(bundle), bundle.signature, spkiB64)) {
+        throw invalid('The corporate policy bundle signature does not verify');
+    }
+    if (bundleHashOf(bundle.policies) !== bundle.bundleHash) {
+        throw invalid('The corporate policy bundle hash does not match its policies');
+    }
+    if (!bundle.enabled && bundle.policies.length > 0) {
+        throw invalid('A disabled corporate policy bundle must not carry policies');
+    }
+    const keys = new Set();
+    for (const p of bundle.policies) {
+        if (keys.has(p.policyKey))
+            throw invalid(`The corporate policy bundle lists ${p.policyKey} twice`);
+        keys.add(p.policyKey);
+        if (ruleHashOf(p.rule) !== p.ruleHash)
+            throw invalid(`The rule of ${p.policyKey} v${p.version} does not match its hash`);
+        const payload = canonicalJson(policyActivationPayload(bundle.orgId, p));
+        if (!verifyEd25519(payload, p.activationSignature, spkiB64)) {
+            throw invalid(`The activation signature of ${p.policyKey} v${p.version} does not verify`);
+        }
+    }
+    return bundle;
+}
+/**
+ * Verify a CI verdict (E61) offline against the instance public key: the
+ * contract, the signature over `signedPayload`, and that the signed payload
+ * is canonical and states this response's run, verdict and counts for the
+ * scan that was sent (`expected`), so a verdict for another org, repository,
+ * commit or bundle is never accepted. Throws NomusApiError on any mismatch.
+ */
+function verifyCiVerdict(raw, spkiB64, expected) {
+    const parsed = ciEvaluateResponseSchema.safeParse(raw);
+    if (!parsed.success)
+        throw invalid('The CI verdict does not match the contract', parsed.error.issues);
+    const res = parsed.data;
+    if (!verifyEd25519(res.signedPayload, res.signature, spkiB64))
+        throw invalid('The CI verdict signature does not verify');
+    let payload;
+    try {
+        payload = ciRunPayloadSchema.parse(JSON.parse(res.signedPayload));
+    }
+    catch {
+        throw invalid('The signed CI verdict payload does not match the contract');
+    }
+    const stated = { ...expected, runId: res.runId, verdict: res.verdict, evaluatedAt: res.evaluatedAt, counts: res.counts };
+    const mismatch = Object.entries(stated).find(([k, v]) => canonicalJson(payload[k]) !== canonicalJson(v));
+    if (canonicalJson(payload) !== res.signedPayload || mismatch || (res.verdict === 'fail') !== (res.counts.blocking > 0)) {
+        throw invalid(`The signed CI verdict does not match the response${mismatch ? ` (${mismatch[0]})` : ''}`);
+    }
+    return res;
+}
+/** Fetch `/api/v1/cpg/bundle` and verify it (see the module comment for the fail-closed rules). */
+async function fetchCorporateBundle(opts) {
+    const fetchImpl = opts.fetchImpl ?? fetch;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const base = opts.apiUrl.replace(/\/+$/, '');
+    const headers = { Authorization: `Bearer ${opts.apiKey}`, Accept: 'application/json' };
+    if (opts.cached)
+        headers['If-None-Match'] = opts.cached.etag;
+    let res;
+    try {
+        res = await fetchImpl(`${base}/api/v1/cpg/bundle`, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    }
+    catch (err) {
+        throw unreachable('Could not reach the Nomus corporate policy bundle endpoint', err);
+    }
+    if (res.status === 404)
+        return { available: false };
+    const spki = await fetchSigningKey(base, fetchImpl, timeoutMs);
+    if (res.status === 304 && opts.cached) {
+        return { available: true, bundle: verifyCorporateBundle(opts.cached.bundle, spki), etag: opts.cached.etag, notModified: true, publicKeySpki: spki };
+    }
+    if (res.status !== 200) {
+        let detail = res.status;
+        try {
+            detail = await res.json();
+        }
+        catch { /* keep the status */ }
+        throw httpError('The Nomus corporate policy bundle endpoint', res.status, detail);
+    }
+    let body;
+    try {
+        body = await res.json();
+    }
+    catch (err) {
+        throw invalid('The Nomus corporate policy bundle is not valid JSON', err);
+    }
+    const bundle = verifyCorporateBundle(body, spki);
+    return { available: true, bundle, etag: res.headers.get('etag'), notModified: false, publicKeySpki: spki };
+}
+//# sourceMappingURL=bundle-client.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/languages.js
+/**
+ * File language for corporate rule scoping (`files.languages`) and for the
+ * `language` of a finding. Decided by extension only, so it is deterministic
+ * and identical in the CLI, the editor and CI.
+ */
+const EXTENSIONS = [
+    [/\.(ts|tsx|mts|cts)$/i, 'typescript'],
+    [/\.(js|jsx|mjs|cjs)$/i, 'javascript'],
+    [/\.(py|pyi)$/i, 'python'],
+    [/\.java$/i, 'java'],
+    [/\.go$/i, 'go'],
+];
+function languages_languageOf(path) {
+    for (const [re, lang] of EXTENSIONS)
+        if (re.test(path))
+            return lang;
+    return 'other';
+}
+//# sourceMappingURL=languages.js.map
+;// CONCATENATED MODULE: ../scanner/dist/corporate/matcher.js
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * The deterministic corporate matcher (design spec §8.2, §8.4.2).
+ *
+ * Pure: the same files and rules always give the same findings. It reads no
+ * clock, makes no network call and never calls an LLM; the detectors it runs
+ * are the scanner's own, on in-memory content. The only inputs are the file
+ * contents (keyed by repo-relative path) and the rules.
+ *
+ * Corporate rules ignore the repository's `.nomus.yml` ignore list and
+ * detector toggles (decision D14): a developer must not be able to hide a
+ * violation by editing a file they own. The only fixed exclusions are
+ * `.git` and `node_modules` directories, files over 2 MB and binary files.
+ */
+const MAX_CORPORATE_FILE_BYTES = 2 * 1024 * 1024;
+const BINARY_SNIFF_CHARS = 8192;
+/** Detectors whose signals a matcher kind reads. `line_regex` needs none. */
+const DETECTORS_FOR = {
+    sdk_call: ['sdk-usage-detector'],
+    sdk_import: ['import-detector'],
+    // Behavioural detectors only: the import detector's capabilities are what an
+    // SDK could do, not what the code does (use sdk_import for imports).
+    capability: ['sdk-usage-detector', 'phi-pattern-detector', 'risk-classifier', 'transparency-detector', 'data-flow-detector'],
+    data_pattern: ['phi-pattern-detector'],
+    data_flow: ['data-flow-detector'],
+    line_regex: [],
+};
+function makeDetector(name) {
+    switch (name) {
+        case 'import-detector': return new ImportDetector();
+        case 'sdk-usage-detector': return new SdkUsageDetector();
+        case 'phi-pattern-detector': return new PhiPatternDetector();
+        case 'risk-classifier': return new RiskClassifier();
+        case 'transparency-detector': return new TransparencyDetector();
+        case 'data-flow-detector': return new DataFlowDetector();
+    }
+}
+/** Normalize a path to repo-relative POSIX form; null when it escapes the repository. */
+function matcher_toRepoRelative(path) {
+    const p = glob_toPosixPath(path).replace(/^\.\/+/, '');
+    if (p.length === 0 || p.startsWith('/') || /^[a-z]:/i.test(p))
+        return null;
+    if (p.split('/').some((seg) => seg === '..' || seg === ''))
+        return null;
+    return p;
+}
+function fixedExclusion(path, content) {
+    if (path.split('/').some((seg) => seg === '.git' || seg === 'node_modules'))
+        return 'excluded_directory';
+    if (Buffer.byteLength(content, 'utf8') > MAX_CORPORATE_FILE_BYTES)
+        return 'too_large';
+    if (content.slice(0, BINARY_SNIFF_CHARS).includes('\u0000'))
+        return 'binary';
+    return null;
+}
+function prepare(p) {
+    const include = compileGlobList(p.rule.files.include);
+    const exclude = compileGlobList(p.rule.files.exclude);
+    const languages = p.rule.files.languages ? new Set(p.rule.files.languages) : null;
+    const regexes = new Map();
+    for (const m of [...p.rule.match.all, ...p.rule.match.unless]) {
+        if (m.kind === 'line_regex')
+            regexes.set(m, new RegExp(m.pattern.source, m.pattern.flags));
+    }
+    return {
+        input: p,
+        inScope: (path, language) => include(path) && !exclude(path) && (!languages || languages.has(language)),
+        regexes,
+    };
+}
+function signalsOf(file, names) {
+    const out = [];
+    for (const n of names)
+        out.push(...(file.signals.get(n) ?? []));
+    return out;
+}
+function metaOf(s) {
+    return (s.metadata ?? {});
+}
+function hitsFor(m, file, regex, counters) {
+    const at = (s) => {
+        const endLine = metaOf(s).endLine;
+        return { line: s.line, endLine: typeof endLine === 'number' && endLine >= s.line ? endLine : s.line };
+    };
+    switch (m.kind) {
+        case 'sdk_call':
+            return signalsOf(file, ['sdk-usage-detector']).filter((s) => {
+                const meta = metaOf(s);
+                const family = typeof meta.sdk === 'string' ? canonicalSdkFamily(meta.sdk) : null;
+                if (!family || !m.sdks.includes(family))
+                    return false;
+                const method = typeof meta.method === 'string' ? meta.method : null;
+                // Dynamic calls (sdk[name]()) have no method: they match only when no methods are listed.
+                if (m.methods)
+                    return method !== null && m.methods.includes(method);
+                return true;
+            }).map(at);
+        case 'sdk_import':
+            return signalsOf(file, ['import-detector']).filter((s) => {
+                const family = canonicalSdkFamily(s.target);
+                return family !== null && m.sdks.includes(family);
+            }).map(at);
+        case 'capability': {
+            const wanted = new Set(m.capabilities);
+            return signalsOf(file, DETECTORS_FOR.capability).filter((s) => s.capabilities.some((c) => wanted.has(c))).map(at);
+        }
+        case 'data_pattern':
+            return signalsOf(file, ['phi-pattern-detector']).filter((s) => {
+                const category = metaOf(s).category;
+                if (typeof category !== 'string' || !m.categories.includes(category))
+                    return false;
+                return !m.labels || m.labels.includes(s.target);
+            }).map(at);
+        case 'data_flow':
+            return signalsOf(file, ['data-flow-detector']).filter((s) => {
+                const meta = metaOf(s);
+                if (m.sources && !(typeof meta.source === 'string' && m.sources.includes(meta.source)))
+                    return false;
+                if (m.sinks && !(typeof meta.sink === 'string' && m.sinks.includes(meta.sink)))
+                    return false;
+                return true;
+            }).map(at);
+        case 'line_regex': {
+            if (!regex)
+                return [];
+            let lines = file.lines;
+            if (m.pattern.ignoreComments) {
+                file.stripped ??= splitLines(stripComments(file.path, file.text));
+                lines = file.stripped;
+            }
+            const hits = [];
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.length > MAX_REGEX_LINE_LENGTH) {
+                    counters.longLines++;
+                    continue;
+                }
+                regex.lastIndex = 0;
+                if (regex.test(line))
+                    hits.push({ line: i + 1, endLine: i + 1 });
+            }
+            return hits;
+        }
+    }
+}
+/** The companion hit nearest the anchor (ties: the earlier line), or null. */
+function nearest(hits, anchor, within) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const h of hits) {
+        const d = Math.abs(h.line - anchor.line);
+        if (within !== null && d > within)
+            continue;
+        if (d < bestDist || (d === bestDist && best !== null && h.line < best.line)) {
+            best = h;
+            bestDist = d;
+        }
+    }
+    return best;
+}
+function evaluateRule(rule, file, counters) {
+    const { policyKey, version, rule: r } = rule.input;
+    const within = r.match.withinLines;
+    const hitCache = new Map();
+    const hits = (m) => {
+        let h = hitCache.get(m);
+        if (!h) {
+            h = hitsFor(m, file, rule.regexes.get(m), counters);
+            hitCache.set(m, h);
+        }
+        return h;
+    };
+    const [first, ...companions] = r.match.all;
+    const out = new Map();
+    for (const anchor of hits(first)) {
+        let start = anchor.line;
+        let end = anchor.endLine;
+        let ok = true;
+        for (const m of companions) {
+            const c = nearest(hits(m), anchor, within);
+            if (!c) {
+                ok = false;
+                break;
+            }
+            start = Math.min(start, c.line);
+            end = Math.max(end, c.endLine);
+        }
+        if (!ok)
+            continue;
+        const suppressed = r.match.unless.some((m) => {
+            const scopeWithin = r.match.unlessScope === 'window' ? within : null;
+            return nearest(hits(m), anchor, scopeWithin) !== null;
+        });
+        if (suppressed)
+            continue;
+        const range = extractSnippet(file.lines, start, end, r.snippet.contextBefore, r.snippet.contextAfter);
+        const key = `${range.startLine}:${range.endLine}`;
+        if (out.has(key))
+            continue;
+        const normalized = normalizeSnippet(range.snippet);
+        out.set(key, {
+            policyKey,
+            policyVersion: version,
+            filePath: file.path,
+            language: file.language,
+            startLine: range.startLine,
+            endLine: range.endLine,
+            anchorLine: anchor.line,
+            matchedBy: first.kind,
+            snippet: normalized,
+            snippetHash: snippetHash(normalized),
+            fingerprint: fingerprintOf(normalized, policyKey, version),
+            truncated: range.truncated,
+            message: r.message,
+        });
+    }
+    return [...out.values()];
+}
+function compareFindings(a, b) {
+    if (a.filePath !== b.filePath)
+        return a.filePath < b.filePath ? -1 : 1;
+    if (a.startLine !== b.startLine)
+        return a.startLine - b.startLine;
+    if (a.policyKey !== b.policyKey)
+        return a.policyKey < b.policyKey ? -1 : 1;
+    return a.endLine - b.endLine;
+}
+/**
+ * Evaluate corporate rules over in-memory files (repo-relative path → UTF-8
+ * content). One finding per (policyKey, file, startLine, endLine), sorted by
+ * (file, startLine, policyKey).
+ */
+async function evaluateCorporateRules(files, policies) {
+    const prepared = policies.map(prepare);
+    const skippedFiles = [];
+    const counters = { longLines: 0 };
+    const scoped = [];
+    for (const [rawPath, rawContent] of files) {
+        const path = matcher_toRepoRelative(rawPath);
+        if (path === null) {
+            skippedFiles.push({ filePath: rawPath, reason: 'invalid_path' });
+            continue;
+        }
+        const excluded = fixedExclusion(path, rawContent);
+        if (excluded) {
+            skippedFiles.push({ filePath: path, reason: excluded });
+            continue;
+        }
+        const language = languages_languageOf(path);
+        const rules = prepared.filter((p) => p.inScope(path, language));
+        if (rules.length === 0)
+            continue;
+        const text = stripBom(rawContent).replace(/\r\n?/g, '\n');
+        scoped.push({ file: { path, language, text, lines: splitLines(text), signals: new Map() }, rules });
+    }
+    // Run each needed detector once over the files whose rules need it.
+    const needed = new Map();
+    for (const { file, rules } of scoped) {
+        const names = new Set();
+        for (const r of rules) {
+            for (const m of [...r.input.rule.match.all, ...r.input.rule.match.unless])
+                for (const n of DETECTORS_FOR[m.kind])
+                    names.add(n);
+        }
+        for (const n of names) {
+            const list = needed.get(n) ?? [];
+            list.push(file);
+            needed.set(n, list);
+        }
+    }
+    for (const [name, list] of needed) {
+        const byPath = new Map(list.map((f) => [f.path, f]));
+        const ctx = {
+            rootDir: '',
+            files: list.map((f) => f.path),
+            fileContents: new Map(list.map((f) => [f.path, f.text])),
+            config: { jurisdictions: [], ignore: [] },
+        };
+        for (const s of await makeDetector(name).detect(ctx)) {
+            const f = byPath.get(s.file);
+            if (!f)
+                continue;
+            const arr = f.signals.get(name) ?? [];
+            arr.push(s);
+            f.signals.set(name, arr);
+        }
+    }
+    const findings = [];
+    for (const { file, rules } of scoped)
+        for (const r of rules)
+            findings.push(...evaluateRule(r, file, counters));
+    findings.sort(compareFindings);
+    return { findings, scannedFileCount: scoped.length, skippedLongLines: counters.longLines, skippedFiles };
+}
+/**
+ * Evaluate one rule on one in-memory file (compile pipeline step 6, example
+ * verification). The fingerprints use `policyKey` / `version` as given.
+ */
+async function evaluateRuleOnText(rule, path, code, policyKey = 'corp.example', version = 1) {
+    return evaluateCorporateRules([[path, code]], [{ policyKey, version, rule }]);
+}
+//# sourceMappingURL=matcher.js.map
+;// CONCATENATED MODULE: ../scanner/dist/scan-corporate.js
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+
+
+
+
+
+/** Files are read in batches so a large repository is never held in memory at once. */
+const READ_BATCH = 500;
+/** The summary of a scan that did not use corporate policies. */
+function scan_corporate_corporateOff() {
+    return {
+        available: false, enabled: false, orgId: null, bundleHash: null,
+        policyCount: 0, scannedFileCount: 0, skippedLongLines: 0, skippedFileCount: 0,
+    };
+}
+/**
+ * The local status of a corporate finding before any review (Phase 3 has no
+ * decisions yet): `advisory` for advisory policies, `grace` until the
+ * policy's enforce-from instant, otherwise `needs_review`, which blocks.
+ */
+function corporateStatusOf(policy, now) {
+    if (policy.tier === 'advisory')
+        return { status: 'advisory', blocking: false };
+    if (now.getTime() < Date.parse(policy.enforceFrom))
+        return { status: 'grace', blocking: false };
+    return { status: 'needs_review', blocking: true };
+}
+/**
+ * Resolve the bundle a scan uses. `off`, or no API key: none. A bundle
+ * passed by the caller is used as is. Otherwise fetch and verify it; any
+ * failure throws NomusApiError (fail closed). An engine that predates CPG
+ * (404) gives `null`: no corporate policy can exist there.
+ */
+async function scan_corporate_resolveCorporateBundle(options, apiUrl, apiKey) {
+    if (!options || options.mode !== 'auto')
+        return null;
+    if (options.bundle)
+        return options.bundle;
+    if (!apiKey)
+        return null;
+    const res = await fetchCorporateBundle({ apiUrl, apiKey, fetchImpl: options.fetchImpl });
+    return res.available ? res.bundle : null;
+}
+function activePolicies(bundle) {
+    return bundle.enabled ? bundle.policies : [];
+}
+function summaryFor(bundle) {
+    return {
+        ...scan_corporate_corporateOff(),
+        available: true,
+        enabled: bundle.enabled,
+        orgId: bundle.orgId,
+        bundleHash: bundle.bundleHash,
+        policyCount: activePolicies(bundle).length,
+    };
+}
+function enrich(f, p, file, now) {
+    const { status, blocking } = corporateStatusOf(p, now);
+    return {
+        source: 'corporate',
+        file,
+        filePath: f.filePath,
+        language: f.language,
+        startLine: f.startLine,
+        endLine: f.endLine,
+        anchorLine: f.anchorLine,
+        matchedBy: f.matchedBy,
+        policyKey: f.policyKey,
+        policyVersion: f.policyVersion,
+        tier: p.tier,
+        status,
+        blocking,
+        enforceFrom: p.enforceFrom,
+        fingerprint: f.fingerprint,
+        snippetHash: f.snippetHash,
+        snippet: f.snippet,
+        truncated: f.truncated,
+        rule: {
+            policyId: p.policyId,
+            policyKey: p.policyKey,
+            version: p.version,
+            title: p.title,
+            tier: p.tier,
+            message: f.message,
+            owningBoards: p.owningBoards.map((b) => ({ id: b.id, name: b.name })),
+            enforceFrom: p.enforceFrom,
+            activatedAt: p.activatedAt,
+            policyReference: `Corporate policy ${p.policyKey} v${p.version}: ${p.title}`,
+        },
+    };
+}
+async function evaluateBatches(batches, bundle, now, preSkipped = 0) {
+    const summary = summaryFor(bundle);
+    summary.skippedFileCount = preSkipped;
+    const policies = activePolicies(bundle);
+    if (policies.length === 0)
+        return { findings: [], summary };
+    const byKey = new Map(policies.map((p) => [p.policyKey, p]));
+    const inputs = policies.map((p) => ({ policyKey: p.policyKey, version: p.version, rule: p.rule }));
+    const findings = [];
+    for await (const batch of batches) {
+        const result = await evaluateCorporateRules(batch.files, inputs);
+        summary.scannedFileCount += result.scannedFileCount;
+        summary.skippedLongLines += result.skippedLongLines;
+        summary.skippedFileCount += result.skippedFiles.length;
+        for (const f of result.findings) {
+            const p = byKey.get(f.policyKey);
+            if (!p)
+                continue; // cannot happen: the matcher only reports the policies it was given
+            findings.push(enrich(f, p, batch.original.get(f.filePath) ?? f.filePath, now));
+        }
+    }
+    findings.sort((a, b) => (a.filePath !== b.filePath ? (a.filePath < b.filePath ? -1 : 1)
+        : a.startLine !== b.startLine ? a.startLine - b.startLine
+            : a.policyKey !== b.policyKey ? (a.policyKey < b.policyKey ? -1 : 1) : a.endLine - b.endLine));
+    return { findings, summary };
+}
+/** A predicate: is this repo-relative path in scope of at least one active policy? */
+function scopeOf(policies) {
+    const scopes = policies.map((p) => ({
+        include: compileGlobList(p.rule.files.include),
+        exclude: compileGlobList(p.rule.files.exclude),
+        languages: p.rule.files.languages ? new Set(p.rule.files.languages) : null,
+    }));
+    return (path) => scopes.some((s) => s.include(path) && !s.exclude(path) && (!s.languages || s.languages.has(languages_languageOf(path))));
+}
+/**
+ * Evaluate the bundle's active policies over a repository on disk. Every
+ * file under `rootDir` is a candidate (dotfiles included, symlinks not
+ * followed) except `.git` and `node_modules`; only files in scope of some
+ * policy are read. `generated` lists files the caller itself wrote during
+ * this run (the GitHub Action's SARIF reports), which are not the
+ * repository's code.
+ */
+async function runCorporateScanOnDisk(rootDir, bundle, options = {}) {
+    const now = options.now ?? new Date();
+    const root = (0,external_node_path_namespaceObject.resolve)(rootDir);
+    const policies = activePolicies(bundle);
+    if (policies.length === 0)
+        return evaluateBatches([], bundle, now);
+    const inScope = scopeOf(policies);
+    const generated = new Set((options.generated ?? []).map((f) => glob_toPosixPath((0,external_node_path_namespaceObject.relative)(root, (0,external_node_path_namespaceObject.resolve)(root, f)))));
+    const paths = (await glob('**/*', {
+        cwd: root, dot: true, nodir: true, posix: true, follow: false,
+        ignore: ['**/.git/**', '**/node_modules/**'],
+    })).map((p) => glob_toPosixPath(p)).filter((p) => inScope(p) && !generated.has(p)).sort();
+    let tooLarge = 0;
+    async function* batches() {
+        for (let i = 0; i < paths.length; i += READ_BATCH) {
+            const files = [];
+            const original = new Map();
+            for (const rel of paths.slice(i, i + READ_BATCH)) {
+                const abs = (0,external_node_path_namespaceObject.resolve)(root, rel);
+                // Skip a file over the size limit without reading it; the matcher would skip it anyway.
+                if ((await (0,promises_namespaceObject.stat)(abs)).size > MAX_CORPORATE_FILE_BYTES) {
+                    tooLarge++;
+                    continue;
+                }
+                files.push([rel, await (0,promises_namespaceObject.readFile)(abs, 'utf8')]);
+                original.set(rel, abs);
+            }
+            yield { files, original };
+        }
+    }
+    const outcome = await evaluateBatches(batches(), bundle, now);
+    outcome.summary.skippedFileCount += tooLarge;
+    return outcome;
+}
+/**
+ * Evaluate the bundle's active policies over in-memory files. Keys may be
+ * absolute (made relative to `rootDir`) or repository-relative; each
+ * finding's `file` is the key the caller used.
+ */
+async function scan_corporate_runCorporateScan(files, rootDir, bundle, options = {}) {
+    const root = resolve(rootDir);
+    const entries = [];
+    const original = new Map();
+    let outside = 0;
+    for (const [key, content] of files) {
+        const rel = toRepoRelative(isAbsolute(key) ? relative(root, key) : key);
+        if (rel === null) {
+            outside++;
+            continue;
+        }
+        entries.push([rel, content]);
+        original.set(rel, key);
+    }
+    return evaluateBatches([{ files: entries, original }], bundle, options.now ?? new Date(), outside);
+}
+/**
+ * The dashboard origin for an API URL, derived as the VS Code extension's
+ * "Open Dashboard" does: same origin, except the local development ports
+ * (3100 → 5173) and an `api.` host prefix. Undefined when it does not parse.
+ */
+function dashboardUrlFromApiUrl(apiUrl) {
+    try {
+        const u = new URL(apiUrl);
+        if (u.port === '3100')
+            u.port = '5173';
+        if (u.hostname.startsWith('api.'))
+            u.hostname = u.hostname.replace(/^api\./, '');
+        return u.origin;
+    }
+    catch {
+        return undefined;
+    }
+}
+//# sourceMappingURL=scan-corporate.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/scan.js
+
 
 
 
@@ -273791,6 +275531,13 @@ async function runScan(options) {
         config.nomus.api_url = options.apiUrl;
     if (options.jurisdictions)
         config.nomus.jurisdictions = options.jurisdictions;
+    // Corporate policies: the bundle's signatures are verified before any of
+    // its rules is used (a failure throws NomusApiError: fail closed), and the
+    // rules run on the repository's files, whatever .nomus.yml ignores (D14).
+    const bundle = await scan_corporate_resolveCorporateBundle(options.corporate, config.nomus.api_url, config.nomus.api_key);
+    const corporate = bundle
+        ? await runCorporateScanOnDisk(rootDir, bundle, { now: options.corporate?.now })
+        : { findings: [], summary: scan_corporate_corporateOff() };
     // Find source files. glob walks directories concurrently and returns them
     // in no guaranteed order; detectors and findings follow this order, so sort
     // it to make every scan of the same tree produce identical output.
@@ -273826,6 +275573,8 @@ async function runScan(options) {
             signals: [],
             status: 'pass',
             counts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+            corporateFindings: corporate.findings,
+            corporate: corporate.summary,
         };
     }
     // Merge signals from all detectors (priority + dedup, M2/M3)
@@ -273856,6 +275605,8 @@ async function runScan(options) {
         signals: allSignals,
         status: maxSeverity >= failThreshold ? 'fail' : 'pass',
         counts,
+        corporateFindings: corporate.findings,
+        corporate: corporate.summary,
     };
 }
 /**
@@ -273873,6 +275624,11 @@ async function runScanFromContents(files, options) {
         config.nomus.api_url = options.apiUrl;
     if (options.jurisdictions)
         config.nomus.jurisdictions = options.jurisdictions;
+    // Corporate policies, as in runScan, over the given files only.
+    const bundle = await resolveCorporateBundle(options.corporate, config.nomus.api_url, config.nomus.api_key);
+    const corporate = bundle
+        ? await runCorporateScan(files, rootDir, bundle, { now: options.corporate?.now })
+        : { findings: [], summary: corporateOff() };
     // Build detector registry
     const registry = buildRegistry(config, options.detectors);
     // Run all detectors with in-memory contents
@@ -273900,6 +275656,8 @@ async function runScanFromContents(files, options) {
             signals: [],
             status: 'pass',
             counts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+            corporateFindings: corporate.findings,
+            corporate: corporate.summary,
         };
     }
     // Same priority+dedup as runScan (M2/M3) — webhook path must not bypass it.
@@ -273925,9 +275683,13 @@ async function runScanFromContents(files, options) {
         signals: allSignals,
         status: maxSeverity >= failThreshold ? 'fail' : 'pass',
         counts,
+        corporateFindings: corporate.findings,
+        corporate: corporate.summary,
     };
 }
 // Re-export types for consumers
+
+
 
 
 // Re-export detector classes so engine + tests can import them directly
@@ -273940,6 +275702,302 @@ async function runScanFromContents(files, options) {
 //# sourceMappingURL=scan.js.map
 // EXTERNAL MODULE: external "node:zlib"
 var external_node_zlib_ = __nccwpck_require__(8522);
+;// CONCATENATED MODULE: ../scanner/dist/output/reporter.js
+
+const SEVERITY_ICONS = {
+    critical: '🔴',
+    high: '🟠',
+    medium: '🟡',
+    low: '🔵',
+};
+const EFFECT_LABELS = {
+    deny: 'BLOCKED',
+    require_disclosure: 'DISCLOSURE REQUIRED',
+    allow_with_audit: 'AUDIT REQUIRED',
+    flag: 'FLAGGED',
+};
+const reporter_SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
+const DISCLAIMER = 'Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.';
+/** pass/fail for a set of findings under a --fail-on threshold. */
+function reportStatus(findings, failOn = 'critical') {
+    const threshold = reporter_SEVERITY_RANK[failOn] ?? reporter_SEVERITY_RANK.critical;
+    return findings.some((f) => (reporter_SEVERITY_RANK[f.rule.severity] ?? 0) >= threshold) ? 'fail' : 'pass';
+}
+function displayPath(file, rootDir) {
+    if (!rootDir || !isAbsolute(file))
+        return file;
+    const rel = relative(rootDir, file).replace(/\\/g, '/');
+    return rel.startsWith('..') ? file : rel;
+}
+/**
+ * Format findings as console output.
+ */
+function formatConsoleReport(findings, options = {}) {
+    if (findings.length === 0) {
+        return '\n✅ No applicable regulatory obligations identified.\n';
+    }
+    const failOn = options.failOn ?? 'critical';
+    const lines = [
+        '',
+        `⚠️  Nomus identified ${findings.length} applicable regulatory obligation(s):`,
+        '',
+    ];
+    // Group by severity
+    const bySeverity = {};
+    for (const f of findings) {
+        const sev = f.rule.severity;
+        if (!bySeverity[sev])
+            bySeverity[sev] = [];
+        bySeverity[sev].push(f);
+    }
+    for (const severity of ['critical', 'high', 'medium', 'low']) {
+        const group = bySeverity[severity];
+        if (!group)
+            continue;
+        for (const f of group) {
+            const icon = SEVERITY_ICONS[severity] ?? '⚪';
+            const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
+            lines.push(`${icon} ${severity.toUpperCase()}: ${f.rule.ruleKey}`);
+            lines.push(`   File: ${displayPath(f.file, options.rootDir)}:${f.line}`);
+            lines.push(`   SDK:  ${f.sdk}`);
+            lines.push(`   Rule: ${f.rule.humanSummary}`);
+            lines.push(`   Ref:  ${f.rule.legalReference}`);
+            lines.push(`   Effect: ${effect}`);
+            if (f.suggestion) {
+                // The whole suggestion: its first line usually ends in ':' and the
+                // steps or code that follow are the actual fix.
+                const [first, ...rest] = f.suggestion.split('\n');
+                lines.push(`   Fix:  ${first}`);
+                for (const line of rest)
+                    lines.push(line ? `         ${line}` : '');
+            }
+            lines.push('');
+        }
+    }
+    // Summary
+    const critical = bySeverity['critical']?.length ?? 0;
+    const high = bySeverity['high']?.length ?? 0;
+    lines.push('─'.repeat(60));
+    lines.push(`Summary: ${critical} critical, ${high} high, ${findings.length} total`);
+    if (reportStatus(findings, failOn) === 'fail') {
+        lines.push(failOn === 'critical'
+            ? '❌ FAIL — Critical regulatory obligations require immediate attention.'
+            : `❌ FAIL — Obligations at or above ${failOn} severity require attention (--fail-on=${failOn}).`);
+    }
+    else if (critical > 0 || high > 0) {
+        lines.push('⚠️  WARN — High-weight obligations identified. Review required.');
+    }
+    else {
+        lines.push('✅ PASS — No blocking issues.');
+    }
+    lines.push('');
+    lines.push(DISCLAIMER);
+    lines.push('');
+    return lines.join('\n');
+}
+/**
+ * Format findings as JSON for programmatic consumption.
+ */
+function formatJsonReport(findings, options = {}) {
+    const failOn = options.failOn ?? 'critical';
+    return {
+        status: reportStatus(findings, failOn),
+        failOn,
+        total: findings.length,
+        critical: findings.filter((f) => f.rule.severity === 'critical').length,
+        high: findings.filter((f) => f.rule.severity === 'high').length,
+        medium: findings.filter((f) => f.rule.severity === 'medium').length,
+        low: findings.filter((f) => f.rule.severity === 'low').length,
+        findings: findings.map((f) => ({
+            file: displayPath(f.file, options.rootDir),
+            line: f.line,
+            sdk: f.sdk,
+            ruleKey: f.rule.ruleKey,
+            severity: f.rule.severity,
+            effect: f.rule.effect,
+            summary: f.rule.humanSummary,
+            legalReference: f.rule.legalReference,
+            confidence: f.rule.confidence,
+            detectorSource: f.detectorSource,
+            suggestion: f.suggestion,
+        })),
+        _disclaimer: DISCLAIMER,
+    };
+}
+// ── Corporate policy findings (CPG) ────────────────────────────────────
+// A separate section, printed only when the org has corporate policy
+// governance switched on. The regulatory report above is unchanged, and
+// corporate findings never change the status or the exit code.
+/** `needs review`, `advisory; enforced from 2026-10-22` or `advisory`. */
+function corporateStatusText(f) {
+    switch (f.status) {
+        case 'needs_review': return 'needs review';
+        case 'grace': return `advisory; enforced from ${f.enforceFrom.slice(0, 10)}`;
+        case 'advisory': return 'advisory';
+    }
+}
+/** Owning boards by name (the bundle lists them by id, which differs between servers). */
+function ownerNames(f) {
+    return f.rule.owningBoards.map((b) => b.name).sort((a, b) => a.localeCompare(b)).join(', ');
+}
+function lineSpan(f) {
+    return f.startLine === f.endLine ? `${f.startLine}` : `${f.startLine}-${f.endLine}`;
+}
+/** The corporate section of the console report. */
+function formatCorporateConsoleReport(findings, summary) {
+    const files = `${summary.scannedFileCount} file${summary.scannedFileCount === 1 ? '' : 's'} checked for corporate policies (every repository file in a policy's scope, of any type)`;
+    const head = `Corporate policies: ${summary.policyCount} active polic${summary.policyCount === 1 ? 'y' : 'ies'} (bundle ${summary.bundleHash?.slice(0, 12) ?? 'none'})
+${files}`;
+    if (findings.length === 0)
+        return `\n${head}\nNo corporate policy findings.\n`;
+    const blocking = findings.filter((f) => f.blocking).length;
+    const lines = ['', head, `${findings.length} corporate policy finding(s), ${blocking} blocking:`, ''];
+    for (const f of findings) {
+        lines.push(`[${f.tier.toUpperCase()}] ${f.policyKey} v${f.policyVersion}: ${f.rule.title}`);
+        lines.push(`   File:   ${f.filePath}:${lineSpan(f)}`);
+        lines.push(`   Policy: ${f.rule.message}`);
+        lines.push(`   Status: ${corporateStatusText(f)}${f.blocking ? ' (blocking)' : ''}`);
+        lines.push(`   Owners: ${ownerNames(f)}`);
+        lines.push(`   Fingerprint: ${f.fingerprint}`);
+        lines.push('');
+    }
+    if (summary.skippedLongLines > 0)
+        lines.push(`Note: ${summary.skippedLongLines} line(s) longer than 4,096 characters were not checked by line patterns.`);
+    if (summary.skippedFileCount > 0)
+        lines.push(`Note: ${summary.skippedFileCount} file(s) were skipped (over 2 MB, binary or outside the repository).`);
+    lines.push('Corporate policy findings never change the exit code of this command.');
+    lines.push('');
+    return lines.join('\n');
+}
+/**
+ * The corporate fields of the JSON report: `corporate` (what was evaluated)
+ * and `corporateFindings`. Paths are repository-relative; the code itself is
+ * not included, only its range and fingerprint.
+ */
+function formatCorporateJson(findings, summary) {
+    return {
+        corporate: {
+            enabled: summary.enabled,
+            orgId: summary.orgId,
+            bundleHash: summary.bundleHash,
+            policyCount: summary.policyCount,
+            scannedFileCount: summary.scannedFileCount,
+            skippedLongLines: summary.skippedLongLines,
+            skippedFileCount: summary.skippedFileCount,
+            total: findings.length,
+            blocking: findings.filter((f) => f.blocking).length,
+        },
+        corporateFindings: findings.map((f) => ({
+            file: f.filePath,
+            startLine: f.startLine,
+            endLine: f.endLine,
+            language: f.language,
+            policyKey: f.policyKey,
+            policyVersion: f.policyVersion,
+            policyId: f.rule.policyId,
+            title: f.rule.title,
+            tier: f.tier,
+            status: f.status,
+            blocking: f.blocking,
+            enforceFrom: f.enforceFrom,
+            message: f.rule.message,
+            owningBoards: f.rule.owningBoards.map((b) => b.name),
+            fingerprint: f.fingerprint,
+            snippetHash: f.snippetHash,
+            truncated: f.truncated,
+        })),
+    };
+}
+//# sourceMappingURL=reporter.js.map
+;// CONCATENATED MODULE: ../scanner/dist/output/sarif-corporate.js
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+
+
+const CORPORATE_SARIF_CATEGORY = 'nomus-corporate/';
+const CORPORATE_SARIF_TOOL = 'Nomus Corporate Policy';
+function scannerVersion() {
+    try {
+        const dir = typeof __dirname !== 'undefined' ? __dirname : (0,external_node_path_namespaceObject.dirname)((0,external_node_url_.fileURLToPath)(import.meta.url));
+        return JSON.parse((0,external_node_fs_namespaceObject.readFileSync)((0,external_node_path_namespaceObject.resolve)(dir, '..', '..', 'package.json'), 'utf-8')).version ?? '0.0.0';
+    }
+    catch {
+        return '0.0.0';
+    }
+}
+/** A server-side decision covering the finding, as a SARIF suppression. */
+function suppressionOf(r) {
+    if (r?.status !== 'approved' && r?.status !== 'excepted')
+        return undefined;
+    const what = r.status === 'approved' ? `Approved by Nomus decision ${r.decisionId}` : `Excepted by Nomus standing exception ${r.exceptionDecisionId}`;
+    return [{ kind: 'external', status: 'accepted', justification: `${what}${r.expiresAt ? ` until ${r.expiresAt}` : ''}` }];
+}
+/** The policy page in the dashboard, or undefined when no dashboard origin is known. */
+function policyPageUrl(dashboardUrl, policyId) {
+    if (!dashboardUrl)
+        return undefined;
+    return `${dashboardUrl.replace(/\/+$/, '')}/governance/policies/${policyId}`;
+}
+/** The corporate SARIF run (one per scan, appended after the regulatory run by the CLI). */
+function formatCorporateSarifRun(findings, options = {}) {
+    const rules = new Map();
+    for (const f of findings) {
+        if (rules.has(f.policyKey))
+            continue;
+        const helpUri = policyPageUrl(options.dashboardUrl, f.rule.policyId);
+        rules.set(f.policyKey, {
+            id: f.policyKey,
+            shortDescription: { text: f.rule.title },
+            fullDescription: { text: f.rule.message },
+            ...(helpUri ? { helpUri } : {}),
+            defaultConfiguration: { level: f.tier === 'advisory' ? 'note' : 'error' },
+            properties: { tags: ['corporate-policy', f.tier] },
+        });
+    }
+    return {
+        tool: {
+            driver: {
+                name: CORPORATE_SARIF_TOOL,
+                version: scannerVersion(),
+                informationUri: 'https://github.com/babbguy/Nomus',
+                rules: [...rules.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+            },
+        },
+        automationDetails: { id: CORPORATE_SARIF_CATEGORY },
+        results: findings.map((f) => {
+            const r = options.resolutionOf?.(f);
+            const blocking = r?.blocking ?? f.blocking;
+            const statusText = r ? r.status.replace(/_/g, ' ') : corporateStatusText(f);
+            const suppressions = suppressionOf(r);
+            return {
+                ruleId: f.policyKey,
+                // Blocking findings are errors; advisory, grace-period, approved and excepted ones are notes.
+                level: blocking ? 'error' : 'note',
+                message: { text: `${f.rule.title} (${f.policyKey} v${f.policyVersion}): ${f.rule.message} Status: ${statusText}.${options.caseUrl ? ` Review case: ${options.caseUrl}` : ''}` },
+                locations: [{
+                        physicalLocation: {
+                            artifactLocation: { uri: f.filePath, uriBaseId: '%SRCROOT%' },
+                            region: { startLine: f.startLine, endLine: f.endLine, startColumn: 1 },
+                        },
+                    }],
+                partialFingerprints: { 'nomusCorporate/v1': f.fingerprint },
+                ...(suppressions ? { suppressions } : {}),
+                properties: { tier: f.tier, status: r?.status ?? f.status, blocking, policyVersion: f.policyVersion, enforceFrom: f.enforceFrom },
+            };
+        }),
+    };
+}
+/** A SARIF 2.1.0 log holding only the corporate run: the GitHub Action uploads it on its own (§11.4). */
+function formatCorporateSarif(findings, options = {}) {
+    return {
+        $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/Schemata/sarif-schema-2.1.0.json',
+        version: '2.1.0',
+        runs: [formatCorporateSarifRun(findings, options)],
+    };
+}
+//# sourceMappingURL=sarif-corporate.js.map
 ;// CONCATENATED MODULE: ../scanner/dist/output/sarif.js
 
 
@@ -274044,6 +276102,7 @@ function formatSarifReport(findings, rootDir) {
             }],
     };
 }
+
 //# sourceMappingURL=sarif.js.map
 ;// CONCATENATED MODULE: ./src/findings.ts
 // Copyright 2026 babbguy
@@ -274114,13 +276173,25 @@ function commentableLines(patch) {
  * Returns the path to the SARIF file, or null if upload failed.
  */
 async function uploadSarif(result, octokit, repo, sha, rootDir = repoRoot(), ref) {
+    // Code Scanning resolves artifact URIs against the repository root, so
+    // paths must be repo-relative even when working-directory is a subfolder.
+    return uploadSarifDocument(octokit, repo, sha, ref, {
+        sarif: () => formatSarifReport(result.findings, rootDir),
+        file: 'nomus-results.sarif',
+        toolName: 'Nomus',
+    });
+}
+/**
+ * Upload one SARIF log as its own Code Scanning analysis. The regulatory
+ * scan and the corporate gate (category `nomus-corporate/`) each upload
+ * their own. Returns the path to the SARIF file, or null if upload failed.
+ */
+async function uploadSarifDocument(octokit, repo, sha, ref, doc) {
     try {
-        // Code Scanning resolves artifact URIs against the repository root, so
-        // paths must be repo-relative even when working-directory is a subfolder.
-        const sarif = formatSarifReport(result.findings, rootDir);
+        const sarif = typeof doc.sarif === 'function' ? doc.sarif() : doc.sarif;
         const sarifJson = JSON.stringify(sarif, null, 2);
         // Write to file for downstream use
-        const sarifPath = (0,external_node_path_namespaceObject.resolve)('nomus-results.sarif');
+        const sarifPath = (0,external_node_path_namespaceObject.resolve)(doc.file);
         (0,external_node_fs_namespaceObject.writeFileSync)(sarifPath, sarifJson, 'utf-8');
         // Compress and encode for API upload
         const compressed = (0,external_node_zlib_.gzipSync)(Buffer.from(sarifJson, 'utf-8'));
@@ -274130,9 +276201,9 @@ async function uploadSarif(result, octokit, repo, sha, rootDir = repoRoot(), ref
             commit_sha: sha,
             ref: ref ?? process.env.GITHUB_REF ?? `refs/heads/main`,
             sarif: encoded,
-            tool_name: 'Nomus',
+            tool_name: doc.toolName,
         });
-        info('   SARIF uploaded to Code Scanning tab');
+        info(`   SARIF uploaded to Code Scanning tab${doc.category ? ` (category ${doc.category})` : ''}`);
         return sarifPath;
     }
     catch (err) {
@@ -274150,13 +276221,13 @@ async function uploadSarif(result, octokit, repo, sha, rootDir = repoRoot(), ref
 ;// CONCATENATED MODULE: ./src/pr-comments.ts
 
 
-const SEVERITY_ICONS = {
+const pr_comments_SEVERITY_ICONS = {
     critical: '🔴',
     high: '🟠',
     medium: '🟡',
     low: '🔵',
 };
-const EFFECT_LABELS = {
+const pr_comments_EFFECT_LABELS = {
     deny: 'BLOCKED',
     require_disclosure: 'DISCLOSURE REQUIRED',
     allow_with_audit: 'AUDIT REQUIRED',
@@ -274165,12 +276236,12 @@ const EFFECT_LABELS = {
 const COMMENT_MARKER = '<!-- nomus-scan -->';
 /** Hidden marker identifying inline review comments posted by Nomus. */
 const FINDING_MARKER = '<!-- nomus-finding -->';
-const DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
+const pr_comments_DISCLAIMER = '*Nomus is a regulatory applicability engine. It identifies applicable obligations — it does not provide legal advice.*';
 /** GitHub accepts a limited number of comments per review. */
 const MAX_INLINE_COMMENTS = 25;
 function findingBlock(f) {
-    const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
-    const effect = EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
+    const icon = pr_comments_SEVERITY_ICONS[f.rule.severity] ?? '⚪';
+    const effect = pr_comments_EFFECT_LABELS[f.rule.effect] ?? f.rule.effect.toUpperCase();
     let body = `${icon} **Nomus: ${f.rule.severity.toUpperCase()}** — ${effect}\n\n`;
     body += `**${f.rule.ruleKey}**\n`;
     body += `${f.rule.humanSummary}\n\n`;
@@ -274218,7 +276289,7 @@ async function postInlineComments(result, octokit, repo, prNumber, sha) {
             path,
             line,
             side: 'RIGHT',
-            body: `${FINDING_MARKER}\n${findings.map(findingBlock).join('\n---\n\n')}\n---\n${DISCLAIMER}`,
+            body: `${FINDING_MARKER}\n${findings.map(findingBlock).join('\n---\n\n')}\n---\n${pr_comments_DISCLAIMER}`,
         }));
         if (candidates.length === 0) {
             info('   No obligations on lines changed in this pull request — no inline comments');
@@ -274273,22 +276344,29 @@ async function postInlineComments(result, octokit, repo, prNumber, sha) {
  * null to embed none (the caller checks that the badge is actually served).
  */
 async function postSummaryComment(result, octokit, repo, apiUrl, prNumber, badgeOrgSlug, complianceScore) {
+    await upsertMarkedComment(octokit, repo, prNumber, COMMENT_MARKER, () => buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore), 'summary comment');
+}
+/**
+ * Edit the PR comment carrying `marker` in place, or post it when there is
+ * none, so re-runs never stack comments. Failures are warnings.
+ */
+async function upsertMarkedComment(octokit, repo, prNumber, marker, buildBody, label) {
     try {
-        const body = buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore);
+        const body = buildBody();
         // Find existing Nomus comment
         const comments = await octokit.paginate(octokit.rest.issues.listComments, {
             ...repo,
             issue_number: prNumber,
             per_page: 100,
         });
-        const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
+        const existing = comments.find((c) => c.body?.includes(marker));
         if (existing) {
             await octokit.rest.issues.updateComment({
                 ...repo,
                 comment_id: existing.id,
                 body,
             });
-            info('   Updated existing PR summary comment');
+            info(`   Updated existing PR ${label}`);
         }
         else {
             await octokit.rest.issues.createComment({
@@ -274296,11 +276374,11 @@ async function postSummaryComment(result, octokit, repo, apiUrl, prNumber, badge
                 issue_number: prNumber,
                 body,
             });
-            info('   Posted PR summary comment');
+            info(`   Posted PR ${label}`);
         }
     }
     catch (err) {
-        warning(`Failed to post summary comment: ${err instanceof Error ? err.message : String(err)}`);
+        warning(`Failed to post ${label}: ${err instanceof Error ? err.message : String(err)}`);
     }
 }
 function buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore) {
@@ -274331,7 +276409,7 @@ function buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore) {
         body += `### Applicable Obligations\n\n`;
         const top = bySeverity(findings).slice(0, 10);
         for (const f of top) {
-            const icon = SEVERITY_ICONS[f.rule.severity] ?? '⚪';
+            const icon = pr_comments_SEVERITY_ICONS[f.rule.severity] ?? '⚪';
             body += `${icon} **${f.rule.ruleKey}** — \`${toRepoPath(f.file)}:${f.line}\`\n`;
             body += `   ${f.rule.humanSummary}\n\n`;
         }
@@ -274346,7 +276424,7 @@ function buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore) {
         body += `[![Nomus Regulatory](${apiUrl}/api/v1/badge/${slug}/svg)](${apiUrl}/api/v1/badge/${slug})\n\n`;
     }
     body += `---\n`;
-    body += `${DISCLAIMER}\n`;
+    body += `${pr_comments_DISCLAIMER}\n`;
     return body;
 }
 
@@ -274426,7 +276504,323 @@ function mapSeverityToAnnotation(severity) {
     }
 }
 
+;// CONCATENATED MODULE: ../scanner/dist/corporate/index.js
+/**
+ * `@nomus/scanner/corporate`: the pure Corporate Policy Governance library
+ * shared by the engine, the VS Code extension and the GitHub Action (design
+ * spec §0). Rule schema and vocabularies, glob and regex safety, the
+ * deterministic matcher, the fingerprint, repository and language helpers,
+ * and the client contracts with the signed-bundle client.
+ *
+ * Only contracts.ts and bundle-client.ts deal with the network; the matcher
+ * and everything it imports are pure (corporate.test.ts checks the imports).
+ */
+
+
+
+
+
+
+
+
+
+
+
+
+/** The detectors skip test files; the compile step explains that when an example misses. */
+
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./src/cpg-check-run.ts
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+/** The check run of the corporate policy gate (design spec §11.5), next to the regulatory one. */
+const CORPORATE_CHECK_NAME = 'Nomus Corporate Policy Gate';
+/** The policy key a fingerprint names (`sha256:corp.key:version`). */
+const policyKeyOf = (fingerprint) => fingerprint.split(':')[1] ?? fingerprint;
+/**
+ * The verdict as a check run: counts, the case link and the bundle hash, and
+ * up to 50 annotations, blocking first. Locations and statuses only, never
+ * the code (§12).
+ */
+async function createCorporateCheckRun(octokit, repo, sha, v, bundleHash, titles) {
+    const { counts } = v;
+    const summary = [
+        `## ${CORPORATE_CHECK_NAME}: ${v.verdict === 'pass' ? 'passed' : 'failed'}`,
+        '',
+        '| Blocking | Pending | Rejected | Approved | Excepted | Advisory |',
+        '|---|---|---|---|---|---|',
+        `| ${counts.blocking} | ${counts.pending} | ${counts.rejected} | ${counts.approved} | ${counts.excepted} | ${counts.advisory} |`,
+        '',
+        v.caseUrl ? `Review case: [${v.caseRef ?? v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
+        '',
+        `Policy bundle: \`${bundleHash}\``,
+    ].join('\n');
+    const annotations = [...v.findings]
+        .sort((a, b) => Number(b.blocking) - Number(a.blocking))
+        .slice(0, 50)
+        .map((f) => {
+        const key = policyKeyOf(f.fingerprint);
+        return {
+            path: f.filePath,
+            start_line: f.startLine,
+            end_line: f.endLine,
+            annotation_level: f.blocking ? 'failure' : 'notice',
+            title: `${key}: ${f.status.replace(/_/g, ' ')}`,
+            message: `${titles.get(key) ?? key} (${f.tier})${f.blocking ? ' blocks this pull request until a reviewer decides it.' : ''}`,
+        };
+    });
+    await create(octokit, repo, sha, v.verdict === 'pass' ? 'success' : 'failure', `${counts.blocking} blocking, ${counts.approved} approved, ${counts.excepted} excepted`, summary, annotations);
+}
+/** Best effort when the gate fails closed; the failed job is the authority. */
+async function createFailClosedCheckRun(octokit, repo, sha, title) {
+    await create(octokit, repo, sha, 'failure', title, `## ${CORPORATE_CHECK_NAME}: ${title}\n\nThe corporate policy status is unknown, so the gate fails closed. See the job log for the cause.`, []);
+}
+async function create(octokit, repo, sha, conclusion, title, summary, annotations) {
+    try {
+        await octokit.rest.checks.create({
+            ...repo, head_sha: sha, name: CORPORATE_CHECK_NAME, status: 'completed', conclusion, output: { title, summary, annotations },
+        });
+        info(`   Corporate check run created: ${conclusion}`);
+    }
+    catch (err) {
+        warning(`Failed to create the corporate check run: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+
+;// CONCATENATED MODULE: ./src/cpg-comment.ts
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+const CORPORATE_COMMENT_MARKER = '<!-- nomus-cpg -->';
+const MAX_ROWS = 50;
+/**
+ * The corporate gate's PR comment (design spec §11.6), edited in place on
+ * every run: the case link, the counts and one row per blocking finding.
+ * Never code, snippets or justifications (§12): those stay on the server.
+ */
+function corporateCommentBody(v) {
+    const c = v.counts;
+    const blocking = v.findings.filter((f) => f.blocking);
+    const lines = [
+        CORPORATE_COMMENT_MARKER,
+        `## Nomus Corporate Policy Gate: ${v.verdict === 'pass' ? 'passed' : 'failed'}`,
+        '',
+        v.caseUrl ? `**Review case:** [${v.caseRef ?? v.caseId}](${v.caseUrl})` : 'No review case for this branch.',
+        '',
+        '| Blocking | Pending | Rejected | Approved | Excepted | Advisory |',
+        '|---|---|---|---|---|---|',
+        `| ${c.blocking} | ${c.pending} | ${c.rejected} | ${c.approved} | ${c.excepted} | ${c.advisory} |`,
+    ];
+    if (blocking.length > 0) {
+        lines.push('', '### Blocking findings', '', '| Policy | Location | Status |', '|---|---|---|');
+        for (const f of blocking.slice(0, MAX_ROWS)) {
+            lines.push(`| \`${policyKeyOf(f.fingerprint)}\` | \`${f.filePath}:${f.startLine}\` | ${f.status.replace(/_/g, ' ')} |`);
+        }
+        if (blocking.length > MAX_ROWS)
+            lines.push('', `_…and ${blocking.length - MAX_ROWS} more in the review case._`);
+        lines.push('', 'Each blocking finding needs an approval, a standing exception or a code change. Request a review from VS Code or open the case.');
+    }
+    return `${lines.join('\n')}\n`;
+}
+async function postCorporateComment(octokit, repo, prNumber, v) {
+    await upsertMarkedComment(octokit, repo, prNumber, CORPORATE_COMMENT_MARKER, () => corporateCommentBody(v), 'corporate policy comment');
+}
+
+;// CONCATENATED MODULE: ./src/cpg.ts
+// Copyright 2026 babbguy
+// SPDX-License-Identifier: Apache-2.0
+
+
+
+
+
+
+
+
+
+const EVALUATE_TIMEOUT_MS = 30_000;
+const FAILED_CLOSED = 'corporate policy status UNKNOWN; failing closed.';
+class GateRefused extends Error {
+}
+function setStatus(status, blocking = 0, caseUrl = '') {
+    setOutput('corporate-status', status);
+    setOutput('corporate-blocking', blocking);
+    setOutput('corporate-case-url', caseUrl);
+}
+/** The scan identity from the workflow context: the PR head, and `owner/repo:ref` for a fork. */
+function gateIdentity() {
+    const { /* context */ "_": context } = github_namespaceObject;
+    const pr = context.payload.pull_request;
+    const repo = canonicalRepo(`${context.repo.owner}/${context.repo.repo}`);
+    const headFull = String(pr?.head?.repo?.full_name ?? '').toLowerCase();
+    const baseFull = String(pr?.base?.repo?.full_name ?? '').toLowerCase();
+    const branch = pr ? (headFull && baseFull && headFull !== baseFull ? `${headFull}:${pr.head.ref}` : pr.head?.ref) : process.env.GITHUB_REF_NAME;
+    if (!repo || typeof branch !== 'string' || !branch)
+        throw new Error('the repository or branch of this workflow run could not be determined');
+    return { repo, branch, prNumber: pr?.number ?? null, headSha: pr?.head?.sha ?? context.sha };
+}
+/** POST JSON to the engine; no answer is `unreachable`, a body that is not JSON is `invalid`. */
+async function post(o, path, body) {
+    let res;
+    try {
+        res = await (o.fetchImpl ?? fetch)(`${o.apiUrl.replace(/\/+$/, '')}/api/v1/cpg${path}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${o.apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(EVALUATE_TIMEOUT_MS),
+        });
+    }
+    catch (err) {
+        throw new CorporateBundleError({ kind: 'unreachable' }, `Could not reach POST /cpg${path}: ${err instanceof Error ? err.message : String(err)}`, err);
+    }
+    let json;
+    try {
+        json = await res.json();
+    }
+    catch (err) {
+        throw new CorporateBundleError({ kind: 'invalid' }, `POST /cpg${path} answered ${res.status} without JSON`, err);
+    }
+    return { status: res.status, json };
+}
+function cpg_httpError(path, status, json) {
+    const code = json?.code;
+    return new CorporateBundleError({ kind: 'http', status }, `POST /cpg${path} answered ${status}${typeof code === 'string' ? ` ${code}` : ''}`, json);
+}
+async function fetchEnabledBundle(o) {
+    return fetchCorporateBundle({ apiUrl: o.apiUrl, apiKey: o.apiKey, fetchImpl: o.fetchImpl });
+}
+/** Every finding with its snippet: blocking tiers require it, and a case revision stores them all. */
+function evaluateRequest(id, bundle, scan) {
+    return ciEvaluateRequestSchema.parse({
+        ...id,
+        eventName: github_context.eventName.slice(0, 50),
+        bundleHash: bundle.bundleHash,
+        scannedFileCount: scan.summary.scannedFileCount,
+        findings: scan.findings.map((f) => ({
+            fingerprint: f.fingerprint, policyKey: f.policyKey, policyVersion: f.policyVersion, filePath: f.filePath,
+            startLine: f.startLine, endLine: f.endLine, language: f.language, snippet: f.snippet,
+        })),
+    });
+}
+/** Scan the whole checkout (D15: `working-directory` never narrows it) and get the signed verdict. */
+async function evaluate(o, id, first) {
+    let { bundle, publicKeySpki } = first;
+    for (let attempt = 1;; attempt++) {
+        const scan = await runCorporateScanOnDisk(repoRoot(), bundle, { now: o.now, generated: o.generated });
+        info(`   Corporate policies: ${bundle.policies.length}, files checked: ${scan.summary.scannedFileCount}, findings: ${scan.findings.length}`);
+        const res = await post(o, '/ci/evaluate', evaluateRequest(id, bundle, scan));
+        if (res.status === 200) {
+            const verdict = verifyCiVerdict(res.json, publicKeySpki, { orgId: bundle.orgId, ...id, bundleHash: bundle.bundleHash });
+            return { bundle, scan, verdict };
+        }
+        // The policies changed since the bundle was fetched: refetch, rescan and retry once.
+        if (res.status === 409 && res.json?.code === 'bundle_stale' && attempt === 1) {
+            info('   The corporate policy bundle changed during the run; fetching it again and rescanning');
+            const again = await fetchEnabledBundle(o);
+            if (!again.available || !again.bundle.enabled)
+                throw new CorporateBundleError({ kind: 'invalid' }, 'The corporate policy bundle disappeared during the run');
+            ({ bundle, publicKeySpki } = again);
+            continue;
+        }
+        throw cpg_httpError('/ci/evaluate', res.status, res.json);
+    }
+}
+async function closePullRequest(o, id) {
+    const pr = github_context.payload.pull_request;
+    const merged = pr.merged === true;
+    const mergeSha = merged && typeof pr.merge_commit_sha === 'string' ? pr.merge_commit_sha : undefined;
+    const res = await post(o, '/ci/pr-closed', prClosedRequestSchema.parse({ repo: id.repo, branch: id.branch, prNumber: id.prNumber, merged, ...(mergeSha ? { mergeSha } : {}) }));
+    if (res.status !== 200)
+        throw cpg_httpError('/ci/pr-closed', res.status, res.json);
+    const closed = prClosedResponseSchema.safeParse(res.json);
+    if (!closed.success)
+        throw new CorporateBundleError({ kind: 'invalid' }, 'The pr-closed response does not match the contract', closed.error.issues);
+    info(`   Pull request ${merged ? 'merged' : 'closed'}: ${closed.data.closed ? `review case ${closed.data.caseId} closed` : 'no open review case to close'}`);
+    setStatus('closed');
+}
+/** Code Scanning, the check run and the PR comment. Best effort: the job status is the gate. */
+async function report(o, id, findings, bundle, v) {
+    if (!o.octokit) {
+        warning('No github-token provided: skipping the corporate SARIF upload, check run and PR comment.');
+        return;
+    }
+    const { /* context */ "_": context } = github_namespaceObject;
+    if (o.uploadSarif) {
+        const located = new Map(v.findings.map((r) => [`${r.fingerprint}@${r.filePath}:${r.startLine}`, r]));
+        await uploadSarifDocument(o.octokit, context.repo, context.sha, context.ref, {
+            sarif: () => formatCorporateSarif(findings, { resolutionOf: (f) => located.get(`${f.fingerprint}@${f.filePath}:${f.startLine}`), caseUrl: v.caseUrl }),
+            category: CORPORATE_SARIF_CATEGORY, file: 'nomus-corporate.sarif', toolName: 'Nomus Corporate Policy',
+        });
+    }
+    const titles = new Map(bundle.policies.map((p) => [p.policyKey, p.title]));
+    await createCorporateCheckRun(o.octokit, context.repo, id.headSha, v, bundle.bundleHash, titles);
+    if (o.postPrComment && id.prNumber && (v.findings.length > 0 || v.caseId)) {
+        await postCorporateComment(o.octokit, context.repo, id.prNumber, v);
+    }
+}
+/** Why the gate failed closed, as the check run title and the job error. */
+function failClosedReason(err) {
+    if (err instanceof GateRefused)
+        return 'Corporate policy gate cannot be disabled';
+    if (!(err instanceof CorporateBundleError))
+        return 'Corporate policy scan failed';
+    return bundleFailureOf(err).kind === 'invalid' ? 'Nomus response could not be verified' : 'Nomus unreachable';
+}
+/** Run the gate after the regulatory flow. Never throws: every failure fails the job closed. */
+async function runCorporateGate(o) {
+    info('🛡️  Nomus Corporate Policy Gate');
+    let id = null;
+    try {
+        const gateInput = o.gateInput.trim().toLowerCase() || 'true';
+        if (gateInput !== 'true' && gateInput !== 'false')
+            throw new GateRefused(`corporate-gate must be true or false (got "${o.gateInput}")`);
+        if (gateInput === 'false')
+            info('Corporate policy gate: disabled by workflow input');
+        const fetched = await fetchEnabledBundle(o);
+        if (!fetched.available) {
+            info('   This Nomus server does not support corporate policies; the corporate policy gate did not run');
+            setStatus('unavailable');
+            return;
+        }
+        if (!fetched.bundle.enabled) {
+            info('   Corporate policies are not enabled for this organization; the corporate policy gate did not run');
+            setStatus('disabled');
+            return;
+        }
+        if (gateInput === 'false') {
+            throw new GateRefused('the organization enforces corporate policies; the gate cannot be disabled from the workflow');
+        }
+        id = gateIdentity();
+        if (github_context.payload.action === 'closed' && github_context.payload.pull_request) {
+            await closePullRequest(o, id);
+            return;
+        }
+        const { bundle, scan, verdict: v } = await evaluate(o, id, fetched);
+        setStatus(v.verdict, v.counts.blocking, v.caseUrl ?? '');
+        info(`   Corporate verdict: ${v.verdict} (${v.counts.blocking} blocking, ${v.counts.approved} approved, ${v.counts.excepted} excepted)`);
+        await report(o, id, scan.findings, bundle, v);
+        if (v.verdict === 'fail') {
+            for (const reason of v.reasons)
+                info(`   Blocking: ${reason}`);
+            setFailed(`Corporate policy gate failed: ${v.counts.blocking} blocking finding(s) without a valid decision (${v.counts.rejected} rejected, ${v.counts.blocking - v.counts.rejected} need review).`
+                + (v.caseUrl ? ` Review case: ${v.caseUrl}` : ''));
+        }
+    }
+    catch (err) {
+        const reason = failClosedReason(err);
+        setStatus('unknown');
+        if (o.octokit) {
+            const sha = id?.headSha ?? github_context.payload.pull_request?.head?.sha ?? github_context.sha;
+            await createFailClosedCheckRun(o.octokit, github_context.repo, sha, `${reason}: failing closed`);
+        }
+        setFailed(`${reason}: ${FAILED_CLOSED} ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+
 ;// CONCATENATED MODULE: ./src/index.ts
+
 
 
 
@@ -274446,6 +276840,7 @@ async function run() {
         const postPrComment = getBooleanInput('post-pr-comment');
         const badgeEmbed = getBooleanInput('badge-embed');
         const badgeOrg = getInput('badge-org');
+        const corporateGate = getInput('corporate-gate');
         // GitHub context
         const { /* context */ "_": context } = github_namespaceObject;
         const token = getInput('github-token') || process.env.GITHUB_TOKEN || '';
@@ -274489,12 +276884,13 @@ async function run() {
         setOutput('compliance-label', complianceScore.label);
         info(`   Regulatory exposure score: ${complianceScore.score}% (${complianceScore.label})`);
         // GitHub integrations (require token)
+        let sarifFile = null;
         if (octokit) {
             // SARIF upload for Code Scanning tab
             if (uploadSarifEnabled && result.findings.length > 0) {
-                const sarifPath = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
-                if (sarifPath)
-                    setOutput('sarif-file', sarifPath);
+                sarifFile = await uploadSarif(result, octokit, repo, sha, repoRoot(), context.ref);
+                if (sarifFile)
+                    setOutput('sarif-file', sarifFile);
             }
             // PR comments (only on pull requests)
             if (postPrComment && prNumber) {
@@ -274513,8 +276909,13 @@ async function run() {
             setFailed(`Nomus found ${result.counts.critical} critical and ${result.counts.high} high severity findings. ` +
                 `Threshold: --fail-on=${failOn}`);
         }
+        // Corporate policy gate: after the regulatory flow, which it leaves unchanged.
+        // The SARIF report just written to the checkout is not the repository's code.
+        await runCorporateGate({ apiUrl, apiKey, gateInput: corporateGate, uploadSarif: uploadSarifEnabled, postPrComment, octokit, generated: sarifFile ? [sarifFile] : [] });
     }
     catch (error) {
+        // The corporate policy gate did not run (it never throws), so its status is unknown too.
+        setOutput('corporate-status', 'unknown');
         // Fail CLOSED on Nomus API failure: the scan could not determine
         // compliance, so the check must fail — never report green on an outage.
         if (isNomusApiError(error)) {

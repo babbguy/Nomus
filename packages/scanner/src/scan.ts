@@ -9,8 +9,12 @@ import { PhiPatternDetector } from './detect/phi-pattern-detector.js';
 import { RiskClassifier } from './detect/risk-classifier.js';
 import { TransparencyDetector } from './detect/transparency-detector.js';
 import { DataFlowDetector } from './detect/data-flow-detector.js';
-import { matchRulesToSignals, type Finding } from './match/rule-matcher.js';
+import { matchRulesToSignals, type CorporateFinding, type Finding } from './match/rule-matcher.js';
 import { generateSuggestions } from './fix/suggestions.js';
+import {
+  corporateOff, resolveCorporateBundle, runCorporateScan, runCorporateScanOnDisk,
+  type CorporateScanOptions, type CorporateScanSummary,
+} from './scan-corporate.js';
 
 export interface ScanOptions {
   rootDir: string;
@@ -23,6 +27,12 @@ export interface ScanOptions {
   config?: { jurisdictions: string[]; api_key?: string; api_url?: string; sector?: string; data_types?: string[]; ignore?: string[] };
   /** Additional detector plugins to run alongside the built-in ImportDetector */
   detectors?: DetectorRegistry;
+  /**
+   * Corporate policies (CPG). Absent or `mode: 'off'`: not evaluated, and the
+   * scan is exactly the v1.1.0 scan. `mode: 'auto'`: the org's signed bundle
+   * is fetched and verified (or `bundle` is used), then evaluated locally.
+   */
+  corporate?: CorporateScanOptions;
 }
 
 export interface ScanResult {
@@ -40,6 +50,10 @@ export interface ScanResult {
     low: number;
     total: number;
   };
+  /** Corporate policy findings; never counted in `findings`, `counts` or `status`. */
+  corporateFindings: CorporateFinding[];
+  /** What the corporate evaluation used: the bundle, its policies and the files checked. */
+  corporate: CorporateScanSummary;
 }
 
 const SOURCE_PATTERNS = [
@@ -133,6 +147,14 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
   if (options.apiUrl) config.nomus.api_url = options.apiUrl;
   if (options.jurisdictions) config.nomus.jurisdictions = options.jurisdictions;
 
+  // Corporate policies: the bundle's signatures are verified before any of
+  // its rules is used (a failure throws NomusApiError: fail closed), and the
+  // rules run on the repository's files, whatever .nomus.yml ignores (D14).
+  const bundle = await resolveCorporateBundle(options.corporate, config.nomus.api_url, config.nomus.api_key);
+  const corporate = bundle
+    ? await runCorporateScanOnDisk(rootDir, bundle, { now: options.corporate?.now })
+    : { findings: [], summary: corporateOff() };
+
   // Find source files. glob walks directories concurrently and returns them
   // in no guaranteed order; detectors and findings follow this order, so sort
   // it to make every scan of the same tree produce identical output.
@@ -171,6 +193,8 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
       signals: [],
       status: 'pass',
       counts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+      corporateFindings: corporate.findings,
+      corporate: corporate.summary,
     };
   }
 
@@ -208,6 +232,8 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
     signals: allSignals,
     status: maxSeverity >= failThreshold ? 'fail' : 'pass',
     counts,
+    corporateFindings: corporate.findings,
+    corporate: corporate.summary,
   };
 }
 
@@ -227,6 +253,12 @@ export async function runScanFromContents(
   if (options.apiKey) config.nomus.api_key = options.apiKey;
   if (options.apiUrl) config.nomus.api_url = options.apiUrl;
   if (options.jurisdictions) config.nomus.jurisdictions = options.jurisdictions;
+
+  // Corporate policies, as in runScan, over the given files only.
+  const bundle = await resolveCorporateBundle(options.corporate, config.nomus.api_url, config.nomus.api_key);
+  const corporate = bundle
+    ? await runCorporateScan(files, rootDir, bundle, { now: options.corporate?.now })
+    : { findings: [], summary: corporateOff() };
 
   // Build detector registry
   const registry = buildRegistry(config, options.detectors);
@@ -257,6 +289,8 @@ export async function runScanFromContents(
       signals: [],
       status: 'pass',
       counts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+      corporateFindings: corporate.findings,
+      corporate: corporate.summary,
     };
   }
 
@@ -287,12 +321,22 @@ export async function runScanFromContents(
     signals: allSignals,
     status: maxSeverity >= failThreshold ? 'fail' : 'pass',
     counts,
+    corporateFindings: corporate.findings,
+    corporate: corporate.summary,
   };
 }
 
 // Re-export types for consumers
 export { NomusApiError, isNomusApiError } from './match/rule-matcher.js';
-export type { Finding, MatchedRule } from './match/rule-matcher.js';
+export type {
+  Finding, MatchedRule, CorporateFinding, CorporateFindingStatus, CorporateTier,
+} from './match/rule-matcher.js';
+export {
+  runCorporateScan, runCorporateScanOnDisk, corporateStatusOf, dashboardUrlFromApiUrl, resolveCorporateBundle,
+  type CorporateMode, type CorporateScanOptions, type CorporateScanSummary, type CorporateScanOutcome,
+} from './scan-corporate.js';
+export { CorporateBundleError, bundleFailureOf, type BundleFailure } from './corporate/bundle-client.js';
+export type { CorporateBundle, BundlePolicy } from './corporate/contracts.js';
 export type { DetectedImport } from './detect/imports.js';
 export type { DetectorPlugin, DetectorSignal, DetectorContext } from './detect/detector.js';
 export { DetectorRegistry, mergeSignals } from './detect/detector.js';

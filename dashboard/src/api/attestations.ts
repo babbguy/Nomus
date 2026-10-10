@@ -26,6 +26,8 @@ export interface Attestation {
   revokedAt?: string | null;
   revocationReason?: string | null;
   supersededBy?: string | null;
+  /** Present only when the attestation has a corporate-policy manifest (counts of the signed records it lists). */
+  corporateGovernance?: { exceptions: number; caseClosures: number; ciRuns: number };
 }
 
 /**
