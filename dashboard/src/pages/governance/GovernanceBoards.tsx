@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Landmark, Plus, UserPlus, X } from 'lucide-react';
 import Card from '../../components/ui/Card';
@@ -15,6 +15,7 @@ import {
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { useOrgUsers } from '../../hooks/useOrgUsers';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtcDate, policyErrorMessage } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
@@ -37,23 +38,9 @@ export default function GovernanceBoards() {
   const { me } = useCpgMe();
   const canManage = hasOrgPermission(me, 'boards.manage');
   const { users, error: usersError } = useOrgUsers(canManage && hasOrgPermission(me, 'org.members.read'));
-  const [boards, setBoards] = useState<Board[] | null>(null);
-  const [policies, setPolicies] = useState<PolicyHead[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, error, fetchedAt, reload, retry } = useCpgLoad(() => Promise.all([listBoards(), listPolicies()]), 'Failed to load the boards');
   const [notice, setNotice] = useState<Notice>(null);
   const [editing, setEditing] = useState<Board | 'new' | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([listBoards(), listPolicies()])
-      .then(([b, p]) => { if (!cancelled) { setBoards(b); setPolicies(p); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the boards')); });
-    return () => { cancelled = true; };
-  }, [reloadKey]);
-
-  const reload = () => setReloadKey((k) => k + 1);
 
   async function run(action: () => Promise<unknown>, ok: string, fail: string) {
     setNotice(null);
@@ -79,14 +66,14 @@ export default function GovernanceBoards() {
       )}
       {usersError && <ErrorState compact message={`${usersError}; adding members is unavailable until the user list loads.`} />}
       {error ? (
-        <ErrorState message={error} onRetry={() => { setError(null); setBoards(null); reload(); }} />
-      ) : boards === null || policies === null ? (
+        <ErrorState message={error} onRetry={retry} />
+      ) : data === null ? (
         <div className="space-y-4"><SkeletonCard /><SkeletonCard /></div>
       ) : (
         <>
           <BoardsView
-            boards={boards}
-            policies={policies}
+            boards={data[0]}
+            policies={data[1]}
             users={users}
             canManage={canManage}
             onEdit={(b) => setEditing(b)}

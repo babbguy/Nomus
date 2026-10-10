@@ -14,6 +14,7 @@ import {
   type PolicyHead, type QuorumConfig, type StandingPattern, type Team,
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import {
@@ -34,10 +35,8 @@ export default function GovernanceExceptions() {
   const readsPolicies = hasOrgPermission(me, 'policy.read');
   const readsMembers = hasOrgPermission(me, 'org.members.read');
   const actions = exceptionActions(me);
-  const [rows, setRows] = useState<ExceptionRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data: rows, error, fetchedAt, reload, retryKeepingData } = useCpgLoad(
+    async () => exceptionRows(...await Promise.all([listStandingProposals(), listStandingExceptions()])), 'Failed to load the standing exceptions');
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<ExceptionStatus | ''>('');
   const [policyKey, setPolicyKey] = useState('');
@@ -46,14 +45,6 @@ export default function GovernanceExceptions() {
   const [policies, setPolicies] = useState<PolicyHead[]>([]);
   const [quorum, setQuorum] = useState<QuorumConfig | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([listStandingProposals(), listStandingExceptions()])
-      .then(([p, x]) => { if (!cancelled) { setRows(exceptionRows(p, x)); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the standing exceptions')); });
-    return () => { cancelled = true; };
-  }, [reloadKey]);
 
   // Reference data, each only when the caller may read it: policies and quorum (policy.read), teams (org.members.read).
   useEffect(() => {
@@ -66,7 +57,7 @@ export default function GovernanceExceptions() {
     return () => { cancelled = true; };
   }, [readsPolicies, readsMembers]);
 
-  const changed = (text: string) => { setNotice(text); setProposing(false); setRevoking(null); setReloadKey((k) => k + 1); };
+  const changed = (text: string) => { setNotice(text); setProposing(false); setRevoking(null); reload(); };
   const boards = new Map([...(me?.boards ?? []), ...policies.flatMap((p) => p.owningBoards)].map((b) => [b.id, b.name]));
   const boardName = (id: string) => boards.get(id) || 'another required board';
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id;
@@ -107,7 +98,7 @@ export default function GovernanceExceptions() {
         )}
       </div>
 
-      {error ? <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />
+      {error ? <ErrorState message={error} onRetry={retryKeepingData} />
         : rows === null ? <SkeletonTable rows={4} />
           : shown.length === 0 ? (
             <EmptyState

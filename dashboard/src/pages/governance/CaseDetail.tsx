@@ -14,7 +14,7 @@ import {
   type CaseDetail as CaseDetailData, type CpgMe, type Proposal, type QuorumConfig, type RevisionDetail,
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
-import { cpgErrorCode } from '../../lib/cpg-errors';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission, holdsPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import { SOURCE_LABEL, actorLabel, caseActions, closeReasonLabel, type CaseActions } from '../../lib/cpg-cases';
@@ -35,19 +35,8 @@ import { CiRunsCard } from './cases/CiRuns';
 export default function CaseDetail() {
   const { id = '' } = useParams();
   const { me } = useCpgMe();
-  const [detail, setDetail] = useState<CaseDetailData | null>(null);
-  const [error, setError] = useState<{ text: string; notFound: boolean } | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data: detail, error, errorCode, fetchedAt, reload, retryKeepingData } = useCpgLoad(() => getCase(id), 'Failed to load the case', [id]);
   const [notice, setNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getCase(id)
-      .then((d) => { if (!cancelled) { setDetail(d); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError({ text: policyErrorMessage(err, 'Failed to load the case'), notFound: cpgErrorCode(err) === 'not_found' }); });
-    return () => { cancelled = true; };
-  }, [id, reloadKey]);
 
   return (
     <div>
@@ -55,9 +44,9 @@ export default function CaseDetail() {
         <ArrowLeft size={12} /> All cases
       </Link>
       {error ? (
-        error.notFound
+        errorCode === 'not_found'
           ? <EmptyState title="Case not found" description="It does not exist in your organization, or it is in a repository you cannot read." />
-          : <ErrorState message={error.text} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />
+          : <ErrorState message={error} onRetry={retryKeepingData} />
       ) : !detail ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
@@ -65,7 +54,7 @@ export default function CaseDetail() {
           detail={detail}
           me={me}
           notice={notice}
-          onChanged={(text) => { setNotice(text); setReloadKey((k) => k + 1); }}
+          onChanged={(text) => { setNotice(text); reload(); }}
           fetchedAt={fetchedAt}
         />
       )}

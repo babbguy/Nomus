@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ScrollText, Plus, Info } from 'lucide-react';
 import Card from '../../components/ui/Card';
@@ -10,9 +10,10 @@ import DataFreshness from '../../components/ui/DataFreshness';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { listPolicies, type PolicyHead } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import {
-  STATE_LABEL, enforcementSummary, matchesPolicyFilter, pendingLabel, policyErrorMessage, policyFilterCounts, type PolicyFilter,
+  STATE_LABEL, enforcementSummary, matchesPolicyFilter, pendingLabel, policyFilterCounts, type PolicyFilter,
 } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
 import { StateBadge, TierBadge } from './policies/parts';
@@ -30,20 +31,9 @@ export default function GovernancePolicies() {
   const { me } = useCpgMe();
   const navigate = useNavigate();
   const canAuthor = hasOrgPermission(me, 'policy.author');
-  const [items, setItems] = useState<PolicyHead[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
+  const { data: items, error, fetchedAt, retry } = useCpgLoad(listPolicies, 'Failed to load the policy log');
   const [filter, setFilter] = useState<PolicyFilter>('');
   const [now] = useState(() => Date.now());
-
-  useEffect(() => {
-    let cancelled = false;
-    listPolicies()
-      .then((list) => { if (!cancelled) { setItems(list); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the policy log')); });
-    return () => { cancelled = true; };
-  }, [retryKey]);
 
   const shown = (items ?? []).filter((p) => matchesPolicyFilter(p, filter));
   const counts = items ? policyFilterCounts(items) : null;
@@ -81,7 +71,7 @@ export default function GovernancePolicies() {
       </div>
 
       {error ? (
-        <ErrorState message={error} onRetry={() => { setError(null); setItems(null); setRetryKey((k) => k + 1); }} />
+        <ErrorState message={error} onRetry={retry} />
       ) : items === null ? (
         <SkeletonTable rows={5} />
       ) : (

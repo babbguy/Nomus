@@ -9,10 +9,11 @@ import ErrorState from '../../components/ui/ErrorState';
 import DataFreshness from '../../components/ui/DataFreshness';
 import {
   getQuorum, getQuorumVersion, listBoards, listPolicies, listQuorumVersions,
-  type Board, type PolicyHead, type QuorumConfig, type QuorumVersion, type QuorumVersionSummary,
+  type QuorumConfig, type QuorumVersion,
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { useOrgUsers } from '../../hooks/useOrgUsers';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { formatActor, hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage, TIER_LABEL } from '../../lib/cpg-policy';
 import { EDITABLE_TIERS, SCOPE_LABEL, quorumChanges, slotSummary } from '../../lib/cpg-quorum-form';
@@ -35,25 +36,14 @@ export default function GovernanceQuorum() {
   const canManage = hasOrgPermission(me, 'quorum.manage');
   const canHistory = canManage || hasOrgPermission(me, 'audit.read');
   const { byId: names } = useOrgUsers(hasOrgPermission(me, 'org.members.read'));
-  const [current, setCurrent] = useState<QuorumVersion | null>(null);
-  const [boards, setBoards] = useState<Board[] | null>(null);
-  const [policies, setPolicies] = useState<PolicyHead[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, error, fetchedAt, reload, retry } = useCpgLoad(
+    () => Promise.all([getQuorum(), listBoards(), listPolicies()]), 'Failed to load the quorum configuration');
+  const [current, boards, policies] = data ?? [null, [], []];
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getQuorum(), listBoards(), listPolicies()])
-      .then(([q, b, p]) => { if (!cancelled) { setCurrent(q); setBoards(b); setPolicies(p); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the quorum configuration')); });
-    return () => { cancelled = true; };
-  }, [reloadKey]);
-
-  const boardNames = new Map((boards ?? []).map((b) => [b.id, b.name]));
-  const policyNames = new Map((policies ?? []).map((p) => [p.policyId, p.policyKey]));
+  const boardNames = new Map(boards.map((b) => [b.id, b.name]));
+  const policyNames = new Map(policies.map((p) => [p.policyId, p.policyKey]));
 
   return (
     <div>
@@ -65,8 +55,8 @@ export default function GovernanceQuorum() {
       />
       {notice && <p className="text-sm text-success mb-3" role="status" data-testid="quorum-notice">{notice}</p>}
       {error ? (
-        <ErrorState message={error} onRetry={() => { setError(null); setCurrent(null); setReloadKey((k) => k + 1); }} />
-      ) : !current || !boards || !policies ? (
+        <ErrorState message={error} onRetry={retry} />
+      ) : !current ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : editing ? (
         <QuorumEditor
@@ -74,7 +64,7 @@ export default function GovernanceQuorum() {
           boards={boards}
           policies={policies}
           onCancel={() => setEditing(false)}
-          onSaved={(v) => { setEditing(false); setNotice(`Saved as version ${v.version}. It applies to every decision from now on.`); setReloadKey((k) => k + 1); }}
+          onSaved={(v) => { setEditing(false); setNotice(`Saved as version ${v.version}. It applies to every decision from now on.`); reload(); }}
         />
       ) : (
         <div className="space-y-4">
@@ -185,20 +175,10 @@ export function QuorumView({ version, boardNames, policyNames, names }: {
 }
 
 function QuorumHistory({ currentVersion, names, policyNames }: { currentVersion: number; names: Names; policyNames: ReadonlyMap<string, string> }) {
-  const [items, setItems] = useState<QuorumVersionSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [key, setKey] = useState(0);
+  const { data: items, error, retryKeepingData } = useCpgLoad(listQuorumVersions, 'Failed to load the quorum history', [currentVersion]);
   const [selected, setSelected] = useState<number | null>(null);
   const [pair, setPair] = useState<{ v: QuorumVersion; prev: QuorumVersion | null } | null>(null);
   const [pairError, setPairError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    listQuorumVersions()
-      .then((list) => { if (!cancelled) { setItems(list); setError(null); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the quorum history')); });
-    return () => { cancelled = true; };
-  }, [key, currentVersion]);
 
   useEffect(() => {
     if (selected === null) return;
@@ -212,7 +192,7 @@ function QuorumHistory({ currentVersion, names, policyNames }: { currentVersion:
   return (
     <Card>
       <h2 className="text-sm font-semibold text-text-primary mb-2">Version history</h2>
-      {error ? <ErrorState compact message={error} onRetry={() => { setError(null); setKey((k) => k + 1); }} /> : items === null ? (
+      {error ? <ErrorState compact message={error} onRetry={retryKeepingData} /> : items === null ? (
         <div className="flex justify-center py-4"><Spinner className="w-5 h-5" /></div>
       ) : items.length === 0 ? (
         <EmptyState title="No versions yet" />

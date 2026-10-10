@@ -14,8 +14,8 @@ import {
   type CompileRecord, type CpgMe, type PolicyDetail as PolicyDetailData, type PolicyVersion, type PolicyVote,
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { useOrgUsers } from '../../hooks/useOrgUsers';
-import { cpgErrorCode } from '../../lib/cpg-errors';
 import { formatActor, hasOrgPermission } from '../../lib/cpg-permissions';
 import {
   EVENT_LABEL, enforcementSummary, formatUtc, fourEyesStatus, policyErrorMessage, versionDiff, type FourEyes,
@@ -38,22 +38,9 @@ export default function PolicyDetail() {
   const justProposed = (location.state as { proposed?: boolean } | null)?.proposed === true;
   const { me } = useCpgMe();
   const { byId: names, error: namesError } = useOrgUsers(hasOrgPermission(me, 'org.members.read'));
-  const [detail, setDetail] = useState<PolicyDetailData | null>(null);
-  const [error, setError] = useState<{ text: string; notFound: boolean } | null>(null);
+  const { data: detail, error, errorCode, fetchedAt, reload, retryKeepingData } = useCpgLoad(() => getPolicy(id), 'Failed to load the policy', [id]);
   const [lapseDays, setLapseDays] = useState<number | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getPolicy(id)
-      .then((d) => { if (!cancelled) { setDetail(d); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => {
-        if (!cancelled) setError({ text: policyErrorMessage(err, 'Failed to load the policy'), notFound: cpgErrorCode(err) === 'not_found' });
-      });
-    return () => { cancelled = true; };
-  }, [id, reloadKey]);
 
   // The proposal lapse window (quorum), for the pending version's deadline. Best effort.
   useEffect(() => {
@@ -62,17 +49,15 @@ export default function PolicyDetail() {
     return () => { cancelled = true; };
   }, []);
 
-  const reload = () => setReloadKey((k) => k + 1);
-
   return (
     <div>
       <Link to="/governance/policies" className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-accent mb-3">
         <ArrowLeft size={12} /> All policies
       </Link>
       {error ? (
-        error.notFound
+        errorCode === 'not_found'
           ? <EmptyState title="Policy not found" description="It does not exist in your organization." />
-          : <ErrorState message={error.text} onRetry={() => { setError(null); reload(); }} />
+          : <ErrorState message={error} onRetry={retryKeepingData} />
       ) : !detail ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
