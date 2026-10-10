@@ -105,7 +105,10 @@ ${USAGE}`);
     console.log(JSON.stringify(sarif, null, 2));
   } else {
     if (result.importCount > 0) {
-      console.log(`   Found ${result.fileCount} source files`);
+      // With corporate policies on, say what this count is: the corporate section counts other files.
+      console.log(corporateOn
+        ? `   Found ${result.fileCount} source files for the regulatory scan`
+        : `   Found ${result.fileCount} source files`);
       console.log(`   Detected ${result.importCount} AI SDK import(s)`);
       console.log(`   Capabilities: ${result.capabilities.join(', ')}\n`);
     }

@@ -11,7 +11,7 @@ import { listBoards, listCases, type Board, type CaseList, type CaseState, type 
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
-import { CASE_STATE_LABEL, actorLabel, pageNote } from '../../lib/cpg-cases';
+import { CASE_STATE_LABEL, actorLabel, pageNote, relativeTime } from '../../lib/cpg-cases';
 import GovernanceHeader from './GovernanceHeader';
 import { CaseStateBadge, LaneList, PullRequest, RepoBranch } from './cases/parts';
 
@@ -104,7 +104,7 @@ export default function GovernanceCases() {
               <Info size={14} className="text-info shrink-0" />{note}
             </p>
           )}
-          {page.items.length > 0 ? <CaseTable items={page.items} /> : !note && (
+          {page.items.length > 0 ? <CaseTable items={page.items} now={fetchedAt ? Date.parse(fetchedAt) : Number.NaN} /> : !note && (
             <EmptyState
               title={cursors.length > 1 ? 'No more cases' : state || boardId ? 'No cases match these filters' : 'No review cases yet'}
               description={cursors.length > 1 ? 'Go back to the previous page.' : state || boardId ? 'Choose another state or board.'
@@ -125,7 +125,13 @@ export default function GovernanceCases() {
   );
 }
 
-export function CaseTable({ items }: { items: CaseSummary[] }) {
+/** A compact relative time with the full UTC time on hover. */
+function When({ iso, now, prefix = '' }: { iso: string; now: number; prefix?: string }) {
+  return <time dateTime={iso} title={formatUtc(iso)} className="whitespace-nowrap">{prefix}{relativeTime(iso, now)}</time>;
+}
+
+/** The case list; times are relative to `now` (when the page was fetched). */
+export function CaseTable({ items, now }: { items: CaseSummary[]; now: number }) {
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="w-full text-sm" data-testid="case-table">
@@ -134,10 +140,10 @@ export function CaseTable({ items }: { items: CaseSummary[] }) {
             <th className="px-4 py-3 font-medium">Case</th>
             <th className="px-4 py-3 font-medium">Repository @ branch</th>
             <th className="px-4 py-3 font-medium">State</th>
-            <th className="px-4 py-3 font-medium">Lanes</th>
-            <th className="px-4 py-3 font-medium">Opened by</th>
-            <th className="px-4 py-3 font-medium">Last activity</th>
-            <th className="px-4 py-3 font-medium">Pull request</th>
+            <th className="px-4 py-3 font-medium" title="Each owning board's review: its state and decided/blocking findings">Lanes</th>
+            <th className="px-4 py-3 font-medium whitespace-nowrap">Opened by</th>
+            <th className="px-4 py-3 font-medium whitespace-nowrap">Last activity</th>
+            <th className="px-4 py-3 font-medium whitespace-nowrap">Pull request</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -145,16 +151,13 @@ export function CaseTable({ items }: { items: CaseSummary[] }) {
             <tr key={c.id} className="align-top hover:bg-surface-hover transition">
               <td className="px-4 py-3 whitespace-nowrap">
                 <Link to={`/governance/cases/${c.id}`} className="font-mono text-text-primary font-medium hover:text-accent">{c.ref}</Link>
-                <p className="text-xs text-text-muted">{c.latestRevision === 0 ? 'no revision yet' : `revision ${c.latestRevision}`}</p>
+                <p className="text-xs text-text-muted">{c.latestRevision === 0 ? 'no revision yet' : `revision ${c.latestRevision}`} · <When iso={c.openedAt} now={now} prefix="opened " /></p>
               </td>
               <td className="px-4 py-3"><RepoBranch repo={c.repo} branch={c.branch} /></td>
               <td className="px-4 py-3"><CaseStateBadge state={c.state} closeReason={c.closeReason} /></td>
               <td className="px-4 py-3">{c.state === 'closed' ? <span className="text-xs text-text-muted">—</span> : <LaneList lanes={c.lanes} compact />}</td>
-              <td className="px-4 py-3 text-xs text-text-secondary">
-                <p>{actorLabel(c.openedBy)}</p>
-                <p className="text-text-muted">{formatUtc(c.openedAt)}</p>
-              </td>
-              <td className="px-4 py-3 text-xs text-text-secondary">{formatUtc(c.updatedAt)}</td>
+              <td className="px-4 py-3 text-xs text-text-secondary" title={`Opened ${formatUtc(c.openedAt)}`}>{actorLabel(c.openedBy)}</td>
+              <td className="px-4 py-3 text-xs text-text-secondary"><When iso={c.updatedAt} now={now} /></td>
               <td className="px-4 py-3 text-xs whitespace-nowrap"><PullRequest repo={c.repo} prNumber={c.prNumber} closed={c.state === 'closed'} /></td>
             </tr>
           ))}

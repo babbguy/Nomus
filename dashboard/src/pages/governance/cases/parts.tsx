@@ -50,7 +50,7 @@ export function LaneList({ lanes, compact = false, closed = false }: { lanes: Ca
           <span className="text-text-primary">{l.boardName || l.boardId}</span>
           {!closed && <Badge variant={LANE_STATE_VARIANT[l.state]} className="whitespace-nowrap">{LANE_STATE_LABEL[l.state]}</Badge>}
           <span className="text-text-muted whitespace-nowrap" title={`${l.decided} of ${l.blocking} blocking findings decided`}>
-            {compact ? `${l.decided}/${l.blocking} decided` : `${l.decided} of ${l.blocking} blocking decided`}
+            {compact ? `${l.decided}/${l.blocking}` : `${l.decided} of ${l.blocking} blocking decided`}
           </span>
         </li>
       ))}

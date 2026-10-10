@@ -150,6 +150,14 @@ export async function cpgScannerChecks(ctx) {
     gate.check('the console report has a separate corporate section naming each finding with its fingerprint',
       /Corporate policies/.test(con.stdout) && cf.every((f) => con.stdout.includes(f.fingerprint)) && con.code === first.code,
       'section with every fingerprint, same exit code', `exit ${con.code}; section ${/Corporate policies/.test(con.stdout)}`);
+    // Each count says what it counts; --no-corporate keeps the v1.1.0 wording.
+    const conOff = await scan(repo, ['.', '--no-corporate']);
+    const filesLine = `${j.corporate.scannedFileCount} files checked for corporate policies (every repository file in a policy's scope, of any type)`;
+    gate.check('the console names each count: source files for the regulatory scan, files checked for corporate policies; --no-corporate keeps "Found N source files"',
+      /^ {3}Found \d+ source files for the regulatory scan\r?$/m.test(con.stdout) && con.stdout.split(/\r?\n/).includes(filesLine)
+        && /^ {3}Found \d+ source files\r?$/m.test(conOff.stdout) && !/regulatory scan|corporate polic/i.test(conOff.stdout),
+      `"Found N source files for the regulatory scan" and "${filesLine}"`,
+      [con.stdout, conOff.stdout].map((s) => s.split(/\r?\n/).filter((l) => /Found|checked/.test(l)).join(' / ')).join(' || '));
 
     // ── a tampered bundle fails closed and its rules never run ────────
     const tamperProxy = await startTamperProxy({

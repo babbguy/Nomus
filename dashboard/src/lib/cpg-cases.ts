@@ -33,6 +33,24 @@ export const SOURCE_LABEL = { vscode: 'VS Code', ci: 'CI', dashboard: 'Dashboard
 
 export const actorLabel = (ref: ActorRef) => ref.name || formatActor(ref.actor);
 
+/**
+ * A compact time relative to `now` ("just now", "5m ago", "3h ago", "4d ago");
+ * from 30 days, the UTC date. '—' when the instant does not parse. Pair it
+ * with the full UTC time on hover.
+ */
+export function relativeTime(iso: string, now: number): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t) || !Number.isFinite(now)) return '—';
+  const minutes = Math.floor(Math.max(0, now - t) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
 /** Text ending in exactly one sentence mark: a full stop is added only when none is there. */
 export const asSentence = (text: string) => (/[.!?]$/.test(text.trimEnd()) ? text.trimEnd() : `${text.trimEnd()}.`);
 

@@ -188,6 +188,12 @@ export async function cpgVscodeChecks(ctx) {
     gate.check('offline (server unreachable): the corporate diagnostics persist and the status row says "offline (cached …)"',
       offlineDiags.length === 1 && offlineDiags[0].code?.value === 'corp.no-direct-openai' && /^Policy bundle: offline \(cached \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\)$/.test(offlineView.at(-1)?.label ?? ''),
       '1 corporate diagnostic; offline (cached …)', `${offlineDiags.length} diag(s); ${offlineView.at(-1)?.label}`);
+    const offlineMsgs = state.messages.slice(msgBefore);
+    const cachedAt = /cached (\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC)/.exec(offlineView.at(-1)?.label ?? '')?.[1];
+    gate.check('offline: one error says which results are unavailable (regulatory) and which are cached (corporate, with the cache time)',
+      offlineMsgs.length === 1 && offlineMsgs[0].level === 'error' && !!cachedAt
+        && offlineMsgs[0].text === `Nomus is unreachable: regulatory results are unavailable and their compliance status is unknown. Corporate policy findings are shown from the policy bundle cached ${cachedAt}.`,
+      '1 error naming the unavailable and the cached results', offlineMsgs.map((m) => `${m.level}: ${m.text}`).join(' | '));
     const cacheKey = `nomus.cpg.bundle:${proxy.url}`;
 
     // ── expired: an offline cache older than the allowed age is not used ─
@@ -198,8 +204,9 @@ export async function cpgVscodeChecks(ctx) {
     const expiredDiags = corp(await save('src/chat.ts', 'typescript'));
     const expiredView = await renderTree(state.trees.get('nomus.corporate'));
     evidence.views.expired = expiredView;
-    gate.check('expired (offline, cached 100 hours ago, limit 72): corporate diagnostics cleared, an error says so, the status row says expired',
-      expiredDiags.length === 0 && state.messages.slice(nExp).some((m) => m.level === 'error' && /too old to use offline/.test(m.text)) && /^Policy bundle expired/.test(expiredView.at(-1)?.label ?? ''),
+    gate.check('expired (offline, cached 100 hours ago, limit 72): corporate diagnostics cleared, one error says so (with the regulatory results unavailable), the status row says expired',
+      expiredDiags.length === 0 && state.messages.slice(nExp).length === 1 && state.messages.slice(nExp).every((m) => m.level === 'error' && /too old to use offline/.test(m.text) && /^Nomus is unreachable: regulatory results are unavailable/.test(m.text))
+        && /^Policy bundle expired/.test(expiredView.at(-1)?.label ?? ''),
       'no corporate diagnostic, error, expired row', `${expiredDiags.length} diag(s); ${state.messages.slice(nExp).map((m) => m.text).join(' | ')}; ${expiredView.at(-1)?.label}`);
     state.globalState.set(cacheKey, { ...record, fetchedAt });
     const restored = corp(await save('src/chat.ts', 'typescript'));
@@ -215,8 +222,9 @@ export async function cpgVscodeChecks(ctx) {
     const tamperedView = await renderTree(state.trees.get('nomus.corporate'));
     evidence.views.tampered = tamperedView;
     const tMsgs = state.messages.slice(nT);
-    gate.check('a tampered cached bundle: corporate diagnostics cleared, an error message shown, the cache deleted, no "no violations" state',
-      tamperedDiags.length === 0 && tMsgs.some((m) => m.level === 'error' && /failed verification and was discarded/.test(m.text)) && state.globalState.get(cacheKey) === undefined
+    gate.check('a tampered cached bundle (offline): corporate diagnostics cleared, one error message (discarded, no fresh bundle, regulatory unavailable), the cache deleted, no "no violations" state',
+      tamperedDiags.length === 0 && tMsgs.length === 1 && tMsgs[0].level === 'error' && /failed verification and was discarded/.test(tMsgs[0].text)
+        && /No fresh bundle could be downloaded/.test(tMsgs[0].text) && /^Nomus is unreachable: regulatory results are unavailable/.test(tMsgs[0].text) && state.globalState.get(cacheKey) === undefined
         && tamperedView.some((r) => /cannot be shown/.test(r.label)) && /^Policy bundle unavailable$/.test(tamperedView.at(-1)?.label ?? ''),
       'cleared, error, cache gone, unavailable row', `${tamperedDiags.length} diag(s); ${tMsgs.map((m) => `${m.level}: ${m.text}`).join(' | ')}; ${tamperedView.map((r) => r.label).join(' / ')}`);
     evidence.messages.push(...state.messages.slice(msgBefore).map((m) => `${m.level}: ${m.text}`));

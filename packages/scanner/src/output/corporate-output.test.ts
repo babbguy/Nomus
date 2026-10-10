@@ -103,7 +103,9 @@ describe('corporate report sections', () => {
 
   it('console: a separate section listing each finding, its status and fingerprint; no undefined/NaN', () => {
     const text = formatCorporateConsoleReport([finding(), grace], SUMMARY);
-    expect(text).toContain('Corporate policies: 3 active policies, 5 files checked');
+    expect(text).toContain(`Corporate policies: 3 active policies (bundle ${SUMMARY.bundleHash!.slice(0, 12)})
+5 files checked for corporate policies (every repository file in a policy's scope, of any type)
+`);
     expect(text).toContain('[PROHIBITED] corp.no-direct-openai v2: No direct OpenAI calls');
     expect(text).toContain('File:   src/chat.ts:6-8');
     expect(text).toContain('Status: needs review (blocking)');

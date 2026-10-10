@@ -68,12 +68,16 @@ node packages/scanner/dist/index.js . --no-corporate  # regulatory scan only; th
 
 The API key needs the `read:policies` scope (to download the bundle) as well as `evaluate`.
 
-**Console.** After the regulatory report, a section lists each corporate finding. This is the real
-output for a repository with four active policies: two blocking findings of a prohibited policy, one
-of a review-required policy, one in its grace period and one advisory:
+**Console.** After the regulatory report, a section lists each corporate finding. The two file
+counts differ on purpose: the regulatory scan reads source files (`Found 5 source files for the
+regulatory scan`, honouring `.nomus.yml` `ignore`), while corporate policies check every repository
+file in a policy's scope, of any type. This is the real output for a repository with four active
+policies: two blocking findings of a prohibited policy, one of a review-required policy, one in its
+grace period and one advisory:
 
 ```
-Corporate policies: 4 active policies, 6 files checked (bundle c3bd03d2ede9)
+Corporate policies: 4 active policies (bundle c3bd03d2ede9)
+6 files checked for corporate policies (every repository file in a policy's scope, of any type)
 5 corporate policy finding(s), 3 blocking:
 
 [REVIEW-REQUIRED] corp.no-pii-to-ai v1: No personal data in AI calls
@@ -264,8 +268,9 @@ offline, and the error says so; your text is kept as a draft.
 
 **Governance > Cases** lists the review cases of the repositories you can read, newest first: the
 case reference (`CPG-…`), repository @ branch, state, each board's lane with how many of its
-blocking findings are decided, who opened it, the last activity and the pull request (a link for
-GitHub repositories). Filter by state or by board, and page with **Previous** and **Next**. If your
+blocking findings are decided (`decided/blocking`), who opened it and when, the last activity and the
+pull request (a link for GitHub repositories). Times are relative (`3h ago`); hover for the exact
+UTC time. Filter by state or by board, and page with **Previous** and **Next**. If your
 access is limited to some repositories, you see only their cases, and every page is full except the
 last.
 
@@ -339,7 +344,9 @@ warns how many will.
 
 
 The extension never shows "no violations" when it cannot check. Every problem is visible, in the
-view's status row and as an error message:
+view's status row and as an error message. A scan reports everything in one error message: when
+the server is unreachable it says that regulatory results are unavailable and whether the corporate
+findings shown come from the cached bundle (with its time) or cannot be shown, and why:
 
 | Situation | What you see |
 |---|---|
