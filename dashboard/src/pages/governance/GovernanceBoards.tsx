@@ -19,6 +19,7 @@ import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtcDate, policyErrorMessage } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
+import { NoticeLine, type Notice } from './parts';
 import { StateBadge, TierBadge } from './policies/parts';
 
 const inputCls = 'w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent';
@@ -30,8 +31,6 @@ const KINDS: Array<{ value: BoardKind; label: string }> = [
   { value: 'custom', label: 'Custom' },
 ];
 const kindLabel = (k: BoardKind) => KINDS.find((x) => x.value === k)?.label ?? k;
-
-type Notice = { type: 'ok' | 'err'; text: string } | null;
 
 /** /governance/boards (E19–E24, E31): review boards, their members, and the policies each one owns. */
 export default function GovernanceBoards() {
@@ -61,9 +60,7 @@ export default function GovernanceBoards() {
         subtitle="Boards own policies and review their findings"
         actions={canManage ? <Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> New board</Button> : undefined}
       />
-      {notice && (
-        <p className={`text-sm mb-3 ${notice.type === 'ok' ? 'text-success' : 'text-danger'}`} role={notice.type === 'err' ? 'alert' : 'status'} data-testid="boards-notice">{notice.text}</p>
-      )}
+      <NoticeLine notice={notice} className="text-sm mb-3" testId="boards-notice" />
       {usersError && <ErrorState compact message={`${usersError}; adding members is unavailable until the user list loads.`} />}
       {error ? (
         <ErrorState message={error} onRetry={retry} />

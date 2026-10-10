@@ -9,6 +9,7 @@ import { archiveRole, createRole, updateRole, type Permission, type PermissionCa
 import { cpgErrorMessage } from '../../../lib/cpg-errors';
 import { formatDate } from '../../../lib/formatters';
 import { inputCls, ORG_ADMIN_LOCKED, permissionGroups, rolePatch, type AccessData } from './helpers';
+import { NoticeLine, type Notice } from '../parts';
 
 const CATEGORY_LABELS: Record<PermissionCategory, string> = {
   org: 'Organization',
@@ -25,7 +26,7 @@ const CATEGORY_LABELS: Record<PermissionCategory, string> = {
 export default function RolesPanel({ data, canManage, onChanged }: { data: AccessData; canManage: boolean; onChanged: () => void }) {
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
   const [archiving, setArchiving] = useState<Role | null>(null);
-  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
 
   return (
     <div>
@@ -36,11 +37,7 @@ export default function RolesPanel({ data, canManage, onChanged }: { data: Acces
         </p>
         {canManage && <Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> New role</Button>}
       </div>
-      {notice && (
-        <p className={`text-xs mb-3 ${notice.type === 'ok' ? 'text-success' : 'text-danger'}`} role={notice.type === 'err' ? 'alert' : 'status'}>
-          {notice.text}
-        </p>
-      )}
+      <NoticeLine notice={notice} className="text-xs mb-3" />
 
       <RoleMatrix roles={data.roles} permissions={data.permissions} canManage={canManage} onEdit={(r) => setEditing(r)} onArchive={(r) => setArchiving(r)} />
 

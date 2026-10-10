@@ -5,6 +5,7 @@ import Button from '../../../components/ui/Button';
 import type { Delivery, DeliveryStatus, Integration } from '../../../api/cpg';
 import { formatUtc } from '../../../lib/cpg-policy';
 import { deliveryCaseRef, eventLabel, KIND_LABELS, lastError } from '../../../lib/cpg-integrations';
+import { TableHead } from '../parts';
 
 const STATUS: Record<DeliveryStatus, { label: string; variant: 'success' | 'warning' | 'danger' | 'default' }> = {
   delivered: { label: 'Delivered', variant: 'success' },
@@ -25,18 +26,10 @@ export function DeliveryTable({ items, integrations, retriedIds, canRetry, onRet
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="w-full min-w-[56rem] text-sm" data-testid="delivery-log">
-        <thead>
-          <tr className="border-b border-border text-left text-text-muted">
-            <th className="px-4 py-3 font-medium">Event</th>
-            <th className="px-4 py-3 font-medium">Integration</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium text-right">Attempts</th>
-            <th className="px-4 py-3 font-medium">Last error</th>
-            <th className="px-4 py-3 font-medium">Next retry</th>
-            <th className="px-4 py-3 font-medium">Created</th>
-            <th className="px-4 py-3 font-medium"><span className="sr-only">Actions</span></th>
-          </tr>
-        </thead>
+        <TableHead columns={[
+          'Event', 'Integration', 'Status', { label: 'Attempts', className: 'text-right' }, 'Last error', 'Next retry', 'Created',
+          { label: <span className="sr-only">Actions</span> },
+        ]} />
         <tbody className="divide-y divide-border">
           {items.map((d) => {
             const integration = integrations.get(d.integrationId);

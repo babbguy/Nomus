@@ -13,6 +13,7 @@ import { cpgErrorMessage } from '../../../lib/cpg-errors';
 import { describeScope, isCanonicalRepo } from '../../../lib/cpg-permissions';
 import { formatDateTime } from '../../../lib/formatters';
 import { inputCls, orgOnlyPermissions, type AccessData } from './helpers';
+import { NoticeLine, TableHead, type Notice } from '../parts';
 
 /** Users tab: org users with their active grants; invite, grant, revoke, deactivate (rbac.users.manage). */
 export default function UsersPanel({ data, meUserId, canManage, onChanged }: {
@@ -25,7 +26,7 @@ export default function UsersPanel({ data, meUserId, canManage, onChanged }: {
   const [granting, setGranting] = useState<OrgUser | null>(null);
   const [revoking, setRevoking] = useState<{ user: OrgUser; grant: Grant } | null>(null);
   const [deactivating, setDeactivating] = useState<OrgUser | null>(null);
-  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
   const teamsById = useMemo(() => new Map(data.teams.map((t) => [t.id, t])), [data.teams]);
   const active = data.users.filter((u) => u.isActive).length;
 
@@ -49,11 +50,7 @@ export default function UsersPanel({ data, meUserId, canManage, onChanged }: {
         {canManage && <Button size="sm" onClick={() => setInviting(true)}><UserPlus size={14} /> Invite user</Button>}
       </div>
 
-      {notice && (
-        <p className={`text-xs mb-3 ${notice.type === 'ok' ? 'text-success' : 'text-danger'}`} role={notice.type === 'err' ? 'alert' : 'status'}>
-          {notice.text}
-        </p>
-      )}
+      <NoticeLine notice={notice} className="text-xs mb-3" />
 
       <UsersTable
         users={data.users}
@@ -112,14 +109,7 @@ export function UsersTable({ users, meUserId, canManage, teamsById, onGrant, onR
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="w-full text-sm" data-testid="access-users">
-        <thead>
-          <tr className="border-b border-border text-left text-text-muted">
-            <th className="px-4 py-3 font-medium">User</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium">Roles</th>
-            {canManage && <th className="px-4 py-3 font-medium text-right">Actions</th>}
-          </tr>
-        </thead>
+        <TableHead columns={['User', 'Status', 'Roles', canManage && { label: 'Actions', className: 'text-right' }]} />
         <tbody className="divide-y divide-border">
           {users.map((u) => (
             <tr key={u.id} className="align-top">

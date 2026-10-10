@@ -7,6 +7,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import { listCaseCiRuns, type CiRun, type CiRunList } from '../../../api/cpg';
 import { formatUtc, policyErrorMessage } from '../../../lib/cpg-policy';
 import { PullRequest } from './parts';
+import { TableHead } from '../parts';
 
 /**
  * The case's CI runs (E63), newest first: the server's verdict, the commit,
@@ -47,15 +48,7 @@ export function CiRunsCard({ caseId, repo, reloadKey }: { caseId: string; repo: 
 export function CiRunTable({ runs, repo }: { runs: CiRun[]; repo: string }) {
   return (
     <table className="w-full text-sm" data-testid="case-ci-runs">
-      <thead>
-        <tr className="border-y border-border text-left text-text-muted">
-          <th className="px-4 py-2 font-medium">Verdict</th>
-          <th className="px-4 py-2 font-medium">Head commit</th>
-          <th className="px-4 py-2 font-medium">Pull request</th>
-          <th className="px-4 py-2 font-medium">Evaluated</th>
-          <th className="px-4 py-2 font-medium">Signature</th>
-        </tr>
-      </thead>
+      <TableHead dense columns={['Verdict', 'Head commit', 'Pull request', 'Evaluated', 'Signature']} />
       <tbody className="divide-y divide-border">
         {runs.map((r) => (
           <tr key={r.id} className="hover:bg-surface-hover">

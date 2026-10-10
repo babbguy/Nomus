@@ -19,6 +19,7 @@ import { formatUtc, policyErrorMessage, TIER_LABEL } from '../../lib/cpg-policy'
 import { EDITABLE_TIERS, SCOPE_LABEL, quorumChanges, slotSummary } from '../../lib/cpg-quorum-form';
 import { QUORUM_SCOPES } from '../../api/cpg-quorum';
 import GovernanceHeader from './GovernanceHeader';
+import { TableHead } from './parts';
 import QuorumEditor from './quorum/QuorumEditor';
 import FixedRules from './quorum/FixedRules';
 import { Mono } from './policies/parts';
@@ -110,12 +111,7 @@ export function QuorumView({ version, boardNames, policyNames, names }: {
 
       <Card className="p-0 overflow-x-auto">
         <table className="w-full text-sm" data-testid="quorum-tiers">
-          <thead>
-            <tr className="border-b border-border text-left text-text-muted">
-              <th className="px-4 py-3 font-medium">Scope</th>
-              {EDITABLE_TIERS.map((t) => <th key={t} className="px-4 py-3 font-medium">{TIER_LABEL[t]}</th>)}
-            </tr>
-          </thead>
+          <TableHead columns={['Scope', ...EDITABLE_TIERS.map((t) => TIER_LABEL[t])]} />
           <tbody className="divide-y divide-border">
             {QUORUM_SCOPES.map((s) => (
               <tr key={s} className="align-top">

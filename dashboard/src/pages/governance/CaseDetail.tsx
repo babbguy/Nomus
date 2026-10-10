@@ -25,6 +25,7 @@ import { FindingList } from './cases/Findings';
 import { Blocked, Discussion, RequestChangesForm } from './cases/Discussion';
 import { DecisionsCard, FindingDecision, type DecisionContext } from './cases/Decisions';
 import { CiRunsCard } from './cases/CiRuns';
+import { TableHead } from './parts';
 
 /**
  * /governance/cases/:id (E43, E44, E51, E52, E46, E47, E49, E50, E54 to
@@ -164,17 +165,7 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
           <p className="text-xs text-text-muted">A revision is a snapshot of the branch&apos;s corporate findings; one is added only when they change.</p>
         </div>
         <table className="w-full text-sm" data-testid="case-revisions">
-          <thead>
-            <tr className="border-y border-border text-left text-text-muted">
-              <th className="px-4 py-2 font-medium">Revision</th>
-              <th className="px-4 py-2 font-medium">From</th>
-              <th className="px-4 py-2 font-medium">New</th>
-              <th className="px-4 py-2 font-medium">Carried</th>
-              <th className="px-4 py-2 font-medium">Resolved</th>
-              <th className="px-4 py-2 font-medium">Head commit</th>
-              <th className="px-4 py-2 font-medium">Created</th>
-            </tr>
-          </thead>
+          <TableHead dense columns={['Revision', 'From', 'New', 'Carried', 'Resolved', 'Head commit', 'Created']} />
           <tbody className="divide-y divide-border">
             {[...detail.revisions].reverse().map((r) => (
               <tr key={r.revision} className={r.revision === revision ? 'bg-accent-dim/40' : 'hover:bg-surface-hover'}>

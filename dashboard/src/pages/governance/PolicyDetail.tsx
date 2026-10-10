@@ -21,6 +21,7 @@ import {
   EVENT_LABEL, enforcementSummary, formatUtc, fourEyesStatus, policyErrorMessage, versionDiff, type FourEyes,
 } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
+import { NoticeLine, TableHead, type Notice } from './parts';
 import CompileResult from './policies/CompileResult';
 import { Field, Mono, RuleView, StateBadge, TierBadge, VersionStatusBadge } from './policies/parts';
 
@@ -40,7 +41,7 @@ export default function PolicyDetail() {
   const { byId: names, error: namesError } = useOrgUsers(hasOrgPermission(me, 'org.members.read'));
   const { data: detail, error, errorCode, fetchedAt, reload, retryKeepingData } = useCpgLoad(() => getPolicy(id), 'Failed to load the policy', [id]);
   const [lapseDays, setLapseDays] = useState<number | null>(null);
-  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
 
   // The proposal lapse window (quorum), for the pending version's deadline. Best effort.
   useEffect(() => {
@@ -85,8 +86,8 @@ export function PolicyDetailView({ detail, me, names, namesError, lapseDays, jus
   namesError: string | null;
   lapseDays: number | null;
   justProposed: boolean;
-  notice: { type: 'ok' | 'err'; text: string } | null;
-  onNotice: (n: { type: 'ok' | 'err'; text: string } | null) => void;
+  notice: Notice;
+  onNotice: (n: Notice) => void;
   onChanged: () => void;
   fetchedAt: string | null;
   now?: number;
@@ -126,9 +127,7 @@ export function PolicyDetailView({ detail, me, names, namesError, lapseDays, jus
           </p>
         </Card>
       )}
-      {notice && (
-        <p className={`text-sm ${notice.type === 'ok' ? 'text-success' : 'text-danger'}`} role={notice.type === 'err' ? 'alert' : 'status'} data-testid="policy-notice">{notice.text}</p>
-      )}
+      <NoticeLine notice={notice} className="text-sm" testId="policy-notice" />
       {namesError && <ErrorState compact message={`${namesError}; user ids are shown instead.`} />}
 
       <Card>
@@ -189,7 +188,7 @@ function PendingPanel({ fourEyes, detail, names, lapseDays, onNotice, onChanged 
   detail: PolicyDetailData;
   names: Names;
   lapseDays: number | null;
-  onNotice: (n: { type: 'ok' | 'err'; text: string } | null) => void;
+  onNotice: (n: Notice) => void;
   onChanged: () => void;
 }) {
   const v = fourEyes.version;
@@ -319,17 +318,7 @@ function VersionsCard({ detail, names, me }: { detail: PolicyDetailData; names: 
         <p className="text-xs text-text-muted">Every version is kept. An approved version is signed with this Nomus instance&apos;s Ed25519 key; verify signatures offline with the signed policy export.</p>
       </div>
       <table className="w-full text-sm" data-testid="policy-versions">
-        <thead>
-          <tr className="border-y border-border text-left text-text-muted">
-            <th className="px-4 py-2 font-medium">Version</th>
-            <th className="px-4 py-2 font-medium">Status</th>
-            <th className="px-4 py-2 font-medium">Tier and owners</th>
-            <th className="px-4 py-2 font-medium">Proposed</th>
-            <th className="px-4 py-2 font-medium">Votes</th>
-            <th className="px-4 py-2 font-medium">Activated / enforced from</th>
-            <th className="px-4 py-2 font-medium">Signature</th>
-          </tr>
-        </thead>
+        <TableHead dense columns={['Version', 'Status', 'Tier and owners', 'Proposed', 'Votes', 'Activated / enforced from', 'Signature']} />
         <tbody className="divide-y divide-border">
           {versions.map((v) => (
             <VersionRow

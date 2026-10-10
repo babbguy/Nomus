@@ -15,11 +15,11 @@ import { cpgErrorMessage } from '../../lib/cpg-errors';
 import { EVENT_OPTIONS, KIND_LABELS, lastError, openFailures, secretLabel } from '../../lib/cpg-integrations';
 import { formatUtc } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
+import { NoticeLine, type Notice } from './parts';
 import { IntegrationEditor, RotateModal, SecretOnceModal } from './integrations/IntegrationEditor';
 import { DeliveryTable, StatusBadge } from './integrations/DeliveryLog';
 import WebhookHelp from './integrations/WebhookHelp';
 
-type Notice = { type: 'ok' | 'err'; text: string } | null;
 /** The inline result of a Send test: the delivery, or why the request itself failed. */
 export type TestResult = Delivery | { error: string };
 const FILTERS: Array<{ value: DeliveryStatus | 'all'; label: string }> = [
@@ -110,7 +110,7 @@ export default function GovernanceIntegrations() {
           <Button size="sm" variant="secondary" onClick={() => setFilter('failed')}>Show failed</Button>
         </div>
       )}
-      {notice && <p className={`text-sm ${notice.type === 'ok' ? 'text-success' : 'text-danger'}`} role={notice.type === 'err' ? 'alert' : 'status'} data-testid="integrations-notice">{notice.text}</p>}
+      <NoticeLine notice={notice} className="text-sm" testId="integrations-notice" />
 
       {error ? (
         <ErrorState message={error} onRetry={() => { setError(null); setIntegrations(null); reload(); }} />
