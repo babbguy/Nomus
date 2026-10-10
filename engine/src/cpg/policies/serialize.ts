@@ -20,25 +20,12 @@ import { contentHashOf, cpgSign, exportSignedText, POLICY_EXPORT_KIND } from './
  */
 
 export function serializeCompileRecord(r: CompileRecordRow): CompileRecordResponse {
+  const json = (text: string | null) => (text ? JSON.parse(text) : null);
   return compileRecordResponseSchema.parse({
-    id: r.id,
-    policyId: r.policyId,
-    requestedBy: r.requestedBy,
-    status: r.status,
-    inputText: r.inputText,
-    inputHash: r.inputHash,
-    promptVersion: r.promptVersion,
-    provider: r.provider,
-    model: r.model,
-    rejection: r.rejection ? JSON.parse(r.rejection) : null,
-    suggestion: r.suggestion ? JSON.parse(r.suggestion) : null,
-    compiledRule: r.compiledRule ? JSON.parse(r.compiledRule) : null,
-    compiledRuleHash: r.compiledRuleHash,
-    examples: JSON.parse(r.examples),
-    exampleResults: r.exampleResults ? JSON.parse(r.exampleResults) : null,
-    tokensIn: r.tokensIn,
-    tokensOut: r.tokensOut,
-    createdAt: r.createdAt,
+    id: r.id, policyId: r.policyId, requestedBy: r.requestedBy, status: r.status, inputText: r.inputText, inputHash: r.inputHash,
+    promptVersion: r.promptVersion, provider: r.provider, model: r.model, rejection: json(r.rejection), suggestion: json(r.suggestion),
+    compiledRule: json(r.compiledRule), compiledRuleHash: r.compiledRuleHash, examples: JSON.parse(r.examples),
+    exampleResults: json(r.exampleResults), tokensIn: r.tokensIn, tokensOut: r.tokensOut, createdAt: r.createdAt,
   });
 }
 
@@ -48,30 +35,18 @@ function boardNames(db: Db, versions: VersionRow[]): Map<string, string> {
   return new Map(db.select({ id: cpgBoards.id, name: cpgBoards.name }).from(cpgBoards).where(inArray(cpgBoards.id, ids)).all().map((b) => [b.id, b.name]));
 }
 
+const owningBoardsOf = (v: VersionRow, names: Map<string, string>) => boardIdsOf(v).map((id) => ({ id, name: names.get(id) ?? '' }));
+
 function serializeVersion(v: VersionRow, events: EventRow[], names: Map<string, string>): PolicyVersionResponse {
   const own = events.filter((e) => e.versionId === v.id);
   const effect = own.find((e) => e.event === 'activated' || e.event === 'retired');
   const d = effect ? JSON.parse(effect.details) as { enforceFrom?: string; activatedAt?: string; retiredAt?: string; signature?: string } : null;
   return {
-    id: v.id,
-    version: v.version,
-    kind: v.kind,
-    status: statusOf(own),
-    title: v.title,
-    plainText: v.plainText,
-    tier: v.tier,
-    owningBoards: boardIdsOf(v).map((id) => ({ id, name: names.get(id) ?? '' })),
-    rule: v.rule ? JSON.parse(v.rule) : null,
-    ruleHash: v.ruleHash,
-    compileRecordId: v.compileRecordId,
-    editedFromCompile: v.editedFromCompile,
-    graceDays: v.graceDays,
-    enforceFromRequested: v.enforceFromRequested,
-    enforceFrom: d?.enforceFrom ?? null,
-    activatedAt: d?.activatedAt ?? d?.retiredAt ?? null,
-    signature: d?.signature ?? null,
-    createdBy: v.createdBy,
-    createdAt: v.createdAt,
+    id: v.id, version: v.version, kind: v.kind, status: statusOf(own), title: v.title, plainText: v.plainText, tier: v.tier,
+    owningBoards: owningBoardsOf(v, names), rule: v.rule ? JSON.parse(v.rule) : null, ruleHash: v.ruleHash,
+    compileRecordId: v.compileRecordId, editedFromCompile: v.editedFromCompile, graceDays: v.graceDays,
+    enforceFromRequested: v.enforceFromRequested, enforceFrom: d?.enforceFrom ?? null, activatedAt: d?.activatedAt ?? d?.retiredAt ?? null,
+    signature: d?.signature ?? null, createdBy: v.createdBy, createdAt: v.createdAt,
   };
 }
 
@@ -79,22 +54,11 @@ function serializeHeadWith(policy: PolicyRow, head: HeadRow, versions: VersionRo
   const shown = versions.find((v) => v.id === head.activeVersionId) ?? versions[versions.length - 1];
   const pending = versions.find((v) => v.id === head.pendingVersionId) ?? null;
   return policyHeadResponseSchema.parse({
-    policyId: policy.id,
-    policyKey: policy.policyKey,
-    state: head.state,
-    title: shown.title,
-    tier: shown.tier,
-    owningBoards: boardIdsOf(shown).map((id) => ({ id, name: names.get(id) ?? '' })),
-    activeVersion: head.activeVersion,
-    enforceFrom: head.enforceFrom,
+    policyId: policy.id, policyKey: policy.policyKey, state: head.state, title: shown.title, tier: shown.tier,
+    owningBoards: owningBoardsOf(shown, names), activeVersion: head.activeVersion, enforceFrom: head.enforceFrom,
     inGracePeriod: head.state === 'active' && !!head.enforceFrom && Date.parse(head.enforceFrom) > now,
-    pendingVersionId: head.pendingVersionId,
-    pendingVersion: pending?.version ?? null,
-    pendingVersionKind: pending?.kind ?? null,
-    latestVersion: versions[versions.length - 1].version,
-    createdAt: policy.createdAt,
-    createdBy: policy.createdBy,
-    updatedAt: head.updatedAt,
+    pendingVersionId: head.pendingVersionId, pendingVersion: pending?.version ?? null, pendingVersionKind: pending?.kind ?? null,
+    latestVersion: versions[versions.length - 1].version, createdAt: policy.createdAt, createdBy: policy.createdBy, updatedAt: head.updatedAt,
   });
 }
 
@@ -163,11 +127,7 @@ export function buildPolicyExport(db: Db, orgId: string): PolicyExportResponse {
   const exportedAt = new Date().toISOString();
   const contentHash = contentHashOf(content);
   return policyExportResponseSchema.parse({
-    kind: POLICY_EXPORT_KIND,
-    orgId,
-    exportedAt,
-    content,
-    contentHash,
+    kind: POLICY_EXPORT_KIND, orgId, exportedAt, content, contentHash,
     signature: cpgSign(exportSignedText({ kind: POLICY_EXPORT_KIND, orgId, exportedAt, contentHash })),
   });
 }
