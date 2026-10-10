@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import {
   bundleHashOf, bundleSignedText, corporateBundleSchema, corporateRuleSchema, sortBundlePolicies, BUNDLE_KIND,
   type BundlePolicy, type CorporateBundle,
@@ -19,8 +19,6 @@ import { cpgSign } from '../policies/signing.js';
  * Cached per org (`cpg:<orgId>`) and invalidated whenever its content can
  * change: activation, retirement, settings and board renames.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export interface BuiltBundle {
   bundle: CorporateBundle;

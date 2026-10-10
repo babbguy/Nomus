@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, lte, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { decryptFromStorage } from '../../core/crypto.js';
-import { getDb } from '../../db/client.js';
+import { getDb, type Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgDeliveryAttempts, cpgIntegrationLinks, cpgIntegrations, cpgNotificationDeliveries } from '../../db/schema-cpg.js';
 import { logger } from '../../logger.js';
@@ -20,8 +19,6 @@ import type { CaseNotificationSummary } from './summary.js';
  * (the schedule lives in the database), and a permanent failure is logged at
  * error level and audited. Idle cost: one indexed SELECT every 15 s.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 /** Delay before attempt n+1 after n attempts: +0, 10 s, 1 min, 5 min, 30 min, 2 h, 6 h, 12 h (8 attempts, about 21 h). */
 export const RETRY_SCHEDULE_MS = [0, 10_000, 60_000, 300_000, 1_800_000, 7_200_000, 21_600_000, 43_200_000] as const;

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgJustifications } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
@@ -13,7 +13,6 @@ import { addCaseEvent, assertLatestFingerprints, openCase, refreshCaseState } fr
  * revision that still has the finding.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type JustificationRow = typeof cpgJustifications.$inferSelect;
 
 /** The current justification of each fingerprint (rows are append-only, so rowid is insertion order). */

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { caseStatusSchema, parseFingerprint, type CaseStatus, type FindingResolution } from '@nomus/scanner/corporate';
 import { cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions, cpgSnippets } from '../../db/schema-cpg.js';
 import { listBoards } from '../boards/service.js';
@@ -24,7 +24,6 @@ import { caseCover, isBlocking, latestFindings, openChangeRequests, type CaseFin
 
 /** Response builders for the review-case routes; each output is parsed with its contract. */
 
-type Db = BetterSQLite3Database<any>;
 type PolicyHead = typeof cpgPolicyHeads.$inferSelect;
 
 export const caseUrl = (origin: string, caseId: string) => `${origin}/governance/cases/${caseId}`;

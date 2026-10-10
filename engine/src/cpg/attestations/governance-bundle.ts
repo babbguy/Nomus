@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { cpgAttestationLinks, cpgAttestationManifests, cpgCases, cpgCiRuns, cpgDecisions, cpgRevocations } from '../../db/schema-cpg.js';
 import { closureSignedText } from '../cases/close.js';
 import { cpgVerify } from '../policies/signing.js';
@@ -11,8 +11,6 @@ import { manifestCounts, type ItemType } from './manifest.js';
  * signed text and signature, so an auditor verifies it offline with the
  * instance's published key, as the receipt itself.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export interface SignedRecord { signedPayloadCanonicalJson: string; signature: string }
 export interface GovernanceItem extends SignedRecord {

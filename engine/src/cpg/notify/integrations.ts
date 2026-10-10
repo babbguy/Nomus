@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { env } from '../../config/env.js';
 import { encryptForStorage } from '../../core/crypto.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
@@ -18,7 +18,6 @@ import { CPG_EVENTS } from './summary.js';
  * never written to the audit log. Every change is audited.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type IntegrationRow = typeof cpgIntegrations.$inferSelect;
 export type IntegrationKind = IntegrationRow['kind'];
 

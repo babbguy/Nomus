@@ -1,5 +1,5 @@
 import { inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { cpgComments, cpgPolicyVersions } from '../../db/schema-cpg.js';
 import { boardIdsOf } from '../policies/service.js';
 import { getCase, isBlocking, latestFindings, openChangeRequests, undecidedBlocking } from './service.js';
@@ -11,7 +11,6 @@ import { getCase, isBlocking, latestFindings, openChangeRequests, undecidedBlock
  * stored.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type LaneState = 'needs_review' | 'changes_requested' | 'decided';
 
 export interface LaneFinding {

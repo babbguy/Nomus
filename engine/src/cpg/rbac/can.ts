@@ -1,4 +1,4 @@
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { isScopable } from './catalog.js';
 import { compileGlob } from './repo-glob.js';
@@ -15,8 +15,6 @@ import { compileGlob } from './repo-glob.js';
  * permission (§3.4). There is no cross-request cache, so a revocation takes
  * effect on the next request.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export interface EffectiveGrant {
   grantId: string;

@@ -1,4 +1,4 @@
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import type { PrClosedRequest } from '@nomus/scanner/corporate';
 import { closeCase } from '../cases/close.js';
 import { findOpenCase } from '../cases/service.js';
@@ -10,7 +10,7 @@ import { findOpenCase } from '../cases/service.js';
  * whose case is attached to another pull request, is left alone.
  */
 export function closeForPullRequest(
-  db: BetterSQLite3Database<any>, orgId: string, pr: PrClosedRequest, actor: string,
+  db: Db, orgId: string, pr: PrClosedRequest, actor: string,
 ): { caseId: string | null; closed: boolean } {
   const kase = findOpenCase(db, { orgId, repo: pr.repo, branch: pr.branch });
   if (!kase || (kase.prNumber !== null && kase.prNumber !== pr.prNumber)) return { caseId: null, closed: false };

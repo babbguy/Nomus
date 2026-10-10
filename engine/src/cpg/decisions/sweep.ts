@@ -1,5 +1,5 @@
 import { and, eq, lte, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgDecisions } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
@@ -16,7 +16,6 @@ import type { DecisionRow } from './resolve.js';
  * integrations in the same transaction (Phase 7).
  */
 
-type Db = BetterSQLite3Database<any>;
 const DAY_MS = 86_400_000;
 export const EXPIRY_ACTION = 'decision.expiry_notice';
 

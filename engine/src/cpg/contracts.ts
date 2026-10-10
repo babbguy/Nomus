@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../db/client.js';
 import { z } from 'zod';
 import { cpgRoles, cpgTeamRepos, cpgUserRoles } from '../db/schema-cpg.js';
 import { PERMISSION_KEYS } from './rbac/catalog.js';
@@ -18,8 +18,6 @@ import { boardsOfUser } from './boards/service.js';
  * Responses are built by the serializers below and parsed with their schema
  * before they are sent, so the contract is enforced, not just documented.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 const uuid = z.string().uuid();
 const isoDate = z.string().datetime();

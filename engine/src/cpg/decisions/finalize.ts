@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
 import { cpgDecisions, cpgProposalEvents, cpgVotes } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
@@ -23,7 +23,6 @@ import { fingerprintsOf, type ProposalRow } from './status.js';
  * policy version) invalidates the proposal instead.
  */
 
-type Db = BetterSQLite3Database<any>;
 export const DECISION_KIND = 'nomus.cpg-decision.v1';
 
 /** The §13.2 payload, signed as canonical JSON. */

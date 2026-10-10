@@ -1,11 +1,10 @@
 import { Hono, type Context } from 'hono';
 import { and, desc, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
   caseByBranchResponseSchema, findingsStatusRequestSchema, findingsStatusResponseSchema, justificationInputSchema, parseFingerprint, requestReviewRequestSchema, requestReviewResponseSchema,
 } from '@nomus/scanner/corporate';
 import type { AppEnv } from '../../app.js';
-import { getDb } from '../../../db/client.js';
+import { getDb, type Db } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
 import { cpgCaseFindings, cpgCaseRevisions, cpgCases } from '../../../db/schema-cpg.js';
 import { CPG_REVIEWER_CONTEXT_PROMPT_VERSION } from '../../../llm/prompts/cpg-reviewer-context.js';
@@ -42,8 +41,6 @@ import { actorFrom, handle, parseBody, parseQuery, pathParam, requireEnabled, re
  * appends to the case events and the audit chain.
  */
 export const cpgCaseRoutes = new Hono<AppEnv>();
-
-type Db = BetterSQLite3Database<any>;
 
 /** `userKey`: also accept the VS Code user-bound key (the "UK" of the endpoint table). */
 const auth = (userKey: boolean) => [requireSessionOrApiKey('read:policies'), rateLimit(), requireCpgPermission(null, { allowUserKey: userKey })] as const;

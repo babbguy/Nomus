@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { AppEnv } from '../../app.js';
-import { getDb } from '../../../db/client.js';
+import { getDb, type Db } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
 import { cpgOrgSettings } from '../../../db/schema-cpg.js';
 import { isLlmProviderConfigured } from '../../../llm/provider.js';
@@ -19,7 +18,7 @@ import { actorFrom, auditActor, handle, parseBody } from './helpers.js';
 /** E15 GET and E16 PATCH /api/v1/cpg/settings. */
 export const cpgSettingsRoutes = new Hono<AppEnv>();
 
-function loadSettings(db: BetterSQLite3Database<any>, orgId: string): CpgSettingsResponse {
+function loadSettings(db: Db, orgId: string): CpgSettingsResponse {
   const s = getOrgSettings(db, orgId);
   if (!s) throw notFound('Settings');
   return cpgSettingsResponseSchema.parse({

@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { z } from 'zod';
 import { canonicalJson, compileGlobList, repoInputSchema, sha256Hex } from '@nomus/scanner/corporate';
 import { cpgAttestationLinks, cpgAttestationManifests, cpgCiRuns, cpgDecisions } from '../../db/schema-cpg.js';
@@ -21,7 +21,6 @@ import { getOrgSettings } from '../rbac/seed.js';
  * named, its signed closure record and the CI runs that record lists.
  */
 
-type Db = BetterSQLite3Database<any>;
 export const MANIFEST_KIND = 'nomus.cpg-attestation-manifest.v1';
 
 /** The optional `governance` extra of POST /evaluate, outside the shared schema and the signed actionContext. */

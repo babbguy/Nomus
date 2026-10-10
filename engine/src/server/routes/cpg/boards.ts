@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { AppEnv } from '../../app.js';
-import { getDb } from '../../../db/client.js';
+import { getDb, type Db } from '../../../db/client.js';
 import { users } from '../../../db/schema.js';
 import { requireSessionOrApiKey } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
@@ -26,8 +25,6 @@ import { actorFrom, auditActor, handle, parseBody, pathParam } from './helpers.j
  * session. Cross-org ids are 404.
  */
 export const cpgBoardRoutes = new Hono<AppEnv>();
-
-type Db = BetterSQLite3Database<any>;
 
 function serializeMembers(db: Db, rows: BoardMemberRow[]): BoardMemberResponse[] {
   const ids = rows.map((r) => r.userId);

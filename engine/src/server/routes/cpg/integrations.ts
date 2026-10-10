@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { and, asc, desc, eq, inArray, lt, sql, type SQL } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { AppEnv } from '../../app.js';
-import { getDb } from '../../../db/client.js';
+import { getDb, type Db } from '../../../db/client.js';
 import { users } from '../../../db/schema.js';
 import { cpgDeliveryAttempts, cpgNotificationDeliveries } from '../../../db/schema-cpg.js';
 import { requireSessionOrApiKey } from '../../middleware/auth.js';
@@ -26,7 +25,6 @@ import { actorFrom, auditActor, handle, parseBody, parseQuery, pathParam } from 
  * Secrets are never returned except a new webhook secret, once.
  */
 export const cpgIntegrationRoutes = new Hono<AppEnv>();
-type Db = BetterSQLite3Database<any>;
 
 const manage = [requireSessionOrApiKey(), rateLimit(), requireCpgPermission('integrations.manage')] as const;
 

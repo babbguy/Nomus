@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgDecisions, cpgRevocations } from '../../db/schema-cpg.js';
@@ -20,7 +20,6 @@ import { getProposal } from './status.js';
  * again. The findings it settled return to review at once.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type RevocationRow = typeof cpgRevocations.$inferSelect;
 export const REVOCATION_KIND = 'nomus.cpg-revocation.v1';
 

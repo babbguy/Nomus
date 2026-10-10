@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { cpgCases, cpgDecisions, cpgProposalEvents, cpgProposals, cpgRevocations, cpgVotes } from '../../db/schema-cpg.js';
 import { notFound } from '../errors.js';
 import { proposalStatus, requirementSchema, type ProposalStatus, type Requirement } from '../quorum/evaluate.js';
@@ -11,7 +11,6 @@ import { proposalStatus, requirementSchema, type ProposalStatus, type Requiremen
  * closed), lapsed, otherwise pending.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type ProposalRow = typeof cpgProposals.$inferSelect;
 export type VoteRow = typeof cpgVotes.$inferSelect;
 

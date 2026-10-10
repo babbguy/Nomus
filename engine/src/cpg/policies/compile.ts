@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { z } from 'zod';
 import {
   canonicalJson, compileGlobList, corporateRuleSchema, evaluateRuleOnText, isTestFile, ruleHashOf, toRepoRelative,
@@ -22,8 +22,6 @@ import { logger } from '../../logger.js';
  * Only the policy text goes to the provider. The author's example code stays
  * on the server and is used only for the deterministic example check.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export const MAX_RAW_OUTPUT = 65_536;
 

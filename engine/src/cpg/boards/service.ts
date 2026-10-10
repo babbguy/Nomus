@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgBoardMembers, cpgBoards } from '../../db/schema-cpg.js';
 import { users } from '../../db/schema.js';
@@ -13,8 +13,6 @@ import { CpgError, notFound } from '../errors.js';
  * review lanes. Every change is written to the audit chain in the same
  * transaction.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export const BOARD_KINDS = ['governance', 'legal', 'ai', 'security', 'custom'] as const;
 export type BoardKind = (typeof BOARD_KINDS)[number];

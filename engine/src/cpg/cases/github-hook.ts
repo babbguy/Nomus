@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalRepo } from '@nomus/scanner/corporate';
 import { githubAppInstallations } from '../../db/schema.js';
 import { getOrgSettings } from '../rbac/seed.js';
@@ -13,8 +13,6 @@ import { attachPullRequest, findOpenCase } from './service.js';
  * pr_closed_unmerged. Organizations without corporate policies switched on,
  * and branches without an open case, are left alone.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export interface PullRequestEvent {
   action?: string;

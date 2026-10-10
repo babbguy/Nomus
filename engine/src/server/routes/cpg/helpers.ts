@@ -4,7 +4,7 @@ import type { z } from 'zod';
 import type { AppEnv } from '../../app.js';
 import { safeJson } from '../../utils.js';
 import { CpgError, cpgError, cpgErrorResponse, invalidInput } from '../../../cpg/errors.js';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../../db/client.js';
 import { can, type CpgActor } from '../../../cpg/rbac/can.js';
 import type { PermissionKey } from '../../../cpg/rbac/catalog.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
@@ -62,7 +62,7 @@ export function requirePermission(actor: CpgActor, permission: PermissionKey, re
 }
 
 /** Writes need corporate policies enabled for the org (403 cpg_disabled). */
-export function requireEnabled(db: BetterSQLite3Database<any>, orgId: string): void {
+export function requireEnabled(db: Db, orgId: string): void {
   if (!getOrgSettings(db, orgId)?.enabled) throw new CpgError(403, 'cpg_disabled', 'Corporate policies are not enabled for this organization');
 }
 

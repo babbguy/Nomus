@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgCaseEvents, cpgCaseRevisions, cpgCases, cpgCiRuns, cpgDecisions } from '../../db/schema-cpg.js';
@@ -19,7 +19,6 @@ import { assertTransition } from './state.js';
  * closed case reproduces exactly the text that was signed.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type CloseReason = NonNullable<CaseRow['closeReason']>;
 export const CASE_CLOSURE_KIND = 'nomus.cpg-case-closure.v1';
 

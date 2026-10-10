@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { AppEnv } from '../../app.js';
-import { getDb } from '../../../db/client.js';
+import { getDb, type Db } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';
 import { organizations, users } from '../../../db/schema.js';
 import { cpgPermissions, cpgRolePermissions, cpgRoles, cpgTeamRepos, cpgTeams, cpgUserRoles } from '../../../db/schema-cpg.js';
@@ -34,8 +33,6 @@ import { actorFrom, auditActor, handle, parseBody, pathParam } from './helpers.j
  * only. Cross-org ids are always 404, never 403.
  */
 export const cpgRbacRoutes = new Hono<AppEnv>();
-
-type Db = BetterSQLite3Database<any>;
 
 const session = (permission: PermissionKey) => [requireSessionOrApiKey(), rateLimit(), requireCpgPermission(permission)] as const;
 

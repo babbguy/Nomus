@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { z } from 'zod';
 import { canonicalJSON } from '../../core/policy-compiler.js';
 import { cpgAuditEvents } from '../../db/schema-cpg.js';
@@ -19,8 +19,6 @@ import { rawSqlite } from '../../db/migrations/runner.js';
  */
 
 export const GENESIS_HASH = '0'.repeat(64);
-
-type Db = BetterSQLite3Database<any>;
 
 /** Payloads are JSON objects; every value must survive canonicalJSON unchanged. */
 export const auditPayloadSchema = z.record(z.string(), z.unknown());

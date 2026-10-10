@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalRepoPattern, isCanonicalRepo } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgRolePermissions, cpgRoles, cpgTeams, cpgUserRoles } from '../../db/schema-cpg.js';
@@ -15,8 +15,6 @@ import { isScopable } from './catalog.js';
  * guard. Every change writes a `cpg_audit_events` row in the same
  * transaction.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export type ScopeType = 'org' | 'team' | 'repo';
 export type GrantRow = typeof cpgUserRoles.$inferSelect;

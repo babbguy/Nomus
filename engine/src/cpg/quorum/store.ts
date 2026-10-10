@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgQuorumConfigVersions } from '../../db/schema-cpg.js';
@@ -16,8 +16,6 @@ import { SEED_QUORUM_CONFIG, quorumConfigSchema, type QuorumConfig } from './sch
  * `system:seed` the first time the org's quorum is needed (signing needs the
  * instance key, which is initialized after the startup migrations).
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export const QUORUM_SEED_ACTOR = 'system:seed';
 

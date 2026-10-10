@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson, corporateRuleSchema, ruleHashOf, validateCorporateRule, type CorporateRule } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import {
@@ -26,7 +26,6 @@ import { activationSignedText, cpgSign, retirementSignedText } from './signing.j
  * trg_cpg_policy_approvals_four_eyes trigger.
  */
 
-type Db = BetterSQLite3Database<any>;
 const DAY_MS = 86_400_000;
 
 export type Tier = 'advisory' | 'review-required' | 'prohibited';

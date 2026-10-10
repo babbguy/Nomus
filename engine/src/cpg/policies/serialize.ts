@@ -1,5 +1,5 @@
 import { inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { cpgBoards } from '../../db/schema-cpg.js';
 import {
   compileRecordResponseSchema, policyDetailResponseSchema, policyExportResponseSchema, policyHeadResponseSchema,
@@ -18,8 +18,6 @@ import { contentHashOf, cpgSign, exportSignedText, POLICY_EXPORT_KIND } from './
  * Serializers for the policy registry responses. Each result is parsed with
  * its zod contract before it leaves the engine, so the contract is enforced.
  */
-
-type Db = BetterSQLite3Database<any>;
 
 export function serializeCompileRecord(r: CompileRecordRow): CompileRecordResponse {
   return compileRecordResponseSchema.parse({

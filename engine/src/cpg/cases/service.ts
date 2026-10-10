@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { Db } from '../../db/client.js';
 import { canonicalJson, MAX_SNIPPET_LINES, normalizeSnippet, parseFingerprint, sha256Hex } from '@nomus/scanner/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import {
@@ -25,7 +25,6 @@ import { assertTransition, deriveCaseState, type CaseFacts } from './state.js';
  * fingerprint, and the policy version exists in the org and is active.
  */
 
-type Db = BetterSQLite3Database<any>;
 export type CaseRow = typeof cpgCases.$inferSelect;
 export type RevisionRow = typeof cpgCaseRevisions.$inferSelect;
 export type CaseFindingRow = typeof cpgCaseFindings.$inferSelect;
