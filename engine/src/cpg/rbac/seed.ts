@@ -21,11 +21,11 @@ import { activeOrgAdminGrants, getRoleByKey, grantIfMissing, type RoleRow } from
  *      get nothing.
  */
 
-export const SEED_ACTOR = 'system:seed';
+const SEED_ACTOR = 'system:seed';
 export const MIGRATION_ACTOR = 'system:rbac-migration';
 
 /** INSERT OR IGNORE the permission catalog (append-only: it only ever grows). */
-export function ensurePermissionCatalog(db: Db): void {
+function ensurePermissionCatalog(db: Db): void {
   rawSqlite(db).transaction(() => {
     for (const p of PERMISSIONS) {
       db.insert(cpgPermissions).values({ key: p.key, category: p.category, scopable: p.scopable, description: p.description })

@@ -25,7 +25,7 @@ export function identityOf(c: Context<AppEnv>): Identity {
  * request and cached in the context. Orgs that predate CPG (or were created
  * outside the seeding paths) are seeded and migrated on first use.
  */
-export function loadCpgActor(c: Context<AppEnv>): CpgActor | null {
+function loadCpgActor(c: Context<AppEnv>): CpgActor | null {
   const cached = c.get('cpgActor');
   if (cached) return cached;
   const orgId = c.get('orgId');

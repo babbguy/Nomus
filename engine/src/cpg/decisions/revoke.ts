@@ -21,7 +21,7 @@ import { getProposal } from './status.js';
  */
 
 export type RevocationRow = typeof cpgRevocations.$inferSelect;
-export const REVOCATION_KIND = 'nomus.cpg-revocation.v1';
+const REVOCATION_KIND = 'nomus.cpg-revocation.v1';
 
 export function getDecision(db: Db, orgId: string, id: string): DecisionRow {
   const d = db.select().from(cpgDecisions).where(and(eq(cpgDecisions.id, id), eq(cpgDecisions.orgId, orgId))).get();

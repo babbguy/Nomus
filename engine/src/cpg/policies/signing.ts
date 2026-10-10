@@ -11,7 +11,7 @@ import { CpgError } from '../errors.js';
  * signData; signRule is not (its payload shape is regulatory).
  */
 
-export const QUORUM_KIND = 'nomus.cpg-quorum.v1';
+const QUORUM_KIND = 'nomus.cpg-quorum.v1';
 export const POLICY_EXPORT_KIND = 'nomus.cpg-policy-export.v1';
 export const GOVERNANCE_EXPORT_KIND = 'nomus.cpg-governance-export.v1';
 
@@ -49,7 +49,7 @@ export function contentHashOf(content: unknown): string {
   return sha256Hex(canonicalJson(content));
 }
 
-export const POLICY_RETIRE_KIND = 'nomus.cpg-policy-retire.v1';
+const POLICY_RETIRE_KIND = 'nomus.cpg-policy-retire.v1';
 
 /** The signed record of a retirement taking effect (the policy leaves the bundle). */
 export function retirementSignedText(r: { orgId: string; policyId: string; policyKey: string; version: number; retiredAt: string }): string {

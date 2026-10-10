@@ -21,14 +21,14 @@ import type { CaseNotificationSummary } from './summary.js';
  */
 
 /** Delay before attempt n+1 after n attempts: +0, 10 s, 1 min, 5 min, 30 min, 2 h, 6 h, 12 h (8 attempts, about 21 h). */
-export const RETRY_SCHEDULE_MS = [0, 10_000, 60_000, 300_000, 1_800_000, 7_200_000, 21_600_000, 43_200_000] as const;
-export const MAX_ATTEMPTS = RETRY_SCHEDULE_MS.length;
+const RETRY_SCHEDULE_MS = [0, 10_000, 60_000, 300_000, 1_800_000, 7_200_000, 21_600_000, 43_200_000] as const;
+const MAX_ATTEMPTS = RETRY_SCHEDULE_MS.length;
 const BATCH = 20;
 const TICK_MS = 15_000;
 const TIMEOUT_MS = 10_000;
 const MAX_RETRY_AFTER_MS = 3_600_000;
 
-export interface AttemptOutcome {
+interface AttemptOutcome {
   httpStatus: number | null;
   error: string | null;
   excerpt: string | null;

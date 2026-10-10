@@ -29,7 +29,7 @@ import type { CaseFindingRow } from './service.js';
  */
 
 export type ReviewerContextRow = typeof cpgReviewerContexts.$inferSelect;
-export const MAX_CONTEXT_ATTEMPTS = 5;
+const MAX_CONTEXT_ATTEMPTS = 5;
 
 const contextOutputSchema = z.object({
   whatItDoes: z.string().trim().min(1).max(1200),

@@ -21,9 +21,9 @@ import { rawSqlite } from '../../db/migrations/runner.js';
 export const GENESIS_HASH = '0'.repeat(64);
 
 /** Payloads are JSON objects; every value must survive canonicalJSON unchanged. */
-export const auditPayloadSchema = z.record(z.string(), z.unknown());
+const auditPayloadSchema = z.record(z.string(), z.unknown());
 
-export interface AuditEventInput {
+interface AuditEventInput {
   orgId: string;
   actor: string;
   action: string;
@@ -32,7 +32,7 @@ export interface AuditEventInput {
   payload: Record<string, unknown>;
 }
 
-export interface AuditEventRow {
+interface AuditEventRow {
   id: string;
   orgId: string;
   seq: number;
@@ -103,7 +103,7 @@ export function appendAuditEvent(db: Db, input: AuditEventInput): AuditEventRow 
   })();
 }
 
-export interface ChainVerification {
+interface ChainVerification {
   valid: boolean;
   checked: number;
   /** The first seq whose link or hash does not verify, or null. */

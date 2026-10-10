@@ -11,9 +11,9 @@ import { getCase, isBlocking, latestFindings, openChangeRequests, undecidedBlock
  * stored.
  */
 
-export type LaneState = 'needs_review' | 'changes_requested' | 'decided';
+type LaneState = 'needs_review' | 'changes_requested' | 'decided';
 
-export interface LaneFinding {
+interface LaneFinding {
   fingerprint: string;
   owningBoardIds: readonly string[];
   blocking: boolean;
@@ -21,7 +21,7 @@ export interface LaneFinding {
   decided: boolean;
 }
 
-export interface Lane {
+interface Lane {
   boardId: string;
   /** Distinct fingerprints, sorted. */
   fingerprints: string[];

@@ -11,7 +11,7 @@ import {
   createGrant, getRole, getRoleByKey, grantIfMissing, isLastOrgAdmin, revokeGrant, rolePermissionKeys,
 } from '../../../cpg/rbac/grants.js';
 import { applyNewMemberGrants } from '../../../cpg/rbac/seed.js';
-import { repoPatternError } from '../../../cpg/rbac/repo-glob.js';
+import { repoPatternError } from '@nomus/scanner/corporate';
 import { appendAuditEvent } from '../../../cpg/audit/log.js';
 import {
   createGrantRequestSchema, createRoleRequestSchema, createTeamRequestSchema, createUserRequestSchema, emptyRequestSchema,

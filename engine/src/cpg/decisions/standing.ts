@@ -106,7 +106,7 @@ function teamRepos(db: Db, orgId: string): Map<string, string[]> {
   return by;
 }
 
-export const resolveRule = (pattern: StandingPattern, teams: Map<string, string[]>): StandingRule =>
+const resolveRule = (pattern: StandingPattern, teams: Map<string, string[]>): StandingRule =>
   ({ pattern, teamRepos: pattern.teamIds.flatMap((id) => teams.get(id) ?? []) });
 
 /** Every standing exception of the org, oldest first, with its pattern (from the immutable proposal) and revocation. */

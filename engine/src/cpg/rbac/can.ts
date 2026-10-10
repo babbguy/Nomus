@@ -1,7 +1,7 @@
 import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { isScopable } from './catalog.js';
-import { compileGlob } from './repo-glob.js';
+import { compileGlob } from '@nomus/scanner/corporate';
 
 /**
  * The CPG permission check (design spec §3.3).
@@ -16,7 +16,7 @@ import { compileGlob } from './repo-glob.js';
  * effect on the next request.
  */
 
-export interface EffectiveGrant {
+interface EffectiveGrant {
   grantId: string;
   roleId: string;
   roleKey: string;

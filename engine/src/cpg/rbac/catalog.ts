@@ -4,9 +4,9 @@
  * INSERT OR IGNORE; system roles are created per org by seed.ts.
  */
 
-export type PermissionCategory = 'org' | 'rbac' | 'policy' | 'case' | 'exception' | 'audit' | 'integration' | 'ci';
+type PermissionCategory = 'org' | 'rbac' | 'policy' | 'case' | 'exception' | 'audit' | 'integration' | 'ci';
 
-export interface PermissionDef {
+interface PermissionDef {
   key: string;
   category: PermissionCategory;
   /** Honoured from team- and repo-scoped grants. Non-scopable permissions need an org-scoped grant. */
@@ -47,10 +47,6 @@ export const PERMISSION_KEYS: readonly PermissionKey[] = PERMISSIONS.map((p) => 
 
 const SCOPABLE = new Map<string, boolean>(PERMISSIONS.map((p) => [p.key, p.scopable]));
 
-export function isPermissionKey(key: string): key is PermissionKey {
-  return SCOPABLE.has(key);
-}
-
 /** True when the permission may be exercised through a team- or repo-scoped grant. */
 export function isScopable(key: string): boolean {
   return SCOPABLE.get(key) === true;
@@ -65,7 +61,7 @@ export type SystemRoleKey =
   | 'developer'
   | 'auditor';
 
-export interface SystemRoleDef {
+interface SystemRoleDef {
   key: SystemRoleKey;
   name: string;
   description: string;
@@ -130,8 +126,6 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
     permissions: ['org.members.read', 'policy.read', 'case.read', 'audit.read', 'audit.export', 'ci.read'],
   },
 ];
-
-export const SYSTEM_ROLE_KEYS: readonly SystemRoleKey[] = SYSTEM_ROLES.map((r) => r.key);
 
 /** Permissions the system org_admin role may never lose (anti-lockout, §3.4). */
 export const ORG_ADMIN_LOCKED_PERMISSIONS: readonly PermissionKey[] = ['rbac.roles.manage', 'rbac.users.manage'];

@@ -23,10 +23,10 @@ import { fingerprintsOf, type ProposalRow } from './status.js';
  * policy version) invalidates the proposal instead.
  */
 
-export const DECISION_KIND = 'nomus.cpg-decision.v1';
+const DECISION_KIND = 'nomus.cpg-decision.v1';
 
 /** The §13.2 payload, signed as canonical JSON. */
-export interface DecisionPayload {
+interface DecisionPayload {
   kind: typeof DECISION_KIND;
   id: string;
   orgId: string;

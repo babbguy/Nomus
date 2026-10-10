@@ -42,7 +42,7 @@ function lines(s: Summary): string[] {
   return out;
 }
 
-export function subjectOf(s: Summary): string {
+function subjectOf(s: Summary): string {
   const where = s.case ? `${s.case.ref} ${HEADLINES[s.event]}: ${s.case.repo} @ ${s.case.branch}` : `${HEADLINES[s.event]} (${s.org.name})`;
   return `[Nomus] ${where}${s.board ? ` (${s.board.name})` : ''}`.slice(0, 250);
 }

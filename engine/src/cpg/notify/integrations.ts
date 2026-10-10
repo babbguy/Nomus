@@ -19,9 +19,8 @@ import { CPG_EVENTS } from './summary.js';
  */
 
 export type IntegrationRow = typeof cpgIntegrations.$inferSelect;
-export type IntegrationKind = IntegrationRow['kind'];
 
-export const allowPrivateTargets = () => env().NOMUS_CPG_ALLOW_PRIVATE_TARGETS === 'true';
+const allowPrivateTargets = () => env().NOMUS_CPG_ALLOW_PRIVATE_TARGETS === 'true';
 
 /** Why a Jira or webhook URL may not be used (null when it may). Checked on save and again before every send. */
 export function targetProblem(url: string): string | null {
@@ -38,7 +37,7 @@ const targetUrl = z.string().url().max(2000).superRefine((u, ctx) => {
   if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Target not allowed: ${problem}` });
 });
 
-export const configSchemas = {
+const configSchemas = {
   email: z.object({
     includeBoardMembers: z.boolean().default(true),
     notifyDevelopers: z.boolean().default(true),
@@ -69,7 +68,7 @@ export const integrationCreateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('jira'), ...base, config: configSchemas.jira, apiToken: z.string().min(8).max(500) }).strict(),
   z.object({ kind: z.literal('webhook'), ...base, config: configSchemas.webhook }).strict(),
 ]);
-export type IntegrationCreate = z.infer<typeof integrationCreateSchema>;
+type IntegrationCreate = z.infer<typeof integrationCreateSchema>;
 
 export const integrationPatchSchema = z.object({
   name: base.name.optional(),
@@ -82,7 +81,7 @@ export const integrationPatchSchema = z.object({
 
 export const rotateSecretSchema = z.object({ apiToken: z.string().min(8).max(500).optional() }).strict();
 
-export const integrationSchema = z.object({
+const integrationSchema = z.object({
   id: z.string().uuid(),
   kind: z.enum(['email', 'jira', 'webhook']),
   name: z.string(),
@@ -94,7 +93,7 @@ export const integrationSchema = z.object({
   createdBy: z.string(), createdAt: z.string().datetime(),
   updatedBy: z.string(), updatedAt: z.string().datetime(),
 }).strict();
-export type Integration = z.infer<typeof integrationSchema>;
+type Integration = z.infer<typeof integrationSchema>;
 
 export function serializeIntegration(r: IntegrationRow): Integration {
   return integrationSchema.parse({

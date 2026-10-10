@@ -12,8 +12,8 @@ import { manifestCounts, type ItemType } from './manifest.js';
  * instance's published key, as the receipt itself.
  */
 
-export interface SignedRecord { signedPayloadCanonicalJson: string; signature: string }
-export interface GovernanceItem extends SignedRecord {
+interface SignedRecord { signedPayloadCanonicalJson: string; signature: string }
+interface GovernanceItem extends SignedRecord {
   type: ItemType;
   id: string;
   /** Decisions: active, expired or revoked when the bundle was generated. Closures and CI runs never change: final. */
@@ -26,7 +26,7 @@ export interface CorporateGovernanceSection {
   instructions: string[];
 }
 
-export const GOVERNANCE_INSTRUCTIONS = [
+const GOVERNANCE_INSTRUCTIONS = [
   'Verify the attestation exactly as for bundleVersion 1 (verification.*). This step is unchanged.',
   'Verify corporateGovernance.manifest.signature (Ed25519, base64) over the UTF-8 bytes of manifest.signedPayloadCanonicalJson with the SAME published key. Check that its kind is "nomus.cpg-attestation-manifest.v1" and that its attestationId, orgId and evaluatedAt equal the attestation\'s.',
   'For each manifest item, take the bundle item with the same type and id; verify its signature over its signedPayloadCanonicalJson with the same key; check that sha256 (hex) of the UTF-8 bytes of its base64 signature string equals the item\'s signatureSha256, and that its orgId equals the manifest\'s. Every bundle item must be listed in the manifest, and every manifest item must be present.',

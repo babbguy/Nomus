@@ -17,7 +17,7 @@ import { SEED_QUORUM_CONFIG, quorumConfigSchema, type QuorumConfig } from './sch
  * instance key, which is initialized after the startup migrations).
  */
 
-export const QUORUM_SEED_ACTOR = 'system:seed';
+const QUORUM_SEED_ACTOR = 'system:seed';
 
 export interface QuorumVersion {
   id: string;
@@ -31,7 +31,7 @@ export interface QuorumVersion {
   signature: string;
 }
 
-export function configHashOf(config: QuorumConfig): string {
+function configHashOf(config: QuorumConfig): string {
   return sha256Hex(canonicalJson(config));
 }
 

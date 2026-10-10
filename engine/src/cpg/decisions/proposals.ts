@@ -26,7 +26,7 @@ import { recordVote } from './votes.js';
  * not vote, so every vote comes from an eligible approver.
  */
 
-export interface ProposalInput {
+interface ProposalInput {
   caseId: string;
   scope: 'snippet' | 'bulk';
   outcome: Outcome;
@@ -36,7 +36,7 @@ export interface ProposalInput {
   rationale: string;
 }
 
-export interface StandingInput {
+interface StandingInput {
   /** The case the exception was proposed from, if any. */
   caseId?: string;
   pattern: StandingPattern;

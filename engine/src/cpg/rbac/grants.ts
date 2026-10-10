@@ -16,7 +16,7 @@ import { isScopable } from './catalog.js';
  * transaction.
  */
 
-export type ScopeType = 'org' | 'team' | 'repo';
+type ScopeType = 'org' | 'team' | 'repo';
 export type GrantRow = typeof cpgUserRoles.$inferSelect;
 export type RoleRow = typeof cpgRoles.$inferSelect;
 
@@ -33,7 +33,7 @@ export function rolePermissionKeys(db: Db, roleId: string): string[] {
     .where(eq(cpgRolePermissions.roleId, roleId)).all().map((r) => r.key).sort();
 }
 
-export function getGrant(db: Db, orgId: string, grantId: string): GrantRow | undefined {
+function getGrant(db: Db, orgId: string, grantId: string): GrantRow | undefined {
   return db.select().from(cpgUserRoles).where(and(eq(cpgUserRoles.id, grantId), eq(cpgUserRoles.orgId, orgId))).get();
 }
 
@@ -107,7 +107,7 @@ export function grantIfMissing(db: Db, input: {
   return { grant: insertGrant(db, input), created: true };
 }
 
-export interface CreateGrantInput {
+interface CreateGrantInput {
   orgId: string;
   userId: string;
   roleId: string;

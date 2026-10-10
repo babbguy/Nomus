@@ -19,8 +19,8 @@ import { assertTransition } from './state.js';
  * closed case reproduces exactly the text that was signed.
  */
 
-export type CloseReason = NonNullable<CaseRow['closeReason']>;
-export const CASE_CLOSURE_KIND = 'nomus.cpg-case-closure.v1';
+type CloseReason = NonNullable<CaseRow['closeReason']>;
+const CASE_CLOSURE_KIND = 'nomus.cpg-case-closure.v1';
 
 export function closurePayload(db: Db, c: CaseRow) {
   const revisions = db.select({ revision: cpgCaseRevisions.revision, findingsDigest: cpgCaseRevisions.findingsDigest, headSha: cpgCaseRevisions.headSha })

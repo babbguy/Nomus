@@ -28,16 +28,16 @@ import { activationSignedText, cpgSign, retirementSignedText } from './signing.j
 
 const DAY_MS = 86_400_000;
 
-export type Tier = 'advisory' | 'review-required' | 'prohibited';
+type Tier = 'advisory' | 'review-required' | 'prohibited';
 export type PolicyState = 'draft' | 'proposed' | 'active' | 'retired';
-export type VersionStatus = 'pending' | 'active' | 'superseded' | 'rejected' | 'withdrawn' | 'expired' | 'retired';
+type VersionStatus = 'pending' | 'active' | 'superseded' | 'rejected' | 'withdrawn' | 'expired' | 'retired';
 export type VersionRow = typeof cpgPolicyVersions.$inferSelect;
 export type EventRow = typeof cpgPolicyVersionEvents.$inferSelect;
 export type HeadRow = typeof cpgPolicyHeads.$inferSelect;
 export type PolicyRow = typeof cpgPolicies.$inferSelect;
 
 /** What a policy change means for distribution; the caller invalidates the bundle and notifies after commit. */
-export interface ChangeEffect {
+interface ChangeEffect {
   bundleChanged: boolean;
 }
 
@@ -174,7 +174,7 @@ export function jsonDiff(before: unknown, after: unknown, path = ''): Array<{ pa
 
 // ─── Propose ───────────────────────────────────────────────────────────
 
-export interface ProposeInput {
+interface ProposeInput {
   orgId: string;
   actorUserId: string;
   /** Set for a new version of an existing policy; absent for a new policy. */
@@ -303,7 +303,7 @@ export function proposeRetirement(db: Db, input: { orgId: string; actorUserId: s
 
 // ─── Vote, activate, withdraw ──────────────────────────────────────────
 
-export interface VoteResult {
+interface VoteResult {
   /** null when the proposal had lapsed: it is now expired and no vote was recorded. */
   voteId: string | null;
   status: VersionStatus;

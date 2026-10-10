@@ -14,8 +14,8 @@ import { CpgError, notFound } from '../errors.js';
  * transaction.
  */
 
-export const BOARD_KINDS = ['governance', 'legal', 'ai', 'security', 'custom'] as const;
-export type BoardKind = (typeof BOARD_KINDS)[number];
+const BOARD_KINDS = ['governance', 'legal', 'ai', 'security', 'custom'] as const;
+type BoardKind = (typeof BOARD_KINDS)[number];
 export type BoardRow = typeof cpgBoards.$inferSelect;
 export type BoardMemberRow = typeof cpgBoardMembers.$inferSelect;
 

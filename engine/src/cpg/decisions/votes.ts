@@ -36,7 +36,7 @@ export function isSelfApproval(db: Db, c: CaseRow, userId: string): boolean {
   return justified !== undefined || revised !== undefined;
 }
 
-export interface Eligibility {
+interface Eligibility {
   boards: string[];
   permissions: string[];
 }

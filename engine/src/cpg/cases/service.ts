@@ -30,7 +30,7 @@ export type RevisionRow = typeof cpgCaseRevisions.$inferSelect;
 export type CaseFindingRow = typeof cpgCaseFindings.$inferSelect;
 type CaseEvent = (typeof cpgCaseEvents.$inferSelect)['event'];
 
-export interface CaseKey {
+interface CaseKey {
   orgId: string;
   /** canonicalRepo() output. */
   repo: string;
@@ -48,14 +48,14 @@ export interface RevisionFinding {
   snippet?: string;
 }
 
-export interface RevisionInput {
+interface RevisionInput {
   source: RevisionRow['source'];
   headSha: string | null;
   bundleHash: string;
   findings: readonly RevisionFinding[];
 }
 
-export interface RevisionResult {
+interface RevisionResult {
   /** The new revision, or the latest one when nothing changed. */
   revision: RevisionRow;
   revisionCreated: boolean;
@@ -98,7 +98,7 @@ export function isBlocking(f: Pick<CaseFindingRow, 'tier' | 'enforced'>): boolea
   return f.tier !== 'advisory' && f.enforced;
 }
 
-export function latestRevision(db: Db, caseId: string): RevisionRow | undefined {
+function latestRevision(db: Db, caseId: string): RevisionRow | undefined {
   return db.select().from(cpgCaseRevisions).where(eq(cpgCaseRevisions.caseId, caseId))
     .orderBy(desc(cpgCaseRevisions.revision)).limit(1).get();
 }

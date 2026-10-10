@@ -8,7 +8,7 @@ import { CpgError } from '../errors.js';
  */
 
 export type CaseState = (typeof CASE_STATES)[number];
-export type ActiveCaseState = Exclude<CaseState, 'closed'>;
+type ActiveCaseState = Exclude<CaseState, 'closed'>;
 
 /** What the state depends on, counted over the latest revision. */
 export interface CaseFacts {

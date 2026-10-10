@@ -14,13 +14,13 @@ import { attachPullRequest, findOpenCase } from './service.js';
  * and branches without an open case, are left alone.
  */
 
-export interface PullRequestEvent {
+interface PullRequestEvent {
   action?: string;
   repository?: { full_name?: string };
   pull_request?: { number?: number; merged?: boolean; head?: { ref?: string } };
 }
 
-export type PullRequestOutcome = 'attached' | 'closed' | 'ignored';
+type PullRequestOutcome = 'attached' | 'closed' | 'ignored';
 
 export function applyCpgPullRequest(db: Db, installationId: number, payload: PullRequestEvent): PullRequestOutcome {
   if (payload.action !== 'opened' && payload.action !== 'closed') return 'ignored';

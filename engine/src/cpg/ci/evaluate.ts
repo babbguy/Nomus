@@ -32,7 +32,7 @@ import { cpgSign } from '../policies/signing.js';
 type ResolvedFinding = CiEvaluateResponse['findings'][number];
 type Counts = CiEvaluateResponse['counts'];
 
-export interface CiCaller {
+interface CiCaller {
   orgId: string;
   apiKeyId: string;
 }

@@ -20,7 +20,7 @@ import { cpgSign } from '../policies/signing.js';
  * change: activation, retirement, settings and board renames.
  */
 
-export interface BuiltBundle {
+interface BuiltBundle {
   bundle: CorporateBundle;
   /** Strong ETag: the content hash plus the enabled flag (both are signed). */
   etag: string;
@@ -28,7 +28,7 @@ export interface BuiltBundle {
 
 const cache = new PolicyCache<BuiltBundle>(500, 300);
 
-export function bundleCacheKey(orgId: string): string {
+function bundleCacheKey(orgId: string): string {
   return `cpg:${orgId}`;
 }
 

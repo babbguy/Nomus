@@ -38,7 +38,7 @@ export const compileRequestSchema = z.object({
 export type CompileRequest = z.infer<typeof compileRequestSchema>;
 
 /** What the LLM must return (§8.1), validated strictly. */
-export const compileOutputSchema = z.discriminatedUnion('expressible', [
+const compileOutputSchema = z.discriminatedUnion('expressible', [
   z.object({
     expressible: z.literal(true),
     suggestedKey: z.string().regex(POLICY_KEY_RE),
@@ -55,9 +55,9 @@ export const compileOutputSchema = z.discriminatedUnion('expressible', [
   }).strict(),
 ]);
 
-export type CompileStatus = 'compiled' | 'rejected_unexpressible' | 'rejected_schema' | 'rejected_validation' | 'rejected_examples' | 'llm_error';
+type CompileStatus = 'compiled' | 'rejected_unexpressible' | 'rejected_schema' | 'rejected_validation' | 'rejected_examples' | 'llm_error';
 
-export interface ExampleResult {
+interface ExampleResult {
   kind: 'violating' | 'compliant';
   index: number;
   path: string;
@@ -68,7 +68,7 @@ export interface ExampleResult {
   note: string | null;
 }
 
-export type Suggestion =
+type Suggestion =
   | { expressible: true; suggestedKey: string; title: string; suggestedTier: (typeof TIERS)[number]; rationale: string; limitations: string[] }
   | { expressible: false; reason: string; closestExpressible: string | null };
 
