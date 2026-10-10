@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Landmark, Plus, UserPlus, X } from 'lucide-react';
 import Card from '../../components/ui/Card';
@@ -15,9 +15,11 @@ import {
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { useOrgUsers } from '../../hooks/useOrgUsers';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtcDate, policyErrorMessage } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
+import { NoticeLine, type Notice } from './parts';
 import { StateBadge, TierBadge } from './policies/parts';
 
 const inputCls = 'w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent';
@@ -30,30 +32,14 @@ const KINDS: Array<{ value: BoardKind; label: string }> = [
 ];
 const kindLabel = (k: BoardKind) => KINDS.find((x) => x.value === k)?.label ?? k;
 
-type Notice = { type: 'ok' | 'err'; text: string } | null;
-
 /** /governance/boards (E19–E24, E31): review boards, their members, and the policies each one owns. */
 export default function GovernanceBoards() {
   const { me } = useCpgMe();
   const canManage = hasOrgPermission(me, 'boards.manage');
   const { users, error: usersError } = useOrgUsers(canManage && hasOrgPermission(me, 'org.members.read'));
-  const [boards, setBoards] = useState<Board[] | null>(null);
-  const [policies, setPolicies] = useState<PolicyHead[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, error, fetchedAt, reload, retry } = useCpgLoad(() => Promise.all([listBoards(), listPolicies()]), 'Failed to load the boards');
   const [notice, setNotice] = useState<Notice>(null);
   const [editing, setEditing] = useState<Board | 'new' | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([listBoards(), listPolicies()])
-      .then(([b, p]) => { if (!cancelled) { setBoards(b); setPolicies(p); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the boards')); });
-    return () => { cancelled = true; };
-  }, [reloadKey]);
-
-  const reload = () => setReloadKey((k) => k + 1);
 
   async function run(action: () => Promise<unknown>, ok: string, fail: string) {
     setNotice(null);
@@ -74,19 +60,17 @@ export default function GovernanceBoards() {
         subtitle="Boards own policies and review their findings"
         actions={canManage ? <Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> New board</Button> : undefined}
       />
-      {notice && (
-        <p className={`text-sm mb-3 ${notice.type === 'ok' ? 'text-success' : 'text-danger'}`} role={notice.type === 'err' ? 'alert' : 'status'} data-testid="boards-notice">{notice.text}</p>
-      )}
+      <NoticeLine notice={notice} className="text-sm mb-3" testId="boards-notice" />
       {usersError && <ErrorState compact message={`${usersError}; adding members is unavailable until the user list loads.`} />}
       {error ? (
-        <ErrorState message={error} onRetry={() => { setError(null); setBoards(null); reload(); }} />
-      ) : boards === null || policies === null ? (
+        <ErrorState message={error} onRetry={retry} />
+      ) : data === null ? (
         <div className="space-y-4"><SkeletonCard /><SkeletonCard /></div>
       ) : (
         <>
           <BoardsView
-            boards={boards}
-            policies={policies}
+            boards={data[0]}
+            policies={data[1]}
             users={users}
             canManage={canManage}
             onEdit={(b) => setEditing(b)}

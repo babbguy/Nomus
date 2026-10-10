@@ -9,11 +9,12 @@ import { createTeam, updateTeam, type Team } from '../../../api/cpg';
 import { cpgErrorMessage } from '../../../lib/cpg-errors';
 import { formatDate } from '../../../lib/formatters';
 import { inputCls, parsePatterns, type AccessData } from './helpers';
+import { NoticeLine, TableHead, type Notice } from '../parts';
 
 /** Teams tab: named sets of repository patterns that scope grants; create, edit, archive (rbac.teams.manage). */
 export default function TeamsPanel({ data, canManage, onChanged }: { data: AccessData; canManage: boolean; onChanged: () => void }) {
   const [editing, setEditing] = useState<Team | 'new' | null>(null);
-  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
 
   async function setArchived(team: Team, archived: boolean) {
     setNotice(null);
@@ -35,11 +36,7 @@ export default function TeamsPanel({ data, canManage, onChanged }: { data: Acces
         </p>
         {canManage && <Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> New team</Button>}
       </div>
-      {notice && (
-        <p className={`text-xs mb-3 ${notice.type === 'ok' ? 'text-success' : 'text-danger'}`} role={notice.type === 'err' ? 'alert' : 'status'}>
-          {notice.text}
-        </p>
-      )}
+      <NoticeLine notice={notice} className="text-xs mb-3" />
 
       <TeamsTable teams={data.teams} canManage={canManage} onEdit={(t) => setEditing(t)} onArchive={(t, a) => void setArchived(t, a)} />
 
@@ -71,15 +68,7 @@ export function TeamsTable({ teams, canManage, onEdit, onArchive }: {
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="w-full text-sm" data-testid="access-teams">
-        <thead>
-          <tr className="border-b border-border text-left text-text-muted">
-            <th className="px-4 py-3 font-medium">Team</th>
-            <th className="px-4 py-3 font-medium">Repository patterns</th>
-            <th className="px-4 py-3 font-medium">Created</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            {canManage && <th className="px-4 py-3 font-medium text-right">Actions</th>}
-          </tr>
-        </thead>
+        <TableHead columns={['Team', 'Repository patterns', 'Created', 'Status', canManage && { label: 'Actions', className: 'text-right' }]} />
         <tbody className="divide-y divide-border">
           {teams.map((t) => (
             <tr key={t.id} className="align-top">

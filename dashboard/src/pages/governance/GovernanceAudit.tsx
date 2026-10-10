@@ -16,6 +16,7 @@ import { formatActor, hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatDateTime } from '../../lib/formatters';
 import { AUDIT_ACTIONS, auditFilterQuery, type AuditFilters } from '../../lib/cpg-audit';
 import GovernanceHeader from './GovernanceHeader';
+import { TableHead } from './parts';
 
 type Names = { users: Map<string, { name: string; email: string }>; roles: Map<string, string>; teams: Map<string, string> };
 
@@ -262,16 +263,7 @@ export function AuditTable({ items, names }: { items: AuditEvent[]; names: Names
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="w-full text-sm" data-testid="audit-table">
-        <thead>
-          <tr className="border-b border-border text-left text-text-muted">
-            <th className="px-4 py-3 font-medium w-8" aria-label="Details" />
-            <th className="px-4 py-3 font-medium">#</th>
-            <th className="px-4 py-3 font-medium">Time</th>
-            <th className="px-4 py-3 font-medium">Action</th>
-            <th className="px-4 py-3 font-medium">Actor</th>
-            <th className="px-4 py-3 font-medium">Target</th>
-          </tr>
-        </thead>
+        <TableHead columns={[{ label: null, className: 'w-8', ariaLabel: 'Details' }, '#', 'Time', 'Action', 'Actor', 'Target']} />
         <tbody className="divide-y divide-border">
           {items.map((e) => {
             const expanded = open === e.id;

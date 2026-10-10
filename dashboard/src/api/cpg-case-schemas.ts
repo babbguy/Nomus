@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { tierSchema } from './cpg-schemas';
+import { isoDate, tierSchema, uuid } from './cpg-schemas';
 
 /**
  * Response contracts of the review-case and approvals API (/api/v1/cpg/cases,
@@ -8,8 +8,6 @@ import { tierSchema } from './cpg-schemas';
  * engine's route tests can parse real responses with it.
  */
 
-const uuid = z.string().uuid();
-const isoDate = z.string().datetime();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}:corp\.[a-z0-9][a-z0-9._-]{0,84}:[1-9][0-9]{0,6}$/);
 
 export const caseStateSchema = z.enum(['open', 'in_review', 'changes_requested', 'decided', 'closed']);

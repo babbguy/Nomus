@@ -14,7 +14,7 @@ import {
   type CaseDetail as CaseDetailData, type CpgMe, type Proposal, type QuorumConfig, type RevisionDetail,
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
-import { cpgErrorCode } from '../../lib/cpg-errors';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission, holdsPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import { SOURCE_LABEL, actorLabel, caseActions, closeReasonLabel, type CaseActions } from '../../lib/cpg-cases';
@@ -25,6 +25,7 @@ import { FindingList } from './cases/Findings';
 import { Blocked, Discussion, RequestChangesForm } from './cases/Discussion';
 import { DecisionsCard, FindingDecision, type DecisionContext } from './cases/Decisions';
 import { CiRunsCard } from './cases/CiRuns';
+import { TableHead } from './parts';
 
 /**
  * /governance/cases/:id (E43, E44, E51, E52, E46, E47, E49, E50, E54 to
@@ -35,19 +36,8 @@ import { CiRunsCard } from './cases/CiRuns';
 export default function CaseDetail() {
   const { id = '' } = useParams();
   const { me } = useCpgMe();
-  const [detail, setDetail] = useState<CaseDetailData | null>(null);
-  const [error, setError] = useState<{ text: string; notFound: boolean } | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data: detail, error, errorCode, fetchedAt, reload, retryKeepingData } = useCpgLoad(() => getCase(id), 'Failed to load the case', [id]);
   const [notice, setNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getCase(id)
-      .then((d) => { if (!cancelled) { setDetail(d); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError({ text: policyErrorMessage(err, 'Failed to load the case'), notFound: cpgErrorCode(err) === 'not_found' }); });
-    return () => { cancelled = true; };
-  }, [id, reloadKey]);
 
   return (
     <div>
@@ -55,9 +45,9 @@ export default function CaseDetail() {
         <ArrowLeft size={12} /> All cases
       </Link>
       {error ? (
-        error.notFound
+        errorCode === 'not_found'
           ? <EmptyState title="Case not found" description="It does not exist in your organization, or it is in a repository you cannot read." />
-          : <ErrorState message={error.text} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />
+          : <ErrorState message={error} onRetry={retryKeepingData} />
       ) : !detail ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
@@ -65,7 +55,7 @@ export default function CaseDetail() {
           detail={detail}
           me={me}
           notice={notice}
-          onChanged={(text) => { setNotice(text); setReloadKey((k) => k + 1); }}
+          onChanged={(text) => { setNotice(text); reload(); }}
           fetchedAt={fetchedAt}
         />
       )}
@@ -175,17 +165,7 @@ export function CaseView({ detail, me, notice, onChanged, fetchedAt }: {
           <p className="text-xs text-text-muted">A revision is a snapshot of the branch&apos;s corporate findings; one is added only when they change.</p>
         </div>
         <table className="w-full text-sm" data-testid="case-revisions">
-          <thead>
-            <tr className="border-y border-border text-left text-text-muted">
-              <th className="px-4 py-2 font-medium">Revision</th>
-              <th className="px-4 py-2 font-medium">From</th>
-              <th className="px-4 py-2 font-medium">New</th>
-              <th className="px-4 py-2 font-medium">Carried</th>
-              <th className="px-4 py-2 font-medium">Resolved</th>
-              <th className="px-4 py-2 font-medium">Head commit</th>
-              <th className="px-4 py-2 font-medium">Created</th>
-            </tr>
-          </thead>
+          <TableHead dense columns={['Revision', 'From', 'New', 'Carried', 'Resolved', 'Head commit', 'Created']} />
           <tbody className="divide-y divide-border">
             {[...detail.revisions].reverse().map((r) => (
               <tr key={r.revision} className={r.revision === revision ? 'bg-accent-dim/40' : 'hover:bg-surface-hover'}>

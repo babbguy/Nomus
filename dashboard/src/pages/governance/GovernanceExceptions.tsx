@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Info, ShieldOff } from 'lucide-react';
-import Card from '../../components/ui/Card';
+import { ShieldOff } from 'lucide-react';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
@@ -14,6 +13,7 @@ import {
   type PolicyHead, type QuorumConfig, type StandingPattern, type Team,
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import {
@@ -21,6 +21,7 @@ import {
   requirementText, scopeRule, type ExceptionRow, type ExceptionStatus,
 } from '../../lib/cpg-approvals';
 import GovernanceHeader from './GovernanceHeader';
+import { FilterTabs, InfoNote } from './parts';
 import { ExpiryField, ProposalCard, RationaleField, RevokeModal, inputCls } from './decisions/parts';
 
 /**
@@ -34,10 +35,8 @@ export default function GovernanceExceptions() {
   const readsPolicies = hasOrgPermission(me, 'policy.read');
   const readsMembers = hasOrgPermission(me, 'org.members.read');
   const actions = exceptionActions(me);
-  const [rows, setRows] = useState<ExceptionRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data: rows, error, fetchedAt, reload, retryKeepingData } = useCpgLoad(
+    async () => exceptionRows(...await Promise.all([listStandingProposals(), listStandingExceptions()])), 'Failed to load the standing exceptions');
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<ExceptionStatus | ''>('');
   const [policyKey, setPolicyKey] = useState('');
@@ -46,14 +45,6 @@ export default function GovernanceExceptions() {
   const [policies, setPolicies] = useState<PolicyHead[]>([]);
   const [quorum, setQuorum] = useState<QuorumConfig | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([listStandingProposals(), listStandingExceptions()])
-      .then(([p, x]) => { if (!cancelled) { setRows(exceptionRows(p, x)); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the standing exceptions')); });
-    return () => { cancelled = true; };
-  }, [reloadKey]);
 
   // Reference data, each only when the caller may read it: policies and quorum (policy.read), teams (org.members.read).
   useEffect(() => {
@@ -66,7 +57,7 @@ export default function GovernanceExceptions() {
     return () => { cancelled = true; };
   }, [readsPolicies, readsMembers]);
 
-  const changed = (text: string) => { setNotice(text); setProposing(false); setRevoking(null); setReloadKey((k) => k + 1); };
+  const changed = (text: string) => { setNotice(text); setProposing(false); setRevoking(null); reload(); };
   const boards = new Map([...(me?.boards ?? []), ...policies.flatMap((p) => p.owningBoards)].map((b) => [b.id, b.name]));
   const boardName = (id: string) => boards.get(id) || 'another required board';
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id;
@@ -83,21 +74,17 @@ export default function GovernanceExceptions() {
         actions={actions.propose && !readOnly ? <Button size="sm" onClick={() => setProposing(true)}>Propose an exception</Button> : undefined}
       />
       {readOnly && (
-        <Card className="mb-4 border-info/30">
-          <p className="text-sm text-text-secondary flex items-start gap-2" role="status"><Info size={16} className="text-info shrink-0 mt-0.5" /> {readOnly}</p>
-        </Card>
+        <InfoNote role="status">{readOnly}</InfoNote>
       )}
       {notice && <p className="text-sm text-success mb-3" role="status" data-testid="exceptions-notice">{notice}</p>}
 
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <div className="flex gap-1 flex-wrap" role="tablist" aria-label="Filter by status">
-          {(['', ...EXCEPTION_STATUSES] as const).map((s) => (
-            <button key={s || 'all'} role="tab" aria-selected={status === s} onClick={() => setStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg transition ${status === s ? 'bg-accent-dim text-accent' : 'text-text-secondary hover:bg-surface-hover'}`}>
-              {s ? EXCEPTION_STATUS_LABEL[s] : 'All'}
-            </button>
-          ))}
-        </div>
+        <FilterTabs
+          label="Filter by status"
+          options={(['', ...EXCEPTION_STATUSES] as const).map((s) => ({ value: s, label: s ? EXCEPTION_STATUS_LABEL[s] : 'All' }))}
+          value={status}
+          onChange={setStatus}
+        />
         {policyKeys.length > 0 && (
           <select aria-label="Filter by policy" value={policyKey} onChange={(e) => setPolicyKey(e.target.value)}
             className="px-3 py-1.5 bg-surface border border-border rounded-lg text-xs text-text-primary">
@@ -107,7 +94,7 @@ export default function GovernanceExceptions() {
         )}
       </div>
 
-      {error ? <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />
+      {error ? <ErrorState message={error} onRetry={retryKeepingData} />
         : rows === null ? <SkeletonTable rows={4} />
           : shown.length === 0 ? (
             <EmptyState

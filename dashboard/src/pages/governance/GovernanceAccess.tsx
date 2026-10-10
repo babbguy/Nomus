@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { KeyRound } from 'lucide-react';
 import Spinner from '../../components/ui/Spinner';
@@ -6,6 +6,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import DataFreshness from '../../components/ui/DataFreshness';
 import { listOrgUsers, listPermissions, listRoles, listTeams } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { useAuthStore } from '../../stores/authStore';
 import { cpgErrorMessage } from '../../lib/cpg-errors';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
@@ -35,34 +36,16 @@ export default function GovernanceAccess() {
   const [params, setParams] = useSearchParams();
   const tab: TabId = (TABS.find((t) => t.id === params.get('tab'))?.id) ?? 'users';
 
-  const [data, setData] = useState<AccessData | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [users, roles, teams, permissions] = await Promise.all([listOrgUsers(), listRoles(), listTeams(), listPermissions()]);
-        if (cancelled) return;
-        setData({ users, roles, teams, permissions });
-        setFetchedAt(new Date().toISOString());
-        setError(null);
-      } catch (err) {
-        if (!cancelled) setError(cpgErrorMessage(err, 'Failed to load users, roles and teams'));
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [retryKey]);
+  const { data, error, fetchedAt, reload, retry } = useCpgLoad(async (): Promise<AccessData> => {
+    const [users, roles, teams, permissions] = await Promise.all([listOrgUsers(), listRoles(), listTeams(), listPermissions()]);
+    return { users, roles, teams, permissions };
+  }, 'Failed to load users, roles and teams', [], cpgErrorMessage);
 
   /** After a change: refetch everything, and the caller's own permissions (they may have changed). */
   const refresh = useCallback(() => {
-    setRetryKey((k) => k + 1);
+    reload();
     reloadMe();
-  }, [reloadMe]);
-
-  const retry = () => { setError(null); setData(null); setRetryKey((k) => k + 1); };
+  }, [reload, reloadMe]);
 
   return (
     <div>

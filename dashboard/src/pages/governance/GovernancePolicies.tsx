@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ScrollText, Plus, Info } from 'lucide-react';
+import { ScrollText, Plus } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -10,11 +10,13 @@ import DataFreshness from '../../components/ui/DataFreshness';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { listPolicies, type PolicyHead } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
+import { useCpgLoad } from '../../hooks/useCpgLoad';
 import { hasOrgPermission } from '../../lib/cpg-permissions';
 import {
-  STATE_LABEL, enforcementSummary, matchesPolicyFilter, pendingLabel, policyErrorMessage, policyFilterCounts, type PolicyFilter,
+  STATE_LABEL, enforcementSummary, matchesPolicyFilter, pendingLabel, policyFilterCounts, type PolicyFilter,
 } from '../../lib/cpg-policy';
 import GovernanceHeader from './GovernanceHeader';
+import { FilterTabs, InfoNote, TableHead } from './parts';
 import { StateBadge, TierBadge } from './policies/parts';
 
 const FILTERS: Array<{ value: PolicyFilter; label: string }> = [
@@ -30,20 +32,9 @@ export default function GovernancePolicies() {
   const { me } = useCpgMe();
   const navigate = useNavigate();
   const canAuthor = hasOrgPermission(me, 'policy.author');
-  const [items, setItems] = useState<PolicyHead[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
+  const { data: items, error, fetchedAt, retry } = useCpgLoad(listPolicies, 'Failed to load the policy log');
   const [filter, setFilter] = useState<PolicyFilter>('');
   const [now] = useState(() => Date.now());
-
-  useEffect(() => {
-    let cancelled = false;
-    listPolicies()
-      .then((list) => { if (!cancelled) { setItems(list); setError(null); setFetchedAt(new Date().toISOString()); } })
-      .catch((err) => { if (!cancelled) setError(policyErrorMessage(err, 'Failed to load the policy log')); });
-    return () => { cancelled = true; };
-  }, [retryKey]);
 
   const shown = (items ?? []).filter((p) => matchesPolicyFilter(p, filter));
   const counts = items ? policyFilterCounts(items) : null;
@@ -58,30 +49,21 @@ export default function GovernancePolicies() {
       />
 
       {me && !me.cpgEnabled && (
-        <Card className="mb-4 border-info/30">
-          <p className="text-sm text-text-secondary flex items-start gap-2" role="status">
-            <Info size={16} className="text-info shrink-0 mt-0.5" />
-            Governance is off for this organization. Policies can be written and approved now, but scanners receive none of them until an Org Admin turns governance on.
-          </p>
-        </Card>
+        <InfoNote role="status">
+          Governance is off for this organization. Policies can be written and approved now, but scanners receive none of them until an Org Admin turns governance on.
+        </InfoNote>
       )}
 
-      <div className="flex gap-1 mb-4 flex-wrap" role="tablist" aria-label="Filter by state">
-        {FILTERS.map((f) => (
-          <button
-            key={f.value || 'all'}
-            role="tab"
-            aria-selected={filter === f.value}
-            onClick={() => setFilter(f.value)}
-            className={`px-3 py-1.5 text-xs rounded-lg transition ${filter === f.value ? 'bg-accent-dim text-accent' : 'text-text-secondary hover:bg-surface-hover'}`}
-          >
-            {f.label}{counts ? ` (${counts[f.value]})` : ''}
-          </button>
-        ))}
-      </div>
+      <FilterTabs
+        label="Filter by state"
+        className="mb-4"
+        options={FILTERS.map((f) => ({ value: f.value, label: `${f.label}${counts ? ` (${counts[f.value]})` : ''}` }))}
+        value={filter}
+        onChange={setFilter}
+      />
 
       {error ? (
-        <ErrorState message={error} onRetry={() => { setError(null); setItems(null); setRetryKey((k) => k + 1); }} />
+        <ErrorState message={error} onRetry={retry} />
       ) : items === null ? (
         <SkeletonTable rows={5} />
       ) : (
@@ -108,16 +90,7 @@ export function PolicyTable({ items, now, filtered, canAuthor }: { items: Policy
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="w-full text-sm" data-testid="policy-table">
-        <thead>
-          <tr className="border-b border-border text-left text-text-muted">
-            <th className="px-4 py-3 font-medium">Policy</th>
-            <th className="px-4 py-3 font-medium">State</th>
-            <th className="px-4 py-3 font-medium">Tier</th>
-            <th className="px-4 py-3 font-medium">Owning boards</th>
-            <th className="px-4 py-3 font-medium">Version</th>
-            <th className="px-4 py-3 font-medium">Enforcement</th>
-          </tr>
-        </thead>
+        <TableHead columns={['Policy', 'State', 'Tier', 'Owning boards', 'Version', 'Enforcement']} />
         <tbody className="divide-y divide-border">
           {items.map((p) => {
             const enforcement = enforcementSummary(p, now);

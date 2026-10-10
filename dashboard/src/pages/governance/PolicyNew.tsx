@@ -15,6 +15,7 @@ import { lapsingCount } from '../../lib/cpg-approvals';
 import { TIER_DESCRIPTION, TIER_LABEL, policyErrorMessage } from '../../lib/cpg-policy';
 import { compileInputProblems, graceFields, ruleEditProblems, tomorrowUtc, type GraceMode } from '../../lib/cpg-policy-forms';
 import GovernanceHeader from './GovernanceHeader';
+import { InfoNote } from './parts';
 import CompileResult from './policies/CompileResult';
 
 const inputCls = 'w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted placeholder:opacity-60 focus:outline-none focus:border-accent';
@@ -172,15 +173,12 @@ export default function PolicyNew() {
     <div>
       <GovernanceHeader icon={FilePlus2} title={heading} subtitle="Plain English in, a deterministic rule out; nothing is active until someone else approves it" />
 
-      <Card className="mb-4 border-info/30">
-        <p className="text-sm text-text-secondary flex items-start gap-2">
-          <ShieldCheck size={16} className="text-info shrink-0 mt-0.5" />
-          <span>
-            An LLM turns your text into a rule; your examples are checked on the server with the scanner&apos;s own matcher and are never sent to the LLM.
-            Proposing creates a version that waits for approval. <strong className="text-text-primary">It never becomes active until someone other than you approves it</strong> (four-eyes).
-          </span>
-        </p>
-      </Card>
+      <InfoNote icon={ShieldCheck}>
+        <span>
+          An LLM turns your text into a rule; your examples are checked on the server with the scanner&apos;s own matcher and are never sent to the LLM.
+          Proposing creates a version that waits for approval. <strong className="text-text-primary">It never becomes active until someone other than you approves it</strong> (four-eyes).
+        </span>
+      </InfoNote>
 
       {loadError ? (
         <ErrorState message={loadError} onRetry={() => { setLoadError(null); setReloadKey((k) => k + 1); }} />

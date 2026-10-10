@@ -60,24 +60,27 @@ export function parseResponse<S extends z.ZodTypeAny>(schema: S, data: unknown, 
   return parsed.data;
 }
 
+/** Awaits a request and parses its body with `schema`; `endpoint` names the call in a contract error. */
+async function call<S extends z.ZodTypeAny>(request: Promise<{ data: unknown }>, schema: S, endpoint: string): Promise<z.infer<S>> {
+  return parseResponse(schema, (await request).data, endpoint);
+}
+
+/** The same for an `{ items }` answer, unwrapped. */
+async function callItems<S extends z.ZodType<{ items: unknown[] }>>(request: Promise<{ data: unknown }>, schema: S, endpoint: string): Promise<z.infer<S>['items']> {
+  return (await call(request, schema, endpoint)).items;
+}
+
+const id = (v: string | number) => encodeURIComponent(String(v));
+
 // ─── E1 me ─────────────────────────────────────────────────────────────
 
-export async function getCpgMe(): Promise<CpgMe> {
-  const { data } = await api.get('/cpg/me');
-  return parseResponse(meSchema, data, 'GET /cpg/me');
-}
+export const getCpgMe = (): Promise<CpgMe> => call(api.get('/cpg/me'), meSchema, 'GET /cpg/me');
 
 // ─── E2 permissions, E3–E6 roles ───────────────────────────────────────
 
-export async function listPermissions(): Promise<Permission[]> {
-  const { data } = await api.get('/cpg/permissions');
-  return parseResponse(listOf(permissionSchema), data, 'GET /cpg/permissions').items;
-}
+export const listPermissions = (): Promise<Permission[]> => callItems(api.get('/cpg/permissions'), listOf(permissionSchema), 'GET /cpg/permissions');
 
-export async function listRoles(): Promise<Role[]> {
-  const { data } = await api.get('/cpg/roles');
-  return parseResponse(listOf(roleSchema), data, 'GET /cpg/roles').items;
-}
+export const listRoles = (): Promise<Role[]> => callItems(api.get('/cpg/roles'), listOf(roleSchema), 'GET /cpg/roles');
 
 export interface CreateRoleInput {
   key: string;
@@ -86,37 +89,23 @@ export interface CreateRoleInput {
   permissions: string[];
 }
 
-export async function createRole(input: CreateRoleInput): Promise<Role> {
-  const { data } = await api.post('/cpg/roles', input);
-  return parseResponse(roleSchema, data, 'POST /cpg/roles');
-}
+export const createRole = (input: CreateRoleInput): Promise<Role> => call(api.post('/cpg/roles', input), roleSchema, 'POST /cpg/roles');
 
-export async function updateRole(id: string, input: { name?: string; description?: string; permissions?: string[] }): Promise<Role> {
-  const { data } = await api.patch(`/cpg/roles/${encodeURIComponent(id)}`, input);
-  return parseResponse(roleSchema, data, 'PATCH /cpg/roles/:id');
-}
+export const updateRole = (roleId: string, input: { name?: string; description?: string; permissions?: string[] }): Promise<Role> =>
+  call(api.patch(`/cpg/roles/${id(roleId)}`, input), roleSchema, 'PATCH /cpg/roles/:id');
 
-export async function archiveRole(id: string): Promise<Role> {
-  const { data } = await api.post(`/cpg/roles/${encodeURIComponent(id)}/archive`, {});
-  return parseResponse(roleSchema, data, 'POST /cpg/roles/:id/archive');
-}
+export const archiveRole = (roleId: string): Promise<Role> =>
+  call(api.post(`/cpg/roles/${id(roleId)}/archive`, {}), roleSchema, 'POST /cpg/roles/:id/archive');
 
 // ─── E7–E11 users and grants ───────────────────────────────────────────
 
-export async function listOrgUsers(): Promise<OrgUser[]> {
-  const { data } = await api.get('/cpg/users');
-  return parseResponse(listOf(orgUserSchema), data, 'GET /cpg/users').items;
-}
+export const listOrgUsers = (): Promise<OrgUser[]> => callItems(api.get('/cpg/users'), listOf(orgUserSchema), 'GET /cpg/users');
 
-export async function inviteOrgUser(input: { email: string; name: string; roleKeys?: string[] }): Promise<InviteResult> {
-  const { data } = await api.post('/cpg/users', input);
-  return parseResponse(inviteResultSchema, data, 'POST /cpg/users');
-}
+export const inviteOrgUser = (input: { email: string; name: string; roleKeys?: string[] }): Promise<InviteResult> =>
+  call(api.post('/cpg/users', input), inviteResultSchema, 'POST /cpg/users');
 
-export async function updateOrgUser(id: string, input: { name?: string; isActive?: boolean }): Promise<OrgUser> {
-  const { data } = await api.patch(`/cpg/users/${encodeURIComponent(id)}`, input);
-  return parseResponse(orgUserSchema, data, 'PATCH /cpg/users/:id');
-}
+export const updateOrgUser = (userId: string, input: { name?: string; isActive?: boolean }): Promise<OrgUser> =>
+  call(api.patch(`/cpg/users/${id(userId)}`, input), orgUserSchema, 'PATCH /cpg/users/:id');
 
 export interface CreateGrantInput {
   roleId: string;
@@ -125,47 +114,32 @@ export interface CreateGrantInput {
   scopeId?: string;
 }
 
-export async function createGrant(userId: string, input: CreateGrantInput): Promise<Grant> {
+export function createGrant(userId: string, input: CreateGrantInput): Promise<Grant> {
   const body = input.scopeType === 'org'
     ? { roleId: input.roleId, scopeType: 'org' as const }
     : { roleId: input.roleId, scopeType: input.scopeType, scopeId: input.scopeId };
-  const { data } = await api.post(`/cpg/users/${encodeURIComponent(userId)}/grants`, body);
-  return parseResponse(grantSchema, data, 'POST /cpg/users/:id/grants');
+  return call(api.post(`/cpg/users/${id(userId)}/grants`, body), grantSchema, 'POST /cpg/users/:id/grants');
 }
 
-export async function revokeGrant(grantId: string, reason: string): Promise<Grant> {
-  const { data } = await api.post(`/cpg/grants/${encodeURIComponent(grantId)}/revoke`, { reason });
-  return parseResponse(grantSchema, data, 'POST /cpg/grants/:id/revoke');
-}
+export const revokeGrant = (grantId: string, reason: string): Promise<Grant> =>
+  call(api.post(`/cpg/grants/${id(grantId)}/revoke`, { reason }), grantSchema, 'POST /cpg/grants/:id/revoke');
 
 // ─── E12–E14 teams ─────────────────────────────────────────────────────
 
-export async function listTeams(): Promise<Team[]> {
-  const { data } = await api.get('/cpg/teams');
-  return parseResponse(listOf(teamSchema), data, 'GET /cpg/teams').items;
-}
+export const listTeams = (): Promise<Team[]> => callItems(api.get('/cpg/teams'), listOf(teamSchema), 'GET /cpg/teams');
 
-export async function createTeam(input: { key: string; name: string; repoPatterns: string[] }): Promise<Team> {
-  const { data } = await api.post('/cpg/teams', input);
-  return parseResponse(teamSchema, data, 'POST /cpg/teams');
-}
+export const createTeam = (input: { key: string; name: string; repoPatterns: string[] }): Promise<Team> =>
+  call(api.post('/cpg/teams', input), teamSchema, 'POST /cpg/teams');
 
-export async function updateTeam(id: string, input: { name?: string; repoPatterns?: string[]; archived?: boolean }): Promise<Team> {
-  const { data } = await api.patch(`/cpg/teams/${encodeURIComponent(id)}`, input);
-  return parseResponse(teamSchema, data, 'PATCH /cpg/teams/:id');
-}
+export const updateTeam = (teamId: string, input: { name?: string; repoPatterns?: string[]; archived?: boolean }): Promise<Team> =>
+  call(api.patch(`/cpg/teams/${id(teamId)}`, input), teamSchema, 'PATCH /cpg/teams/:id');
 
 // ─── E15–E16 settings ──────────────────────────────────────────────────
 
-export async function getCpgSettings(): Promise<CpgSettings> {
-  const { data } = await api.get('/cpg/settings');
-  return parseResponse(cpgSettingsSchema, data, 'GET /cpg/settings');
-}
+export const getCpgSettings = (): Promise<CpgSettings> => call(api.get('/cpg/settings'), cpgSettingsSchema, 'GET /cpg/settings');
 
-export async function updateCpgSettings(input: { enabled?: boolean; reviewerContextLlm?: boolean }): Promise<CpgSettings> {
-  const { data } = await api.patch('/cpg/settings', input);
-  return parseResponse(cpgSettingsSchema, data, 'PATCH /cpg/settings');
-}
+export const updateCpgSettings = (input: { enabled?: boolean; reviewerContextLlm?: boolean }): Promise<CpgSettings> =>
+  call(api.patch('/cpg/settings', input), cpgSettingsSchema, 'PATCH /cpg/settings');
 
 // ─── E17 audit ─────────────────────────────────────────────────────────
 
@@ -190,72 +164,44 @@ export function auditQueryString(q: AuditQuery): string {
   return s ? `?${s}` : '';
 }
 
-export async function listAuditEvents(q: AuditQuery = {}): Promise<AuditList> {
-  const { data } = await api.get(`/cpg/audit${auditQueryString(q)}`);
-  return parseResponse(auditListSchema, data, 'GET /cpg/audit');
-}
+export const listAuditEvents = (q: AuditQuery = {}): Promise<AuditList> =>
+  call(api.get(`/cpg/audit${auditQueryString(q)}`), auditListSchema, 'GET /cpg/audit');
 
 /** E73: the signed governance audit export (audit.export). */
-export async function exportGovernanceAudit(): Promise<GovernanceExport> {
-  const { data } = await api.get('/cpg/audit/export');
-  return parseResponse(governanceExportSchema, data, 'GET /cpg/audit/export');
-}
+export const exportGovernanceAudit = (): Promise<GovernanceExport> =>
+  call(api.get('/cpg/audit/export'), governanceExportSchema, 'GET /cpg/audit/export');
 
 // ─── E19–E24 boards ────────────────────────────────────────────────────
 
-const id = (v: string) => encodeURIComponent(v);
+export const listBoards = (): Promise<Board[]> => callItems(api.get('/cpg/boards'), listOf(boardSchema), 'GET /cpg/boards');
 
-export async function listBoards(): Promise<Board[]> {
-  const { data } = await api.get('/cpg/boards');
-  return parseResponse(listOf(boardSchema), data, 'GET /cpg/boards').items;
-}
+export const createBoard = (input: { key: string; name: string; kind: BoardKind; description?: string }): Promise<Board> =>
+  call(api.post('/cpg/boards', input), boardSchema, 'POST /cpg/boards');
 
-export async function createBoard(input: { key: string; name: string; kind: BoardKind; description?: string }): Promise<Board> {
-  const { data } = await api.post('/cpg/boards', input);
-  return parseResponse(boardSchema, data, 'POST /cpg/boards');
-}
+export const updateBoard = (boardId: string, input: { name?: string; description?: string }): Promise<Board> =>
+  call(api.patch(`/cpg/boards/${id(boardId)}`, input), boardSchema, 'PATCH /cpg/boards/:id');
 
-export async function updateBoard(boardId: string, input: { name?: string; description?: string }): Promise<Board> {
-  const { data } = await api.patch(`/cpg/boards/${id(boardId)}`, input);
-  return parseResponse(boardSchema, data, 'PATCH /cpg/boards/:id');
-}
+export const archiveBoard = (boardId: string): Promise<Board> =>
+  call(api.post(`/cpg/boards/${id(boardId)}/archive`, {}), boardSchema, 'POST /cpg/boards/:id/archive');
 
-export async function archiveBoard(boardId: string): Promise<Board> {
-  const { data } = await api.post(`/cpg/boards/${id(boardId)}/archive`, {});
-  return parseResponse(boardSchema, data, 'POST /cpg/boards/:id/archive');
-}
+export const addBoardMember = (boardId: string, userId: string): Promise<BoardMember> =>
+  call(api.post(`/cpg/boards/${id(boardId)}/members`, { userId }), boardMemberSchema, 'POST /cpg/boards/:id/members');
 
-export async function addBoardMember(boardId: string, userId: string): Promise<BoardMember> {
-  const { data } = await api.post(`/cpg/boards/${id(boardId)}/members`, { userId });
-  return parseResponse(boardMemberSchema, data, 'POST /cpg/boards/:id/members');
-}
-
-export async function removeBoardMember(boardId: string, userId: string): Promise<BoardMember> {
-  const { data } = await api.post(`/cpg/boards/${id(boardId)}/members/${id(userId)}/remove`, {});
-  return parseResponse(boardMemberSchema, data, 'POST /cpg/boards/:id/members/:userId/remove');
-}
+export const removeBoardMember = (boardId: string, userId: string): Promise<BoardMember> =>
+  call(api.post(`/cpg/boards/${id(boardId)}/members/${id(userId)}/remove`, {}), boardMemberSchema, 'POST /cpg/boards/:id/members/:userId/remove');
 
 // ─── E25–E28 quorum ────────────────────────────────────────────────────
 
-export async function getQuorum(): Promise<QuorumVersion> {
-  const { data } = await api.get('/cpg/quorum');
-  return parseResponse(quorumVersionSchema, data, 'GET /cpg/quorum');
-}
+export const getQuorum = (): Promise<QuorumVersion> => call(api.get('/cpg/quorum'), quorumVersionSchema, 'GET /cpg/quorum');
 
-export async function putQuorum(config: QuorumConfig, changeNote: string): Promise<QuorumVersion> {
-  const { data } = await api.put('/cpg/quorum', { config, changeNote });
-  return parseResponse(quorumVersionSchema, data, 'PUT /cpg/quorum');
-}
+export const putQuorum = (config: QuorumConfig, changeNote: string): Promise<QuorumVersion> =>
+  call(api.put('/cpg/quorum', { config, changeNote }), quorumVersionSchema, 'PUT /cpg/quorum');
 
-export async function listQuorumVersions(): Promise<QuorumVersionSummary[]> {
-  const { data } = await api.get('/cpg/quorum/versions');
-  return parseResponse(listOf(quorumVersionSummarySchema), data, 'GET /cpg/quorum/versions').items;
-}
+export const listQuorumVersions = (): Promise<QuorumVersionSummary[]> =>
+  callItems(api.get('/cpg/quorum/versions'), listOf(quorumVersionSummarySchema), 'GET /cpg/quorum/versions');
 
-export async function getQuorumVersion(version: number): Promise<QuorumVersion> {
-  const { data } = await api.get(`/cpg/quorum/versions/${id(String(version))}`);
-  return parseResponse(quorumVersionSchema, data, 'GET /cpg/quorum/versions/:version');
-}
+export const getQuorumVersion = (version: number): Promise<QuorumVersion> =>
+  call(api.get(`/cpg/quorum/versions/${id(version)}`), quorumVersionSchema, 'GET /cpg/quorum/versions/:version');
 
 // ─── E29–E30 compile ───────────────────────────────────────────────────
 
@@ -271,30 +217,23 @@ export interface CompileInput {
   examples: { violating: CodeExample[]; compliant: CodeExample[] };
 }
 
-export async function compilePolicy(input: CompileInput): Promise<CompileRecord> {
+export function compilePolicy(input: CompileInput): Promise<CompileRecord> {
   const body = input.policyId
     ? { plainText: input.plainText, policyId: input.policyId, examples: input.examples }
     : { plainText: input.plainText, examples: input.examples };
-  const { data } = await api.post('/cpg/compile', body);
-  return parseResponse(compileRecordSchema, data, 'POST /cpg/compile');
+  return call(api.post('/cpg/compile', body), compileRecordSchema, 'POST /cpg/compile');
 }
 
-export async function getCompileRecord(recordId: string): Promise<CompileRecord> {
-  const { data } = await api.get(`/cpg/compile/${id(recordId)}`);
-  return parseResponse(compileRecordSchema, data, 'GET /cpg/compile/:id');
-}
+export const getCompileRecord = (recordId: string): Promise<CompileRecord> =>
+  call(api.get(`/cpg/compile/${id(recordId)}`), compileRecordSchema, 'GET /cpg/compile/:id');
 
 // ─── E31–E37 the policy log ────────────────────────────────────────────
 
-export async function listPolicies(state?: PolicyState): Promise<PolicyHead[]> {
-  const { data } = await api.get(state ? `/cpg/policies?state=${id(state)}` : '/cpg/policies');
-  return parseResponse(listOf(policyHeadSchema), data, 'GET /cpg/policies').items;
-}
+export const listPolicies = (state?: PolicyState): Promise<PolicyHead[]> =>
+  callItems(api.get(state ? `/cpg/policies?state=${id(state)}` : '/cpg/policies'), listOf(policyHeadSchema), 'GET /cpg/policies');
 
-export async function getPolicy(policyId: string): Promise<PolicyDetail> {
-  const { data } = await api.get(`/cpg/policies/${id(policyId)}`);
-  return parseResponse(policyDetailSchema, data, 'GET /cpg/policies/:id');
-}
+export const getPolicy = (policyId: string): Promise<PolicyDetail> =>
+  call(api.get(`/cpg/policies/${id(policyId)}`), policyDetailSchema, 'GET /cpg/policies/:id');
 
 export interface ProposeInput {
   compileRecordId: string;
@@ -318,31 +257,22 @@ function proposeBody(input: ProposeInput): Record<string, unknown> {
   return body;
 }
 
-export async function proposePolicy(input: ProposeInput & { policyKey: string }): Promise<PolicyDetail> {
-  const { data } = await api.post('/cpg/policies', { ...proposeBody(input), policyKey: input.policyKey });
-  return parseResponse(policyDetailSchema, data, 'POST /cpg/policies');
-}
+export const proposePolicy = (input: ProposeInput & { policyKey: string }): Promise<PolicyDetail> =>
+  call(api.post('/cpg/policies', { ...proposeBody(input), policyKey: input.policyKey }), policyDetailSchema, 'POST /cpg/policies');
 
-export async function proposePolicyVersion(policyId: string, input: ProposeInput): Promise<PolicyDetail> {
-  const { data } = await api.post(`/cpg/policies/${id(policyId)}/versions`, proposeBody(input));
-  return parseResponse(policyDetailSchema, data, 'POST /cpg/policies/:id/versions');
-}
+export const proposePolicyVersion = (policyId: string, input: ProposeInput): Promise<PolicyDetail> =>
+  call(api.post(`/cpg/policies/${id(policyId)}/versions`, proposeBody(input)), policyDetailSchema, 'POST /cpg/policies/:id/versions');
 
-export async function proposeRetirement(policyId: string, reason: string): Promise<PolicyDetail> {
-  const { data } = await api.post(`/cpg/policies/${id(policyId)}/retire`, { reason });
-  return parseResponse(policyDetailSchema, data, 'POST /cpg/policies/:id/retire');
-}
+export const proposeRetirement = (policyId: string, reason: string): Promise<PolicyDetail> =>
+  call(api.post(`/cpg/policies/${id(policyId)}/retire`, { reason }), policyDetailSchema, 'POST /cpg/policies/:id/retire');
 
-export async function voteOnVersion(versionId: string, vote: 'approve' | 'reject', comment?: string): Promise<VoteResult> {
+export function voteOnVersion(versionId: string, vote: 'approve' | 'reject', comment?: string): Promise<VoteResult> {
   const body = comment && comment.trim() ? { vote, comment: comment.trim() } : { vote };
-  const { data } = await api.post(`/cpg/policy-versions/${id(versionId)}/votes`, body);
-  return parseResponse(voteResultSchema, data, 'POST /cpg/policy-versions/:id/votes');
+  return call(api.post(`/cpg/policy-versions/${id(versionId)}/votes`, body), voteResultSchema, 'POST /cpg/policy-versions/:id/votes');
 }
 
-export async function withdrawVersion(versionId: string): Promise<PolicyDetail> {
-  const { data } = await api.post(`/cpg/policy-versions/${id(versionId)}/withdraw`, {});
-  return parseResponse(policyDetailSchema, data, 'POST /cpg/policy-versions/:id/withdraw');
-}
+export const withdrawVersion = (versionId: string): Promise<PolicyDetail> =>
+  call(api.post(`/cpg/policy-versions/${id(versionId)}/withdraw`, {}), policyDetailSchema, 'POST /cpg/policy-versions/:id/withdraw');
 
 // ─── E41–E52 review cases ──────────────────────────────────────────────
 
@@ -353,54 +283,42 @@ export interface CaseQuery {
   limit?: number;
 }
 
-export async function listCases(q: CaseQuery = {}): Promise<CaseList> {
+export function listCases(q: CaseQuery = {}): Promise<CaseList> {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') params.set(k, String(v));
   const qs = params.toString();
-  const { data } = await api.get(`/cpg/cases${qs ? `?${qs}` : ''}`);
-  return parseResponse(caseListSchema, data, 'GET /cpg/cases');
+  return call(api.get(`/cpg/cases${qs ? `?${qs}` : ''}`), caseListSchema, 'GET /cpg/cases');
 }
 
-export async function getCase(caseId: string): Promise<CaseDetail> {
-  const { data } = await api.get(`/cpg/cases/${id(caseId)}`);
-  return parseResponse(caseDetailSchema, data, 'GET /cpg/cases/:id');
-}
+export const getCase = (caseId: string): Promise<CaseDetail> => call(api.get(`/cpg/cases/${id(caseId)}`), caseDetailSchema, 'GET /cpg/cases/:id');
 
 /** E63: a case's CI runs, newest first (the first 50). */
-export async function listCaseCiRuns(caseId: string): Promise<CiRunList> {
-  const { data } = await api.get(`/cpg/ci/runs?caseId=${id(caseId)}`);
-  return parseResponse(ciRunListSchema, data, 'GET /cpg/ci/runs');
-}
+export const listCaseCiRuns = (caseId: string): Promise<CiRunList> =>
+  call(api.get(`/cpg/ci/runs?caseId=${id(caseId)}`), ciRunListSchema, 'GET /cpg/ci/runs');
 
-export async function getCaseRevision(caseId: string, revision: number): Promise<RevisionDetail> {
-  const { data } = await api.get(`/cpg/cases/${id(caseId)}/revisions/${id(String(revision))}`);
-  return parseResponse(revisionDetailSchema, data, 'GET /cpg/cases/:id/revisions/:revision');
-}
+export const getCaseRevision = (caseId: string, revision: number): Promise<RevisionDetail> =>
+  call(api.get(`/cpg/cases/${id(caseId)}/revisions/${id(revision)}`), revisionDetailSchema, 'GET /cpg/cases/:id/revisions/:revision');
 
 /** E51 (generated on the first request when the org allows it) or, with `retry`, E52 after a failure. */
-export async function getReviewerContext(caseId: string, findingId: string, retry = false): Promise<ReviewerContext> {
+export function getReviewerContext(caseId: string, findingId: string, retry = false): Promise<ReviewerContext> {
   const path = `/cpg/cases/${id(caseId)}/findings/${id(findingId)}/context`;
-  const { data } = retry ? await api.post(`${path}/retry`, {}) : await api.get(path);
-  return parseResponse(reviewerContextSchema, data, retry ? 'POST /cpg/cases/:id/findings/:findingId/context/retry' : 'GET /cpg/cases/:id/findings/:findingId/context');
+  return retry
+    ? call(api.post(`${path}/retry`, {}), reviewerContextSchema, 'POST /cpg/cases/:id/findings/:findingId/context/retry')
+    : call(api.get(path), reviewerContextSchema, 'GET /cpg/cases/:id/findings/:findingId/context');
 }
 
 /** A comment, or with `threadId` a reply to that thread. */
-export async function addCaseComment(caseId: string, body: string, threadId?: string): Promise<CaseComment> {
+export function addCaseComment(caseId: string, body: string, threadId?: string): Promise<CaseComment> {
   const input = threadId ? { kind: 'reply', threadId, body } : { kind: 'comment', body };
-  const { data } = await api.post(`/cpg/cases/${id(caseId)}/comments`, input);
-  return parseResponse(caseCommentSchema, data, 'POST /cpg/cases/:id/comments');
+  return call(api.post(`/cpg/cases/${id(caseId)}/comments`, input), caseCommentSchema, 'POST /cpg/cases/:id/comments');
 }
 
-export async function requestCaseChanges(caseId: string, input: { boardId: string; body: string; fingerprints: string[] }): Promise<CaseComment> {
-  const { data } = await api.post(`/cpg/cases/${id(caseId)}/request-changes`, input);
-  return parseResponse(caseCommentSchema, data, 'POST /cpg/cases/:id/request-changes');
-}
+export const requestCaseChanges = (caseId: string, input: { boardId: string; body: string; fingerprints: string[] }): Promise<CaseComment> =>
+  call(api.post(`/cpg/cases/${id(caseId)}/request-changes`, input), caseCommentSchema, 'POST /cpg/cases/:id/request-changes');
 
 /** E49 withdraw (the opener, or case.close) or E50 close (case.close). */
-export async function endCase(caseId: string, how: 'withdraw' | 'close', reason: string) {
-  const { data } = await api.post(`/cpg/cases/${id(caseId)}/${how}`, { reason });
-  return parseResponse(caseStatusSchema, data, `POST /cpg/cases/:id/${how}`);
-}
+export const endCase = (caseId: string, how: 'withdraw' | 'close', reason: string) =>
+  call(api.post(`/cpg/cases/${id(caseId)}/${how}`, { reason }), caseStatusSchema, `POST /cpg/cases/:id/${how}`);
 
 // ─── E54 to E60 proposals, votes, decisions, standing exceptions ───────
 
@@ -408,43 +326,27 @@ export type ProposalInput =
   | { caseId: string; scope: 'snippet' | 'bulk'; outcome: 'approve' | 'reject'; fingerprints: string[]; expiresAt?: string; rationale: string }
   | { scope: 'standing'; caseId?: string; pattern: StandingPattern; expiresAt: string; rationale: string };
 
-export async function propose(input: ProposalInput): Promise<Proposal> {
-  const { data } = await api.post('/cpg/proposals', input);
-  return parseResponse(proposalSchema, data, 'POST /cpg/proposals');
-}
+export const propose = (input: ProposalInput): Promise<Proposal> => call(api.post('/cpg/proposals', input), proposalSchema, 'POST /cpg/proposals');
 
 /** A case's proposals, oldest first. */
-export async function listCaseProposals(caseId: string): Promise<Proposal[]> {
-  const { data } = await api.get(`/cpg/proposals?caseId=${encodeURIComponent(caseId)}`);
-  return parseResponse(proposalListSchema, data, 'GET /cpg/proposals').items;
-}
+export const listCaseProposals = (caseId: string): Promise<Proposal[]> =>
+  callItems(api.get(`/cpg/proposals?caseId=${id(caseId)}`), proposalListSchema, 'GET /cpg/proposals');
 
 /** The organization's standing exception proposals the caller may read, oldest first. */
-export async function listStandingProposals(status?: ProposalStatus): Promise<Proposal[]> {
-  const { data } = await api.get(`/cpg/proposals?scope=standing${status ? `&status=${status}` : ''}`);
-  return parseResponse(proposalListSchema, data, 'GET /cpg/proposals').items;
-}
+export const listStandingProposals = (status?: ProposalStatus): Promise<Proposal[]> =>
+  callItems(api.get(`/cpg/proposals?scope=standing${status ? `&status=${status}` : ''}`), proposalListSchema, 'GET /cpg/proposals');
 
-export async function voteOnProposal(proposalId: string, vote: 'approve' | 'reject', comment: string): Promise<CastVote> {
-  const { data } = await api.post(`/cpg/proposals/${proposalId}/votes`, { vote, ...(comment.trim() ? { comment: comment.trim() } : {}) });
-  return parseResponse(castVoteSchema, data, 'POST /cpg/proposals/:id/votes');
-}
+export const voteOnProposal = (proposalId: string, vote: 'approve' | 'reject', comment: string): Promise<CastVote> =>
+  call(api.post(`/cpg/proposals/${id(proposalId)}/votes`, { vote, ...(comment.trim() ? { comment: comment.trim() } : {}) }), castVoteSchema, 'POST /cpg/proposals/:id/votes');
 
-export async function getDecision(decisionId: string): Promise<Decision> {
-  const { data } = await api.get(`/cpg/decisions/${decisionId}`);
-  return parseResponse(decisionSchema, data, 'GET /cpg/decisions/:id');
-}
+export const getDecision = (decisionId: string): Promise<Decision> => call(api.get(`/cpg/decisions/${id(decisionId)}`), decisionSchema, 'GET /cpg/decisions/:id');
 
-export async function revokeDecision(decisionId: string, reason: string) {
-  const { data } = await api.post(`/cpg/decisions/${decisionId}/revoke`, { reason });
-  return parseResponse(revocationSchema, data, 'POST /cpg/decisions/:id/revoke');
-}
+export const revokeDecision = (decisionId: string, reason: string) =>
+  call(api.post(`/cpg/decisions/${id(decisionId)}/revoke`, { reason }), revocationSchema, 'POST /cpg/decisions/:id/revoke');
 
 /** Finalized standing exceptions the caller may read, oldest first. */
-export async function listStandingExceptions(policyKey?: string): Promise<StandingException[]> {
-  const { data } = await api.get(`/cpg/exceptions${policyKey ? `?policyKey=${encodeURIComponent(policyKey)}` : ''}`);
-  return parseResponse(standingExceptionListSchema, data, 'GET /cpg/exceptions').items;
-}
+export const listStandingExceptions = (policyKey?: string): Promise<StandingException[]> =>
+  callItems(api.get(`/cpg/exceptions${policyKey ? `?policyKey=${id(policyKey)}` : ''}`), standingExceptionListSchema, 'GET /cpg/exceptions');
 
 // ─── E64–E70 integrations and the delivery log ─────────────────────────
 
@@ -453,38 +355,23 @@ export type IntegrationInput = {
   config: Record<string, unknown>; apiToken?: string;
 };
 
-export async function listIntegrations(): Promise<Integration[]> {
-  const { data } = await api.get('/cpg/integrations');
-  return parseResponse(listOf(integrationSchema), data, 'GET /cpg/integrations').items;
-}
+export const listIntegrations = (): Promise<Integration[]> => callItems(api.get('/cpg/integrations'), listOf(integrationSchema), 'GET /cpg/integrations');
 
-export async function createIntegration(input: IntegrationInput): Promise<IntegrationWithSecret> {
-  const { data } = await api.post('/cpg/integrations', input);
-  return parseResponse(integrationWithSecretSchema, data, 'POST /cpg/integrations');
-}
+export const createIntegration = (input: IntegrationInput): Promise<IntegrationWithSecret> =>
+  call(api.post('/cpg/integrations', input), integrationWithSecretSchema, 'POST /cpg/integrations');
 
-export async function updateIntegration(integrationId: string, patch: Partial<Pick<IntegrationInput, 'name' | 'boardIds' | 'events' | 'enabled' | 'config'>>): Promise<Integration> {
-  const { data } = await api.patch(`/cpg/integrations/${id(integrationId)}`, patch);
-  return parseResponse(integrationSchema, data, 'PATCH /cpg/integrations/:id');
-}
+export const updateIntegration = (integrationId: string, patch: Partial<Pick<IntegrationInput, 'name' | 'boardIds' | 'events' | 'enabled' | 'config'>>): Promise<Integration> =>
+  call(api.patch(`/cpg/integrations/${id(integrationId)}`, patch), integrationSchema, 'PATCH /cpg/integrations/:id');
 
 /** A webhook gets a new signing secret (returned once); a Jira integration takes the new token. */
-export async function rotateIntegrationSecret(integrationId: string, apiToken?: string): Promise<IntegrationWithSecret> {
-  const { data } = await api.post(`/cpg/integrations/${id(integrationId)}/rotate-secret`, apiToken ? { apiToken } : {});
-  return parseResponse(integrationWithSecretSchema, data, 'POST /cpg/integrations/:id/rotate-secret');
-}
+export const rotateIntegrationSecret = (integrationId: string, apiToken?: string): Promise<IntegrationWithSecret> =>
+  call(api.post(`/cpg/integrations/${id(integrationId)}/rotate-secret`, apiToken ? { apiToken } : {}), integrationWithSecretSchema, 'POST /cpg/integrations/:id/rotate-secret');
 
-export async function testIntegration(integrationId: string): Promise<Delivery> {
-  const { data } = await api.post(`/cpg/integrations/${id(integrationId)}/test`, {});
-  return parseResponse(deliverySchema, data, 'POST /cpg/integrations/:id/test');
-}
+export const testIntegration = (integrationId: string): Promise<Delivery> =>
+  call(api.post(`/cpg/integrations/${id(integrationId)}/test`, {}), deliverySchema, 'POST /cpg/integrations/:id/test');
 
-export async function listDeliveries(q: { status?: DeliveryStatus; limit?: number; cursor?: string } = {}): Promise<DeliveryList> {
-  const { data } = await api.get('/cpg/deliveries', { params: q });
-  return parseResponse(deliveryListSchema, data, 'GET /cpg/deliveries');
-}
+export const listDeliveries = (q: { status?: DeliveryStatus; limit?: number; cursor?: string } = {}): Promise<DeliveryList> =>
+  call(api.get('/cpg/deliveries', { params: q }), deliveryListSchema, 'GET /cpg/deliveries');
 
-export async function retryDelivery(deliveryId: string): Promise<Delivery> {
-  const { data } = await api.post(`/cpg/deliveries/${id(deliveryId)}/retry`, {});
-  return parseResponse(deliverySchema, data, 'POST /cpg/deliveries/:id/retry');
-}
+export const retryDelivery = (deliveryId: string): Promise<Delivery> =>
+  call(api.post(`/cpg/deliveries/${id(deliveryId)}/retry`, {}), deliverySchema, 'POST /cpg/deliveries/:id/retry');

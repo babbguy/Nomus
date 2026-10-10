@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isoDate, uuid } from './cpg-schemas';
 
 /**
  * The approval quorum configuration (design spec §4.1), mirrored from
@@ -16,8 +17,6 @@ import { z } from 'zod';
  * This module imports only zod, so the engine's contract test can load it.
  */
 
-const uuid = z.string().uuid();
-const isoDate = z.string().datetime();
 const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
 
 export const scopeRuleSchema = z.object({

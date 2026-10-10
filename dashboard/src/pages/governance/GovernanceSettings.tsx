@@ -15,6 +15,7 @@ import { cpgErrorMessage } from '../../lib/cpg-errors';
 import { formatActor, hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatDateTime } from '../../lib/formatters';
 import GovernanceHeader from './GovernanceHeader';
+import { NoticeLine, type Notice } from './parts';
 
 /**
  * /governance/settings (E15, E16): turn governance on or off and choose
@@ -35,7 +36,7 @@ export default function GovernanceSettings() {
   const [usersError, setUsersError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [message, setMessage] = useState<Notice>(null);
   const [confirmEnabled, setConfirmEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -100,11 +101,7 @@ export default function GovernanceSettings() {
               settings.reviewerContextLlm ? 'Reviewer context generation turned off.' : 'Reviewer context generation turned on.',
             )}
           />
-          {message && (
-            <p className={`text-xs mt-3 ${message.type === 'ok' ? 'text-success' : 'text-danger'}`} role={message.type === 'err' ? 'alert' : 'status'}>
-              {message.text}
-            </p>
-          )}
+          <NoticeLine notice={message} className="text-xs mt-3" />
           {usersError && <ErrorState compact message={`${usersError}; actors are shown by id.`} />}
           <DataFreshness fetchedAt={fetchedAt} className="mt-4" />
         </>

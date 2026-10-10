@@ -13,6 +13,7 @@ import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import { CASE_STATE_LABEL, actorLabel, pageNote, relativeTime } from '../../lib/cpg-cases';
 import GovernanceHeader from './GovernanceHeader';
+import { FilterTabs, InfoNote, TableHead } from './parts';
 import { CaseStateBadge, LaneList, PullRequest, RepoBranch } from './cases/parts';
 
 const PAGE_SIZE = 25;
@@ -58,28 +59,16 @@ export default function GovernanceCases() {
       <GovernanceHeader icon={FolderGit2} title="Review cases" subtitle="One case per branch: its corporate findings, the developer's justifications and each owning board's review" />
 
       {me && !me.cpgEnabled && (
-        <Card className="mb-4 border-info/30">
-          <p className="text-sm text-text-secondary flex items-start gap-2" role="status">
-            <Info size={16} className="text-info shrink-0 mt-0.5" />
-            Governance is off for this organization, so no cases are listed. An Org Admin can turn it on in Settings.
-          </p>
-        </Card>
+        <InfoNote role="status">Governance is off for this organization, so no cases are listed. An Org Admin can turn it on in Settings.</InfoNote>
       )}
 
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <div className="flex gap-1 flex-wrap" role="tablist" aria-label="Filter by state">
-          {STATES.map((s) => (
-            <button
-              key={s || 'all'}
-              role="tab"
-              aria-selected={state === s}
-              onClick={() => refilter(() => setState(s))}
-              className={`px-3 py-1.5 text-xs rounded-lg transition ${state === s ? 'bg-accent-dim text-accent' : 'text-text-secondary hover:bg-surface-hover'}`}
-            >
-              {s ? CASE_STATE_LABEL[s] : 'All'}
-            </button>
-          ))}
-        </div>
+        <FilterTabs
+          label="Filter by state"
+          options={STATES.map((s) => ({ value: s, label: s ? CASE_STATE_LABEL[s] : 'All' }))}
+          value={state}
+          onChange={(s) => refilter(() => setState(s))}
+        />
         {boards.length > 0 && (
           <select
             aria-label="Filter by board"
@@ -135,17 +124,11 @@ export function CaseTable({ items, now }: { items: CaseSummary[]; now: number })
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="w-full text-sm" data-testid="case-table">
-        <thead>
-          <tr className="border-b border-border text-left text-text-muted">
-            <th className="px-4 py-3 font-medium">Case</th>
-            <th className="px-4 py-3 font-medium">Repository @ branch</th>
-            <th className="px-4 py-3 font-medium">State</th>
-            <th className="px-4 py-3 font-medium" title="Each owning board's review: its state and decided/blocking findings">Lanes</th>
-            <th className="px-4 py-3 font-medium whitespace-nowrap">Opened by</th>
-            <th className="px-4 py-3 font-medium whitespace-nowrap">Last activity</th>
-            <th className="px-4 py-3 font-medium whitespace-nowrap">Pull request</th>
-          </tr>
-        </thead>
+        <TableHead columns={[
+          'Case', 'Repository @ branch', 'State',
+          { label: 'Lanes', title: "Each owning board's review: its state and decided/blocking findings" },
+          { label: 'Opened by', className: 'whitespace-nowrap' }, { label: 'Last activity', className: 'whitespace-nowrap' }, { label: 'Pull request', className: 'whitespace-nowrap' },
+        ]} />
         <tbody className="divide-y divide-border">
           {items.map((c) => (
             <tr key={c.id} className="align-top hover:bg-surface-hover transition">
