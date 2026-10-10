@@ -1,7 +1,6 @@
 import { z } from 'zod';
+import { isoDate, uuid } from './cpg-schemas';
 
-const uuid = z.string().uuid();
-const isoDate = z.string().datetime();
 
 export const CPG_EVENTS = [
   'case.review_requested', 'case.changes_requested', 'case.replied', 'decision.recorded', 'case.closed',

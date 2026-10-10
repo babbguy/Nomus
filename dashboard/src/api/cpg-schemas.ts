@@ -15,8 +15,9 @@ import { z } from 'zod';
  * contract test can load it.
  */
 
-const uuid = z.string().uuid();
-const isoDate = z.string().datetime();
+/** Shared by every CPG contract module. */
+export const uuid = z.string().uuid();
+export const isoDate = z.string().datetime();
 export const scopeTypeSchema = z.enum(['org', 'team', 'repo']);
 
 export const permissionCategorySchema = z.enum(['org', 'rbac', 'policy', 'case', 'exception', 'audit', 'integration', 'ci']);
