@@ -116,7 +116,7 @@ export function latestFindings(db: Db, caseId: string): CaseFindingRow[] {
 export function findOrCreateCase(db: Db, key: CaseKey, actor: string): { case: CaseRow; created: boolean } {
   const sameBranch = and(eq(cpgCases.orgId, key.orgId), eq(cpgCases.repo, key.repo), eq(cpgCases.branch, key.branch));
   return rawSqlite(db).transaction(() => {
-    const open = db.select().from(cpgCases).where(and(sameBranch, isNull(cpgCases.closedAt))).get();
+    const open = findOpenCase(db, key);
     if (open) return { case: open, created: false };
 
     const previous = db.select({ id: cpgCases.id }).from(cpgCases).where(and(sameBranch, isNotNull(cpgCases.closedAt)))

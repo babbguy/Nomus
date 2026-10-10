@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, lt, or, sql, type SQL } from 'drizzle-orm';
 import {
   caseByBranchResponseSchema, findingsStatusRequestSchema, findingsStatusResponseSchema, justificationInputSchema, parseFingerprint, requestReviewRequestSchema, requestReviewResponseSchema,
 } from '@nomus/scanner/corporate';
@@ -13,7 +13,7 @@ import { can, type CpgActor } from '../../../cpg/rbac/can.js';
 import type { PermissionKey } from '../../../cpg/rbac/catalog.js';
 import { getOrgSettings } from '../../../cpg/rbac/seed.js';
 import { appendAuditEvent } from '../../../cpg/audit/log.js';
-import { addCaseEvent, findOrCreateCase, addRevision, getCase, type CaseRow } from '../../../cpg/cases/service.js';
+import { addCaseEvent, addRevision, findOpenCase, findOrCreateCase, getCase, type CaseRow } from '../../../cpg/cases/service.js';
 import { addJustification } from '../../../cpg/cases/justifications.js';
 import { addComment, requestChanges, resubmit, type CommentRow } from '../../../cpg/cases/comments.js';
 import { closeCase } from '../../../cpg/cases/close.js';
@@ -149,9 +149,7 @@ cpgCaseRoutes.get('/cases/by-branch', ...readAuth, handle((c) => {
   const q = parseQuery(c, caseByBranchQuerySchema);
   const orgId = readerOrg(c, q.repo);
   const db = getDb();
-  const kase = getOrgSettings(db, orgId)?.enabled
-    ? db.select().from(cpgCases).where(and(eq(cpgCases.orgId, orgId), eq(cpgCases.repo, q.repo), eq(cpgCases.branch, q.branch), isNull(cpgCases.closedAt))).get()
-    : undefined;
+  const kase = getOrgSettings(db, orgId)?.enabled ? findOpenCase(db, { orgId, ...q }) : undefined;
   return c.json(caseByBranchResponseSchema.parse({ case: kase ? caseStatus(db, kase, origin(c)) : null }));
 }));
 
