@@ -5,7 +5,8 @@ reviews happen on a best-effort basis, but well-scoped issues and pull requests
 are welcome.
 
 By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-Contributions are accepted under the [Apache License 2.0](LICENSE).
+Contributions are accepted under the project's license, the
+[Functional Source License, Version 1.1, ALv2 Future License](LICENSE) (FSL-1.1-ALv2).
 
 ## Getting set up
 

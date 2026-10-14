@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **License.** Starting with v1.2.0, Nomus is licensed under the Functional Source License,
+  Version 1.1, ALv2 Future License (FSL-1.1-ALv2) instead of the Apache License 2.0. You may use,
+  copy, modify and redistribute it for any purpose other than a Competing Use, which the license
+  defines as making the software available to others in a commercial product or service that
+  substitutes for it, substitutes for any other product or service we offer using it that exists
+  as of the date we make it available, or offers the same or substantially similar functionality
+  (see `LICENSE` for the exact terms). Each version also becomes available under the Apache
+  License 2.0 on the second anniversary of the date it is made available. Versions up to and
+  including v1.1.0 remain under the Apache License 2.0. For a commercial license, open a
+  discussion titled "Commercial license" in the repository's Discussions
+  (https://github.com/babbguy/Nomus/discussions). The SPDX identifier in every `package.json`
+  (including the VS Code extension manifest), the extension's bundled `LICENSE` and source file
+  headers is now `FSL-1.1-ALv2`.
+
 ### Fixed
 - Scanner: two scans of the same repository could list findings in a different order, because the
   file walk returns files in no guaranteed order. Files are now sorted before detection, so the

@@ -1,5 +1,5 @@
 // Copyright 2026 babbguy
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-ALv2
 
 /**
  * Regressions found by running the action end to end (dist/index.js against a

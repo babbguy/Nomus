@@ -1,5 +1,5 @@
 // Copyright 2026 babbguy
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-ALv2
 
 /**
  * PATCH /api/v1/auth/profile email change, as the Profile page sends it.

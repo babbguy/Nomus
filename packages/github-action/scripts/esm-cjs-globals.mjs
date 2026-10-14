@@ -1,5 +1,5 @@
 // Copyright 2026 babbguy
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-ALv2
 
 // ncc emits dist/index.js as an ES module (dist/package.json has
 // "type": "module"), but the bundled TypeScript compiler, which the scanner's

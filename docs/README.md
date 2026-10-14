@@ -1,6 +1,6 @@
 # Nomus Documentation
 
-**Nomus** is an open-source (Apache-2.0) AI regulatory applicability engine. It monitors AI-related regulations, keeps source-exact copies of them, scans codebases against generated rules, and produces signed attestations. You run it yourself.
+**Nomus** is a source-available (FSL-1.1-ALv2) AI regulatory applicability engine. It monitors AI-related regulations, keeps source-exact copies of them, scans codebases against generated rules, and produces signed attestations. You run it yourself.
 
 > **Disclaimer.** Nomus is a regulatory applicability tool, not a compliance certification. Its output is not legal advice. Have qualified counsel review anything you rely on.
 
@@ -113,4 +113,4 @@ Tests and lint: `npm run test:engine`, `npm run test:extensions`, `npm run lint`
 
 ## License
 
-Apache-2.0. See the `LICENSE` and `NOTICE` files in the repository root.
+From v1.2.0, FSL-1.1-ALv2 (Functional Source License, Version 1.1, ALv2 Future License); versions up to and including v1.1.0 remain under Apache-2.0. See the License section of the repository README and the `LICENSE` and `NOTICE` files in the repository root.
