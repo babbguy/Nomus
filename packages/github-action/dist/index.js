@@ -274047,7 +274047,7 @@ function formatSarifReport(findings, rootDir) {
 //# sourceMappingURL=sarif.js.map
 ;// CONCATENATED MODULE: ./src/findings.ts
 // Copyright 2026 babbguy
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-ALv2
 
 const findings_SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
 /** The repository checkout root: GITHUB_WORKSPACE on a runner, else the cwd. */

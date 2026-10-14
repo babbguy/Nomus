@@ -2,7 +2,7 @@
   "name": "@nomus/github-action",
   "version": "1.1.0",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "author": "babbguy",
   "repository": {
     "type": "git",

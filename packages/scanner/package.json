@@ -2,7 +2,7 @@
   "name": "@nomus/scanner",
   "version": "1.1.0",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "author": "babbguy",
   "repository": {
     "type": "git",
@@ -50,7 +50,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc",

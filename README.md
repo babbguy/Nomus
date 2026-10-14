@@ -13,8 +13,8 @@ that may apply, with citations back to the source text.
 > attestation from Nomus is evidence of what the tool evaluated, not a statement that a
 > system is compliant.
 
-This is a portfolio project, released under the Apache-2.0 license. It is not offered as a
-hosted service. Run it yourself with Docker or from source.
+This is a portfolio project, licensed under FSL-1.1-ALv2 from v1.2.0 (see [License](#license)).
+It is not offered as a hosted service. Run it yourself with Docker or from source.
 
 ## What it does
 
@@ -192,6 +192,27 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Starting with v1.2.0, Nomus is licensed under the
+[Functional Source License, Version 1.1, ALv2 Future License](LICENSE) (FSL-1.1-ALv2).
+Versions up to and including v1.1.0 remain under the Apache License, Version 2.0.
+
+You may use, copy, modify and redistribute Nomus for any purpose other than a Competing Use.
+The license defines a Competing Use as making the software available to others in a commercial
+product or service that:
+
+1. substitutes for the software;
+2. substitutes for any other product or service we offer using the software that exists as of
+   the date we make the software available; or
+3. offers the same or substantially similar functionality as the software.
+
+Internal use, non-commercial education, non-commercial research, and professional services you
+provide to a licensee are expressly permitted. Each version also becomes available under the
+Apache License, Version 2.0, on the second anniversary of the date it is made available. The
+[LICENSE](LICENSE) file is the full and binding text.
+
+For a commercial license, open a discussion titled "Commercial license" in this repository's
+[Discussions](https://github.com/babbguy/Nomus/discussions).
+
+See [NOTICE](NOTICE) for third-party attributions.
 
 Copyright 2026 babbguy

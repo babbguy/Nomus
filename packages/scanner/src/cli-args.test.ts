@@ -1,5 +1,5 @@
 // Copyright 2026 babbguy
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-ALv2
 
 import { describe, it, expect } from 'vitest';
 import { parseCliArgs } from './cli-args.js';

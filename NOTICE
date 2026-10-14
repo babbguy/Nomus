@@ -1,7 +1,10 @@
 Nomus
 Copyright 2026 babbguy
 
-This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Starting with v1.2.0, this product is licensed under the Functional Source
+License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2) (see LICENSE).
+Versions up to and including v1.1.0 remain under the Apache License,
+Version 2.0.
 
 Third-party content bundled in this repository:
 
