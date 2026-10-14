@@ -19,7 +19,8 @@ All notable changes to this project are documented here. The format follows
   discussion titled "Commercial license" in the repository's Discussions
   (https://github.com/babbguy/Nomus/discussions). The SPDX identifier in every `package.json`
   (including the VS Code extension manifest), the extension's bundled `LICENSE` and source file
-  headers is now `FSL-1.1-ALv2`.
+  headers is now `FSL-1.1-ALv2`. The scanner, MCP server and GitHub Action packages now ship their
+  own copy of the license text.
 
 ### Fixed
 - Scanner: two scans of the same repository could list findings in a different order, because the
