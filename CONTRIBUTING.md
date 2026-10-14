@@ -8,6 +8,14 @@ By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 Contributions are accepted under the project's license, the
 [Functional Source License, Version 1.1, ALv2 Future License](LICENSE) (FSL-1.1-ALv2).
 
+## Contributor License Agreement
+
+Contributions require a signed Contributor License Agreement ([CLA.md](CLA.md)).
+You sign it once, as a comment on your first pull request: the CLA bot posts
+instructions, and you reply with the sentence it asks for. Your signature covers
+all your later contributions. The CLA check on a pull request keeps failing until every
+commit author on it has signed.
+
 ## Getting set up
 
 Requirements: Node.js 20.19+ (or 22.12+) and npm. CI runs Node 22.
