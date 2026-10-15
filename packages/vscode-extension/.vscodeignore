@@ -5,5 +5,5 @@ esbuild.mjs
 *.ts
 !dist/**/*.js
 tests/**
-vitest.config.ts
+vitest.config.mts
 dist/**/*.map
