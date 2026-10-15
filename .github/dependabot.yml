@@ -48,6 +48,55 @@ updates:
       - dependency-name: "nginx"
         update-types: ["version-update:semver-minor"]
 
+  # npm: every workspace (engine, dashboard, packages/*) through the root
+  # package-lock.json.
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    # One pull request per month for all npm dependencies.
+    groups:
+      npm:
+        patterns: ["*"]
+    labels:
+      - "dependencies"
+    # Majors held back on purpose (CHANGELOG, "Dependencies"); each needs its
+    # own change. Like the rules above, these filter version updates only.
+    ignore:
+      # The workspace's own packages, versioned with each release.
+      - dependency-name: "nomus-scan"
+      - dependency-name: "@nomus/*"
+      # TypeScript 7 has no compiler API (the scanner uses it at runtime); typescript-eslint supports < 6.1.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # zod 4 changes the documented details of 400 responses and the MCP tool schemas.
+      - dependency-name: "zod"
+        update-types: ["version-update:semver-major"]
+      # pdf-parse 2 extracts PDF text differently, which would mark every PDF source as changed.
+      - dependency-name: "pdf-parse"
+        update-types: ["version-update:semver-major"]
+      # node-cron 4 refuses impossible dates such as "0 0 30 2 *" and stops the engine at startup.
+      - dependency-name: "node-cron"
+        update-types: ["version-update:semver-major"]
+      # better-sqlite3 13 and openai 7 require Node.js 22; Nomus supports Node.js 20.
+      - dependency-name: "better-sqlite3"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "openai"
+        update-types: ["version-update:semver-major"]
+      # @types/node follows the oldest supported Node.js line, which moves deliberately.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # @types/vscode must not be newer than engines.vscode (the oldest supported VS Code).
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # drizzle 1.0 is published as release candidates only.
+      - dependency-name: "drizzle-orm"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "drizzle-kit"
+        update-types: ["version-update:semver-major"]
+
   # GitHub Actions, pinned by commit SHA.
   - package-ecosystem: "github-actions"
     directory: "/"

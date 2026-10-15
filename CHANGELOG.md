@@ -36,8 +36,9 @@ All notable changes to this project are documented here. The format follows
 - **Security scanning.** CodeQL analyzes the TypeScript/JavaScript sources and the GitHub Actions
   workflows on pull requests and pushes to `develop` and `main` and weekly, and OpenSSF Scorecard
   scores the repository weekly and on pushes to `develop`, publishing its result for the README
-  badge. Dependabot proposes monthly grouped updates for the base images, the Compose images and
-  the GitHub Actions.
+  badge. Dependabot proposes monthly grouped updates for the base images, the Compose images, the
+  GitHub Actions and the npm dependencies of every workspace, holding back the majors listed under
+  "Dependencies" below.
 - Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
   export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
   every signed decision, revocation, case closure record and CI verdict, verifiable offline with the
