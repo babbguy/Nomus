@@ -34,7 +34,7 @@
     "cheerio": "^1.2.0",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.13",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.6.0",
     "openai": "^6.49.0",
     "pdf-parse": "^1.1.4",
     "pino": "^10.4.0",
