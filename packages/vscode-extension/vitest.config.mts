@@ -6,7 +6,7 @@ export default defineConfig({
     environment: 'node',
     alias: {
       // Mock vscode module — it's only available inside VS Code runtime
-      vscode: resolve(__dirname, 'tests/__mocks__/vscode.ts'),
+      vscode: resolve(import.meta.dirname, 'tests/__mocks__/vscode.ts'),
     },
   },
 });

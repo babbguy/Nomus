@@ -138,7 +138,9 @@ export async function processJob(job: ForgeJob): Promise<PvsResult> {
     updateJobStatus(job.id, 'processing');
 
     // Read raw content from disk
-    const rawContent = readFileSync(job.documentPath, job.fileType === 'pdf' ? undefined : 'utf-8');
+    const rawContent: Buffer | string = job.fileType === 'pdf'
+      ? readFileSync(job.documentPath)
+      : readFileSync(job.documentPath, 'utf-8');
 
     let parsedContent: string;
 

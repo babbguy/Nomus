@@ -176,16 +176,16 @@
     "watch": "node esbuild.mjs --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npx --yes @vscode/vsce@3 package --no-dependencies"
+    "package": "npx --yes @vscode/vsce@4 package --no-dependencies"
   },
   "dependencies": {
     "@nomus/scanner": "*"
   },
   "devDependencies": {
-    "@types/node": "^24.12.0",
+    "@types/node": "^24.19.2",
     "@types/vscode": "^1.85.0",
-    "esbuild": "^0.25.0",
-    "typescript": "~5.9.3",
-    "vitest": "^4.1.0"
+    "esbuild": "^0.28.2",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.4"
   }
 }

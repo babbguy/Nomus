@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@nomus/shared': resolve(__dirname, '../packages/shared/src/index.ts'),
-      '@nomus/chain': resolve(__dirname, '../packages/chain/src/index.ts'),
+      '@nomus/shared': resolve(import.meta.dirname, '../packages/shared/src/index.ts'),
+      '@nomus/chain': resolve(import.meta.dirname, '../packages/chain/src/index.ts'),
     },
   },
   test: {

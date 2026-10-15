@@ -11,6 +11,24 @@ import * as Sentry from '@sentry/react';
 
 let initialized = false;
 
+/**
+ * Collect nothing beyond the error itself. Sentry 11 collects user info,
+ * cookies, headers, bodies and query data unless told not to; every
+ * category is switched off explicitly (beforeSend still scrubs).
+ */
+const NO_DATA_COLLECTION: Sentry.BrowserOptions['dataCollection'] = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+};
+
 export function isErrorTrackingEnabled(): boolean {
   return initialized;
 }
@@ -24,6 +42,7 @@ export function initErrorTracking(): void {
       dsn,
       environment: import.meta.env.MODE,
       defaultIntegrations: false,
+      dataCollection: NO_DATA_COLLECTION,
       // Strip anything that could carry regulatory/customer data before send.
       beforeSend(event) {
         if (event.request) {
