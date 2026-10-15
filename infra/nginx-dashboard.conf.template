@@ -1,9 +1,11 @@
-# Dashboard container Nginx config.
-# Serves the React SPA and proxies same-origin API calls to the engine
-# container (compose service name "engine", port 3100).
+# Dashboard container Nginx config (template).
+# Serves the React SPA and proxies same-origin API calls to the engine.
+# The image's entrypoint renders this file at start, replacing
+# ${NOMUS_ENGINE_UPSTREAM} (host:port, default engine:3100, the Compose
+# service). Nginx runs unprivileged, so it listens on 8080.
 
 server {
-    listen 80;
+    listen 8080;
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
@@ -16,7 +18,7 @@ server {
 
     # API — the dashboard calls /api/v1/* on its own origin
     location /api/ {
-        proxy_pass http://engine:3100;
+        proxy_pass http://${NOMUS_ENGINE_UPSTREAM};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -26,7 +28,7 @@ server {
 
     # Server-Sent Events — long-lived, unbuffered
     location /api/v1/stream {
-        proxy_pass http://engine:3100;
+        proxy_pass http://${NOMUS_ENGINE_UPSTREAM};
         proxy_set_header Host $host;
         proxy_set_header Connection '';
         proxy_http_version 1.1;
@@ -38,7 +40,7 @@ server {
 
     # Published signing keys
     location /.well-known/ {
-        proxy_pass http://engine:3100;
+        proxy_pass http://${NOMUS_ENGINE_UPSTREAM};
         proxy_set_header Host $host;
     }
 

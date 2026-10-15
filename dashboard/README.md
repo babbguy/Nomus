@@ -16,7 +16,7 @@ npm run dev:dashboard     # in another: http://localhost:5173
 
 The Vite dev server proxies `/api` and `/.well-known` to `http://localhost:3100` (see `vite.config.ts`). In the engine's `.env`, `NOMUS_CORS_ORIGIN` should be `http://localhost:5173` (the `.env.example` default).
 
-With Docker Compose (`docker compose up --build`) the dashboard is served by nginx on `http://localhost:8080` and proxies `/api/` to the engine container; see `Dockerfile.dashboard` (repository root) and `infra/nginx-dashboard.conf`.
+With Docker Compose (`docker compose up --build`) the dashboard is served by nginx on `http://localhost:8080` and proxies `/api/` to the engine container; see `Dockerfile.dashboard` (repository root) and `infra/nginx-dashboard.conf.template`.
 
 The first login uses the admin account created from `NOMUS_ADMIN_EMAIL` / `NOMUS_ADMIN_PASSWORD` in the engine configuration.
 

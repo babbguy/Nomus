@@ -40,7 +40,8 @@ certification; have qualified counsel review anything you rely on.
 git clone https://github.com/babbguy/Nomus.git
 cd Nomus
 cp engine/.env.example engine/.env      # then edit the secrets in it
-docker compose up --build
+docker compose pull                     # published images; or build them: docker compose up --build
+docker compose up
 ```
 
 Edit `engine/.env` before the first start. At minimum set:
@@ -259,7 +260,8 @@ clean result when it could not reach the engine). Details: [scan reference](../a
 
 ```bash
 # Docker
-docker compose up --build         # build and start (add -d to detach)
+docker compose pull               # fetch the published images (NOMUS_VERSION pins a release)
+docker compose up                 # start (add -d to detach; --build builds from the checkout)
 docker compose logs -f engine     # engine logs
 docker compose down               # stop (data volume is kept)
 

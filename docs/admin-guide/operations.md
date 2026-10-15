@@ -99,7 +99,7 @@ curl http://localhost:3100/ready
 curl http://localhost:3100/api/v1/admin/status -H "Authorization: Bearer $ADMIN_API_KEY"
 ```
 
-Point any uptime checker you like (your own cron plus `curl`, Uptime Kuma, a cloud monitor) at `/health` and `/ready`. The Docker image and Compose file already include a container health check on `/health`.
+Point any uptime checker you like (your own cron plus `curl`, Uptime Kuma, a cloud monitor) at `/health` and `/ready`. The engine image has a container health check on `/ready`, and the dashboard image has one on its Nginx `/health`.
 
 Process level:
 
@@ -208,13 +208,17 @@ Set `NOMUS_REQUIRE_RULE_APPROVAL=true` if generated rules should wait for a huma
 
 The schema is created and extended automatically when the engine starts (additive changes only), so there is no separate migration step.
 
-Docker Compose:
+Docker Compose with the published images (back up the `nomus-data` volume first, see [Backup and restore](#backup-and-restore)):
 
 ```bash
-git pull
-docker compose up -d --build
+git fetch --tags && git checkout v1.2.0     # the compose file for the new release
+export NOMUS_VERSION=1.2.0
+docker compose pull
+docker compose up -d
 curl http://localhost:3100/ready
 ```
+
+If you build the images yourself, check out the new release and run `docker compose up -d --build` instead.
 
 Bare metal (`/opt/nomus/deploy.sh` does the same):
 

@@ -67,7 +67,8 @@ With Docker:
 
 ```bash
 cp engine/.env.example engine/.env   # edit the secrets in it
-docker compose up --build
+docker compose pull                  # published images; or build them: docker compose up --build
+docker compose up
 ```
 
 - Dashboard: http://localhost:8080
@@ -89,7 +90,7 @@ Tests and lint: `npm run test:engine`, `npm run test:extensions`, `npm run lint`
 
 ## System requirements
 
-- Node.js 20.19+ or 22.12+ for source installs (the dashboard build uses Vite 8; CI runs Node 22, the Docker images use Node 20)
+- Node.js 20.19+ or 22.12+ for source installs (the dashboard build uses Vite 8; CI runs Node 22, the Docker images use Node 22)
 - Docker with Compose v2 (for container installs)
 - SQLite is embedded (better-sqlite3); no separate database server
 - An LLM API key (Anthropic by default; Google and OpenAI providers are supported) for classification and translation features

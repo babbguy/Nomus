@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Container images.** Each release publishes `ghcr.io/babbguy/nomus-engine` and
+  `ghcr.io/babbguy/nomus-dashboard` for linux/amd64 and linux/arm64, tagged with the version
+  (`1.2.0`), the minor line (`1.2`) and `latest`, with SBOM and provenance attestations.
+  `docker-compose.yml` now runs these images (`NOMUS_VERSION` selects the tag, default
+  `latest`); `docker compose up --build` still builds them from the checkout.
+- **Release workflows.** A `vX.Y.Z` tag creates the GitHub release, with the `CHANGELOG.md`
+  section as its notes and the VS Code extension `.vsix` attached, and publishes the images.
+  Both refuse a tag that does not match the version of every package. A new CI check,
+  "Release packaging", runs on every pull request: the package versions agree, `CHANGELOG.md`
+  has a section for the current version, `npm pack` of the scanner and MCP server contains
+  every entry point, the extension packages with `vsce`, and both images build for both
+  platforms.
+
 ### Security
 - Dependencies upgraded to clear every high and critical `npm audit` advisory (1 critical, 14 high
   before). Fixed in production code: the MCP server's SDK (1.29.0 -> 1.32.1, with its express,
@@ -17,6 +31,15 @@ All notable changes to this project are documented here. The format follows
   esbuild's dev server).
 
 ### Changed
+- **Container images.** The engine image runs on Node.js 22 (Node.js 20 is end-of-life) and
+  no longer contains npm, npx, corepack or yarn, and its health check calls `GET /ready`
+  (database and signing keys) instead of `GET /health`. The dashboard image now runs Nginx as
+  the unprivileged `nginx` user and **listens on port 8080 instead of 80**: if you publish the
+  dashboard port yourself, change the container side to 8080 (the bundled
+  `docker-compose.yml` does). Set `NOMUS_ENGINE_UPSTREAM` (default `engine:3100`) to run the
+  dashboard image where the engine has another name. `infra/nginx-dashboard.conf` became
+  `infra/nginx-dashboard.conf.template`. Every image carries OCI labels for its version,
+  source revision and license.
 - **Dependencies.** Patch and minor updates across the workspace, plus these majors:
   TypeScript 6.0, ESLint 10, Vitest 5, Sentry 11, `@anthropic-ai/sdk` 0.134,
   `@hono/node-server` 2, pino 10, glob 13, lucide-react 1, esbuild 0.28 (VS Code extension),

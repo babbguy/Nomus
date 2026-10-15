@@ -34,7 +34,7 @@ Everything is local: no LLM provider, GitHub or regulator website is contacted.
 | Piece | What the gate uses |
 |-------|--------------------|
 | Engine | `engine/dist/index.js` in production mode (`NOMUS_ENV=production`, `NODE_ENV=production`) on a fresh SQLite database, with random secrets for each run |
-| Dashboard | `dashboard/dist` served on its own origin with `/api` proxied to the engine, like `infra/nginx-dashboard.conf` |
+| Dashboard | `dashboard/dist` served on its own origin with `/api` proxied to the engine, like `infra/nginx-dashboard.conf.template` |
 | LLM | `lib/fake-llm.mjs`, an OpenAI-compatible server (`OPENAI_BASE_URL`) that recognises each Nomus prompt and answers deterministically from the text it is given |
 | GitHub | `lib/fake-github.mjs`, a stateful fake of the REST endpoints the Action calls; it rejects what GitHub rejects (review comments outside the diff, too many annotations) |
 | Slack | `lib/fake-sink.mjs` as the alert webhook, so alerting is configured and nothing leaves the machine |
