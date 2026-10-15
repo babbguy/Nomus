@@ -9,7 +9,10 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - **Container images.** Each release publishes `ghcr.io/babbguy/nomus-engine` and
   `ghcr.io/babbguy/nomus-dashboard` for linux/amd64 and linux/arm64, tagged with the version
-  (`1.2.0`), the minor line (`1.2`) and `latest`, with SBOM and provenance attestations.
+  (`1.2.0`), the minor line (`1.2`) and `latest`. Each image is signed with cosign (keyless, by
+  the publish workflow's GitHub identity) and has an SPDX SBOM per platform and a SLSA build
+  provenance attestation (`gh attestation verify oci://ghcr.io/babbguy/nomus-engine:<tag> -R
+  babbguy/Nomus`); `SECURITY.md` has the verify commands.
   `docker-compose.yml` now runs these images (`NOMUS_VERSION` selects the tag, default
   `latest`); `docker compose up --build` still builds them from the checkout.
 - **Release workflows.** A `vX.Y.Z` tag creates the GitHub release, with the `CHANGELOG.md`
@@ -26,6 +29,11 @@ All notable changes to this project are documented here. The format follows
   [babbguy/nomus-action](https://github.com/babbguy/nomus-action), so workflows use
   `uses: babbguy/nomus-action@v1`. A registry whose credentials are not configured is skipped
   with a notice, and a manual run of each workflow is a dry run.
+- **Security scanning.** CodeQL analyzes the TypeScript/JavaScript sources and the GitHub Actions
+  workflows on pull requests and pushes to `develop` and `main` and weekly, and OpenSSF Scorecard
+  scores the repository weekly and on pushes to `develop`, publishing its result for the README
+  badge. Dependabot proposes monthly grouped updates for the base images, the Compose images and
+  the GitHub Actions.
 - Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
   export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
   every signed decision, revocation, case closure record and CI verdict, verifiable offline with the
@@ -226,6 +234,15 @@ All notable changes to this project are documented here. The format follows
   esbuild's dev server).
 
 ### Changed
+- **Pinned images.** The Dockerfiles' base images (`node:22-slim`, `nginxinc/nginx-unprivileged:1.30-alpine`)
+  and the Compose TLS profile's images are pinned by digest, keeping the tag for readability. The
+  TLS proxy moves from Nginx 1.27, which is end of life, to the current stable line, 1.30
+  (`nginx:1.30-alpine`), and Certbot is pinned to v5.8.0 instead of an untagged `latest`.
+- `SECURITY.md` lists the supported versions and the response to expect from a single
+  maintainer, covers the GitHub Action repository, and explains how to verify the images and the
+  npm packages (`npm audit signatures`). Private vulnerability reporting is enabled.
+- The README opens with a quick start (engine, CLI, VS Code, GitHub Action, MCP server) and a few
+  status badges.
 - The GitHub Action runs on Node.js 24 (`using: node24`); Node.js 20 is end of life.
 - **Package names.** The scanner package `@nomus/scanner` is now `nomus-scan` (imports become
   `nomus-scan` and `nomus-scan/corporate`) and the MCP server `@nomus/mcp-server` is now
@@ -310,6 +327,9 @@ All notable changes to this project are documented here. The format follows
   while the user has a temporary password.
 
 ### Fixed
+- The Compose TLS profile's proxy sent dashboard traffic to port 80, but the dashboard image's
+  unprivileged Nginx listens on 8080, so every dashboard page through the proxy failed with 502. It
+  now proxies to port 8080.
 - LLM provider fallback: when the primary provider failed, the fallback was sent the primary role's model ID
   (for example a Claude model sent to Google), so it failed exactly when it was needed. The fallback now runs
   its own provider's default model with that model's request rules, and is skipped, with a logged warning,
