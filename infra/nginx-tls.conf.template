@@ -52,7 +52,7 @@ server {
 
     # Dashboard (static; the dashboard container also proxies /api to the engine)
     location / {
-        proxy_pass http://dashboard:80;
+        proxy_pass http://dashboard:8080;
         proxy_set_header Host $host;
     }
 

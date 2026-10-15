@@ -18,6 +18,7 @@
 #   docker compose --profile tls up -d
 #
 # The engine reads its configuration from engine/.env (see engine/.env.example).
+# Third-party images are pinned by digest; Dependabot updates the digests.
 
 name: nomus
 
@@ -56,7 +57,7 @@ services:
   # ─── Optional TLS front proxy (profile: tls) ───────────────────────────
   nginx:
     profiles: ["tls"]
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine@sha256:ed84151ed2d47ef93c0939eb9b9754c6990db6092cd2081e11988a47a83d47ea
     container_name: nomus-proxy
     restart: unless-stopped
     environment:
@@ -75,7 +76,7 @@ services:
 
   certbot:
     profiles: ["tls"]
-    image: certbot/certbot
+    image: certbot/certbot:v5.8.0@sha256:f70ad0adbb7e117f0fe42a63c553f28ea451edabc0148757b6efcd9735acaa20
     container_name: nomus-certbot
     volumes:
       - ./infra/certbot/conf:/etc/letsencrypt
