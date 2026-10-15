@@ -2,14 +2,20 @@
 #
 # Quickstart (localhost):
 #   cp engine/.env.example engine/.env      # then edit the secrets in it
-#   docker compose up --build
+#   docker compose pull                     # published images from ghcr.io
+#   docker compose up -d
 #   -> dashboard  http://localhost:8080
-#   -> engine API http://localhost:3100  (GET /health)
+#   -> engine API http://localhost:3100  (GET /health, GET /ready)
+#
+# NOMUS_VERSION selects the image tag (default: latest), for example
+# NOMUS_VERSION=1.2.0 docker compose pull. To build the images from this
+# checkout instead, run docker compose up --build.
 #
 # Optional TLS front proxy (bring your own domain; see docs/admin-guide/deployment.md):
 #   export DOMAIN=nomus.example.com
-#   docker compose --profile tls run --rm -p 80:80 --entrypoint certbot certbot \n#     certonly --standalone -d "$DOMAIN" --email you@example.com --agree-tos
-#   docker compose --profile tls up -d --build
+#   docker compose --profile tls run --rm -p 80:80 --entrypoint certbot certbot \
+#     certonly --standalone -d "$DOMAIN" --email you@example.com --agree-tos
+#   docker compose --profile tls up -d
 #
 # The engine reads its configuration from engine/.env (see engine/.env.example).
 
@@ -17,6 +23,7 @@ name: nomus
 
 services:
   engine:
+    image: ghcr.io/babbguy/nomus-engine:${NOMUS_VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -31,21 +38,17 @@ services:
     environment:
       # Container paths; everything else comes from engine/.env.
       NOMUS_DB_PATH: /app/data/nomus.db
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    # Health check: built into the image (GET /ready).
 
   dashboard:
+    image: ghcr.io/babbguy/nomus-dashboard:${NOMUS_VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile.dashboard
     container_name: nomus-dashboard
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8080:8080"
     depends_on:
       engine:
         condition: service_healthy

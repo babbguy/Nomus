@@ -5,9 +5,13 @@
 #
 # The engine imports @nomus/shared, @nomus/chain and @nomus/scanner at runtime,
 # so all three workspace packages are built and shipped alongside it.
+# Published as ghcr.io/babbguy/nomus-engine (see .github/workflows/publish.yml).
 
 # ─── Stage 1: Install all dependencies (including dev, for the build) ─────
-FROM node:20-slim AS deps
+# Stages 1-2 produce platform-independent JavaScript, so they run on the build
+# host's platform even when building for another one; only the production
+# dependencies (native modules) are installed for the target platform.
+FROM --platform=$BUILDPLATFORM node:22-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -38,7 +42,7 @@ RUN npm run build -w packages/shared && \
     npm run build -w engine
 
 # ─── Stage 3: Production-only dependencies ────────────────────────────────
-FROM node:20-slim AS prod-deps
+FROM node:22-slim AS prod-deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -55,11 +59,15 @@ RUN npm ci --omit=dev \
     --include-workspace-root
 
 # ─── Stage 4: Runtime ─────────────────────────────────────────────────────
-FROM node:20-slim AS runtime
+FROM node:22-slim AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# The engine needs only the node binary at runtime: drop the package managers
+# (and their dependency trees) and create the data directory for SQLite
+# (mount a volume here to persist it). Everything else stays root-owned and
+# read-only to the runtime user.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
+      /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* && \
+    mkdir -p /app/data && chown node:node /app/data
 
 WORKDIR /app
 
@@ -76,19 +84,28 @@ COPY --from=build /app/packages/scanner/package.json ./packages/scanner/
 COPY --from=build /app/engine/dist ./engine/dist
 COPY --from=build /app/engine/package.json ./engine/
 
-# Data directory for SQLite (mount a volume here to persist it)
-RUN mkdir -p /app/data && chown -R node:node /app/data
-
 USER node
 
-ENV NODE_ENV=production
-ENV NOMUS_PORT=3100
-ENV NOMUS_DB_PATH=/app/data/nomus.db
-ENV NOMUS_LOG_FORMAT=json
+ENV NODE_ENV=production \
+    NOMUS_PORT=3100 \
+    NOMUS_DB_PATH=/app/data/nomus.db \
+    NOMUS_LOG_FORMAT=json
 
 EXPOSE 3100
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:3100/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+# /ready: the database is reachable and the signing keys are initialized.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.NOMUS_PORT||3100)+'/ready',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+
+ARG VERSION=dev
+ARG REVISION=unknown
+LABEL org.opencontainers.image.title="Nomus Engine" \
+      org.opencontainers.image.description="Nomus regulatory applicability engine (API, pipeline and scheduler)" \
+      org.opencontainers.image.source="https://github.com/babbguy/Nomus" \
+      org.opencontainers.image.url="https://github.com/babbguy/Nomus" \
+      org.opencontainers.image.documentation="https://github.com/babbguy/Nomus/blob/main/docs/admin-guide/deployment.md" \
+      org.opencontainers.image.licenses="FSL-1.1-ALv2" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
 
 CMD ["node", "engine/dist/index.js"]

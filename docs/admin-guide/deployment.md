@@ -24,7 +24,7 @@ How to run Nomus on your own machine or server. Nomus is self-hosted, source-ava
 ## Requirements
 
 - Linux, macOS or Windows host. The bare-metal example script targets Ubuntu 22.04 or newer.
-- Docker with Compose v2 for container installs, or Node.js 20.19+ (or 22.12+) for source and bare-metal installs.
+- Docker with Compose v2 for container installs (images for linux/amd64 and linux/arm64), or Node.js 20.19+ (or 22.12+) for source and bare-metal installs.
 - A few GB of RAM and disk are enough for evaluation; size disk for your raw snapshots (kept forever unless you set a retention period).
 - Outbound HTTPS to the regulation sources you enable and to your LLM provider.
 - An LLM API key. Anthropic is the default provider; Google and OpenAI are supported (see [Environment variables](#environment-variables)).
@@ -34,11 +34,26 @@ How to run Nomus on your own machine or server. Nomus is self-hosted, source-ava
 
 ## Docker Compose
 
-The repository ships `docker-compose.yml`, `Dockerfile` (engine) and `Dockerfile.dashboard` (Nginx serving the React build).
+Each release publishes two images to the GitHub Container Registry, for linux/amd64 and linux/arm64:
+
+| Image | Contents |
+|-------|----------|
+| `ghcr.io/babbguy/nomus-engine` | The engine (Node.js 22), running as the `node` user |
+| `ghcr.io/babbguy/nomus-dashboard` | Unprivileged Nginx serving the React build on port 8080 and proxying the API to the engine |
+
+Tags: the exact version (`1.2.0`), the minor line (`1.2`, which moves to each patch release) and `latest` (the newest release). A pre-release gets only its own version tag. Pin a version in production:
+
+```bash
+docker pull ghcr.io/babbguy/nomus-engine:1.2.0
+docker pull ghcr.io/babbguy/nomus-dashboard:1.2.0
+```
+
+The repository's `docker-compose.yml` runs both images. The repository also has their build files (`Dockerfile` for the engine, `Dockerfile.dashboard` for the dashboard), so you can build the images from a checkout instead.
 
 ```bash
 git clone https://github.com/babbguy/Nomus.git
 cd Nomus
+git checkout v1.2.0          # the release you deploy
 cp engine/.env.example engine/.env
 ```
 
@@ -58,16 +73,20 @@ openssl rand -hex 16   # NOMUS_ADMIN_BOOTSTRAP_KEY
 openssl rand -base64 18 # NOMUS_ADMIN_PASSWORD
 ```
 
-Start the stack:
+Start the stack from the published images. `NOMUS_VERSION` selects the image tag (default `latest`):
 
 ```bash
-docker compose up --build
+export NOMUS_VERSION=1.2.0
+docker compose pull
+docker compose up -d
 ```
+
+To build the images from your checkout instead, run `docker compose up -d --build`.
 
 | Service | Container | Host port | Notes |
 |---------|-----------|-----------|-------|
-| Dashboard | `nomus-dashboard` | 8080 | Nginx; proxies `/api`, `/.well-known` and the SSE stream to the engine |
-| Engine | `nomus-engine` | 3100 | `GET /health`; data in the `nomus-data` volume (`/app/data/nomus.db`) |
+| Dashboard | `nomus-dashboard` | 8080 | Nginx (container port 8080); proxies `/api`, `/.well-known` and the SSE stream to the engine |
+| Engine | `nomus-engine` | 3100 | Health check `GET /ready`; data in the `nomus-data` volume (`/app/data/nomus.db`) |
 
 Open http://localhost:8080 and sign in with `NOMUS_ADMIN_EMAIL` / `NOMUS_ADMIN_PASSWORD`. Verify the engine:
 
@@ -77,7 +96,13 @@ docker compose ps
 docker compose logs -f engine
 ```
 
-The engine service has a health check; the dashboard starts after it reports healthy. Add `-d` to `docker compose up` to run in the background.
+Both images have a health check. The engine's calls `GET /ready`, which checks that the database is reachable and the signing keys are loaded. The dashboard's calls Nginx's own `GET /health`. The dashboard starts after the engine reports healthy.
+
+The dashboard image proxies the API to `engine:3100`, the Compose service name, and Nginx does not start if that name cannot be resolved. To run the dashboard image anywhere else (another orchestrator or a different service name), set `NOMUS_ENGINE_UPSTREAM` to the engine's `host:port`:
+
+```bash
+docker run -d -p 8080:8080 -e NOMUS_ENGINE_UPSTREAM=nomus-engine.internal:3100 ghcr.io/babbguy/nomus-dashboard:1.2.0
+```
 
 The SQLite database lives in the named volume `nomus-data`. `docker compose down` keeps it; `docker compose down -v` deletes it.
 
@@ -95,7 +120,7 @@ docker compose --profile tls run --rm -p 80:80 --entrypoint certbot certbot \
   certonly --standalone -d "$DOMAIN" --email you@example.com --agree-tos
 
 # 2. Start everything with the proxy
-docker compose --profile tls up -d --build
+docker compose --profile tls up -d
 ```
 
 Set `NOMUS_CORS_ORIGIN=https://nomus.example.com` in `engine/.env` before step 2. Certificates are stored under `infra/certbot/`, which is created on the host by the first command. Keep the `DOMAIN` variable exported (or in a `.env` file next to `docker-compose.yml`) for later `docker compose --profile tls` commands.
@@ -292,7 +317,7 @@ Nomus stores everything in one SQLite file at `NOMUS_DB_PATH` (opened in WAL mod
 - Use TLS for anything reachable from the internet, and keep `NOMUS_CORS_ORIGIN` set to your real origin.
 - Keep `.env` out of version control and readable only by the service user: `chmod 600 .env`.
 - Restrict the data directory: `chmod 700 data`.
-- Run the engine as a non-root user where practical (the Docker image already runs as `node`).
+- Run the engine as a non-root user where practical (the engine image runs as `node`, the dashboard image as `nginx`).
 - Firewall: allow SSH, 80 and 443; do not expose 3100 or 8080 directly when a proxy is in front.
 - SSH: prefer key authentication and disable root login (`PasswordAuthentication no`, `PermitRootLogin no` in `/etc/ssh/sshd_config`) once you have key access working.
 - Keep the OS and Docker images updated.
