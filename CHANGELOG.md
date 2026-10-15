@@ -6,17 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Security
-- Dependencies upgraded to clear every high and critical `npm audit` advisory (1 critical, 14 high
-  before). Fixed in production code: the MCP server's SDK (1.29.0 -> 1.32.1, with its express,
-  proxy-addr, ip-address, qs and fast-uri dependencies), hono (CORS ReDoS and other advisories),
-  axios (also inlined in the GitHub Action bundle), undici, react-router and Sentry's
-  OpenTelemetry dependencies. Six moderate advisories remain, none reachable: `uuid` under
-  node-cron 3 (the advisory needs a caller-supplied buffer; node-cron only calls `uuid.v4()`),
-  and esbuild 0.18 under drizzle-kit's config loader (a development-only CLI that never starts
-  esbuild's dev server).
-
 ### Added
+- **Container images.** Each release publishes `ghcr.io/babbguy/nomus-engine` and
+  `ghcr.io/babbguy/nomus-dashboard` for linux/amd64 and linux/arm64, tagged with the version
+  (`1.2.0`), the minor line (`1.2`) and `latest`, with SBOM and provenance attestations.
+  `docker-compose.yml` now runs these images (`NOMUS_VERSION` selects the tag, default
+  `latest`); `docker compose up --build` still builds them from the checkout.
+- **Release workflows.** A `vX.Y.Z` tag creates the GitHub release, with the `CHANGELOG.md`
+  section as its notes and the VS Code extension `.vsix` attached, and publishes the images.
+  Both refuse a tag that does not match the version of every package. A new CI check,
+  "Release packaging", runs on every pull request: the package versions agree, `CHANGELOG.md`
+  has a section for the current version, `npm pack` of the scanner and MCP server contains
+  every entry point, the extension packages with `vsce`, and both images build for both
+  platforms.
 - Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
   export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
   every signed decision, revocation, case closure record and CI verdict, verifiable offline with the
@@ -206,6 +208,16 @@ All notable changes to this project are documented here. The format follows
   constraints and triggers that refuse updates and deletes on append-only tables. An edited
   migration stops the engine at startup instead of drifting.
 
+### Security
+- Dependencies upgraded to clear every high and critical `npm audit` advisory (1 critical, 14 high
+  before). Fixed in production code: the MCP server's SDK (1.29.0 -> 1.32.1, with its express,
+  proxy-addr, ip-address, qs and fast-uri dependencies), hono (CORS ReDoS and other advisories),
+  axios (also inlined in the GitHub Action bundle), undici, react-router and Sentry's
+  OpenTelemetry dependencies. Six moderate advisories remain, none reachable: `uuid` under
+  node-cron 3 (the advisory needs a caller-supplied buffer; node-cron only calls `uuid.v4()`),
+  and esbuild 0.18 under drizzle-kit's config loader (a development-only CLI that never starts
+  esbuild's dev server).
+
 ### Changed
 - **Default LLM models.** The classifier and translator now default to `claude-haiku-5-5` instead
   of `claude-haiku-4-5-20251001`, and the dashboard's LLM Providers page suggests
@@ -216,6 +228,15 @@ All notable changes to this project are documented here. The format follows
   OpenAI reasoning models refuse it. OpenAI requests use `max_completion_tokens` instead of the
   deprecated `max_tokens`, which reasoning models refuse. Cost estimates include the new models'
   rates and the current Claude Haiku 4.5 and Opus 4.6 rates.
+- **Container images.** The engine image runs on Node.js 22 (Node.js 20 is end-of-life) and
+  no longer contains npm, npx, corepack or yarn, and its health check calls `GET /ready`
+  (database and signing keys) instead of `GET /health`. The dashboard image now runs Nginx as
+  the unprivileged `nginx` user and **listens on port 8080 instead of 80**: if you publish the
+  dashboard port yourself, change the container side to 8080 (the bundled
+  `docker-compose.yml` does). Set `NOMUS_ENGINE_UPSTREAM` (default `engine:3100`) to run the
+  dashboard image where the engine has another name. `infra/nginx-dashboard.conf` became
+  `infra/nginx-dashboard.conf.template`. Every image carries OCI labels for its version,
+  source revision and license.
 - **Dependencies.** Patch and minor updates across the workspace, plus these majors:
   TypeScript 6.0, ESLint 10, Vitest 5, Sentry 11, `@anthropic-ai/sdk` 0.134,
   `@hono/node-server` 2, pino 10, glob 13, lucide-react 1, esbuild 0.28 (VS Code extension),

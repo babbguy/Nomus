@@ -82,11 +82,16 @@ engine which rules apply.
 git clone https://github.com/babbguy/Nomus.git
 cd Nomus
 cp engine/.env.example engine/.env     # then edit the secrets (see Configuration)
-docker compose up --build
+docker compose pull                    # images from ghcr.io; or build them: docker compose up --build
+docker compose up
 ```
 
 - Dashboard: http://localhost:8080
 - Engine API: http://localhost:3100 (`GET /health`)
+
+Each release publishes `ghcr.io/babbguy/nomus-engine` and `ghcr.io/babbguy/nomus-dashboard`
+(linux/amd64 and linux/arm64). Set `NOMUS_VERSION` (for example `NOMUS_VERSION=1.2.0`) to pin
+a release; the default is `latest`.
 
 `engine/.env.example` sets `NOMUS_ENV=development` and ships placeholder secrets so you can
 look around. The engine image also sets `NODE_ENV=production`, which turns on the production
@@ -101,7 +106,7 @@ proxy (Nginx + certbot) is available under the `tls` compose profile, see
 ### From source
 
 Requires Node.js 20.19 or newer (or 22.12+), the minimum for the dashboard's Vite 8 build. CI
-runs Node 22 and the Docker images use Node 20.
+runs Node 22 and the Docker images use Node 22.
 
 ```bash
 git clone https://github.com/babbguy/Nomus.git

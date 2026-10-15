@@ -1,16 +1,36 @@
-node_modules
+# Build context for Dockerfile and Dockerfile.dashboard (repository root).
+# Each Dockerfile copies only what it needs; this keeps the context small and
+# keeps local state and secrets out of it.
+
+# Dependencies and build output (rebuilt inside the image)
 **/node_modules
+**/dist
+**/*.tsbuildinfo
+**/coverage
+**/*.vsix
+
+# Version control, CI and editor state
 .git
 .github
 .claude
-CLAUDE.md
+**/CLAUDE.md
+.vscode
+.idea
+
+# Local data, logs and secrets
 data
-**/dist
-**/*.tsbuildinfo
+**/data/*.db*
+**/*.log
 **/.env
 **/.env.*
 !**/.env.example
-*.log
-coverage
-docs
+**/*.pem
+**/*.key
 infra/certbot
+
+# Not used by either image
+docs
+e2e
+packages/github-action
+packages/mcp-server
+packages/vscode-extension

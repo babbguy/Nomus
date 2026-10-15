@@ -97,14 +97,15 @@ Quickstart:
 
 ```bash
 cp engine/.env.example engine/.env     # then edit the secrets
-docker compose up --build
+docker compose pull                    # or build from the checkout: docker compose up --build
+docker compose up
 ```
 
 The dashboard is on http://localhost:8080 and the engine API on http://localhost:3100. The dashboard container is an nginx that serves the React app and proxies `/api/` to the engine, so browser calls are same-origin.
 
 | Problem | Check |
 |---------|-------|
-| Engine container restarts or is "unhealthy" | `docker compose logs engine`. The healthcheck calls `http://localhost:3100/health` inside the container. Most failures are the production configuration errors listed above, because the image sets `NODE_ENV=production`. |
+| Engine container restarts or is "unhealthy" | `docker compose logs engine`. The health check calls `GET /ready` on the engine's port inside the container, so it fails until the database opens and the signing keys load. Most failures are the production configuration errors listed above, because the image sets `NODE_ENV=production`. |
 | Dashboard container never starts | It waits for the engine healthcheck (`depends_on: service_healthy`). Fix the engine first. |
 | Data disappears after rebuild | Data lives in the named volume `nomus-data`, mounted at `/app/data`. `docker compose down -v` deletes it. |
 | Login works but you are bounced back to the login page over plain HTTP | The session cookie is marked `Secure` when `NOMUS_ENV=production`. Use HTTPS (see the TLS profile in `docker-compose.yml` and the [deployment guide](../admin-guide/deployment.md)), or keep `NOMUS_ENV=development` for a local try-out. |
@@ -113,10 +114,10 @@ The dashboard is on http://localhost:8080 and the engine API on http://localhost
 
 ## Reverse proxy
 
-If you put your own nginx in front of the engine (the repo's examples are `infra/nginx.conf`, `infra/nginx-dashboard.conf` and `infra/nginx-tls.conf.template`):
+If you put your own nginx in front of the engine (the repo's examples are `infra/nginx.conf`, `infra/nginx-dashboard.conf.template` and `infra/nginx-tls.conf.template`):
 
 - **502 Bad Gateway**: the engine is not running or `proxy_pass` points at the wrong host/port. Test `curl http://localhost:3100/health` from the proxy host. On SELinux systems you may need `setsebool -P httpd_can_network_connect 1`.
-- **Dashboard live updates stall or never arrive**: the Server-Sent Events endpoint `/api/v1/stream` must not be buffered. `infra/nginx-dashboard.conf` shows the settings used (`proxy_http_version 1.1`, `proxy_buffering off`, long `proxy_read_timeout`).
+- **Dashboard live updates stall or never arrive**: the Server-Sent Events endpoint `/api/v1/stream` must not be buffered. `infra/nginx-dashboard.conf.template` shows the settings used (`proxy_http_version 1.1`, `proxy_buffering off`, long `proxy_read_timeout`).
 - **Large uploads rejected (413)**: raise `client_max_body_size` (the example config uses 25m for `/api/`).
 - **Browser reports a CORS error**: `NOMUS_CORS_ORIGIN` must equal the exact origin the browser loads the dashboard from, including scheme and port (for example `http://localhost:5173` for `npm run dev:dashboard`, or `https://nomus.example.com`). It is a single value, not a list. If the dashboard and API share an origin through the proxy, CORS is not involved.
 

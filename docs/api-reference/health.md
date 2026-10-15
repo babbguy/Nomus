@@ -28,15 +28,15 @@ curl http://localhost:3100/health
 }
 ```
 
-Always `200` while the process is serving requests. The Docker Compose healthcheck uses this
-endpoint.
+Always `200` while the process is serving requests.
 
 ---
 
 ## GET /ready
 
 Reports whether the database is reachable and the signing keys are initialized. Rule promotion
-needs the signing keys, so the engine is not ready without them.
+needs the signing keys, so the engine is not ready without them. The engine image's container
+health check uses this endpoint.
 
 `200`:
 

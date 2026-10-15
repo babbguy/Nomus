@@ -104,6 +104,21 @@ The project follows git flow:
 `main` and `develop` are protected: changes land only through pull requests whose
 CI checks pass, and direct or force pushes are refused.
 
+On the release branch, set the version in every package and add the `## [X.Y.Z]` section
+to `CHANGELOG.md`:
+
+```bash
+npm version X.Y.Z --no-git-tag-version
+npm version X.Y.Z --no-git-tag-version --workspaces
+node scripts/check-version.mjs        # prints X.Y.Z when every package agrees
+```
+
+Pushing the `vX.Y.Z` tag runs two workflows. `release.yml` creates the GitHub release, with
+the `CHANGELOG.md` section as its notes and the VS Code extension `.vsix` attached.
+`publish.yml` pushes the `nomus-engine` and `nomus-dashboard` images to `ghcr.io`. Both
+refuse a tag that does not match the package versions. The CI check "Release packaging"
+runs the same packaging steps on every pull request.
+
 ## Commit and PR style
 
 - Use conventional-style commit messages (`feat:`, `fix:`, `docs:`, `refactor:`,

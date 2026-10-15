@@ -1,4 +1,4 @@
-// Serves the production dashboard build the way infra/nginx-dashboard.conf
+// Serves the production dashboard build the way infra/nginx-dashboard.conf.template
 // does: static files with an SPA fallback to index.html, /health answered
 // locally, and /api/ and /.well-known/ proxied to the engine on the same
 // origin (unbuffered, so Server-Sent Events stream through).

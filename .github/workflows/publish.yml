@@ -1,0 +1,110 @@
+# =============================================================================
+# Nomus — Publish container images
+# =============================================================================
+# A v* tag (for example v1.2.0) builds the engine and dashboard images for
+# linux/amd64 and linux/arm64 and pushes them to the GitHub Container Registry:
+#
+#   ghcr.io/babbguy/nomus-engine:1.2.0, :1.2, :latest
+#   ghcr.io/babbguy/nomus-dashboard:1.2.0, :1.2, :latest
+#
+# A pre-release tag (v1.3.0-rc.1) pushes only its own version tag. A manual run
+# (workflow_dispatch) is a dry run: it builds both images for both platforms
+# and pushes nothing.
+# =============================================================================
+
+name: Publish images
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Image (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: nomus-engine
+            dockerfile: Dockerfile
+            title: Nomus Engine
+            description: Nomus regulatory applicability engine (API, pipeline and scheduler)
+          - image: nomus-dashboard
+            dockerfile: Dockerfile.dashboard
+            title: Nomus Dashboard
+            description: Nomus web dashboard (Nginx serving the React build and proxying the engine API)
+    env:
+      PUSH: ${{ github.event_name == 'push' }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Tag matches the package versions
+        if: env.PUSH == 'true'
+        run: node scripts/check-version.mjs "$GITHUB_REF_NAME"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          # Put the labels on the multi-platform index too, where GHCR reads them.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          # latest follows the newest non-pre-release tag (flavor latest=auto).
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.licenses=FSL-1.1-ALv2
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/docs/admin-guide/deployment.md
+          annotations: |
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.licenses=FSL-1.1-ALv2
+
+      - name: Log in to the GitHub Container Registry
+        if: env.PUSH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and push on a tag)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
