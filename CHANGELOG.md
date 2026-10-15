@@ -233,10 +233,11 @@ All notable changes to this project are documented here. The format follows
   before). Fixed in production code: the MCP server's SDK (1.29.0 -> 1.32.1, with its express,
   proxy-addr, ip-address, qs and fast-uri dependencies), hono (CORS ReDoS and other advisories),
   axios (also inlined in the GitHub Action bundle), undici, react-router and Sentry's
-  OpenTelemetry dependencies. Six moderate advisories remain, none reachable: `uuid` under
-  node-cron 3 (the advisory needs a caller-supplied buffer; node-cron only calls `uuid.v4()`),
-  and esbuild 0.18 under drizzle-kit's config loader (a development-only CLI that never starts
-  esbuild's dev server).
+  OpenTelemetry dependencies. node-cron 3 -> 4 removes `uuid` from the engine. One moderate
+  advisory remains, not reachable: esbuild 0.18 under drizzle-kit's config loader (a
+  development-only CLI that never starts esbuild's dev server).
+- `NOMUS_SCRAPE_CRON` and `NOMUS_SCOUT_CRON` are validated at startup: an invalid or impossible
+  expression (such as `0 0 30 2 *`) is reported as a configuration error naming the setting.
 
 ### Changed
 - **Pinned images.** The Dockerfiles' base images (`node:22-slim`, `nginxinc/nginx-unprivileged:1.30-alpine`)

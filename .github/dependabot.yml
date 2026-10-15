@@ -77,9 +77,6 @@ updates:
       # pdf-parse 2 extracts PDF text differently, which would mark every PDF source as changed.
       - dependency-name: "pdf-parse"
         update-types: ["version-update:semver-major"]
-      # node-cron 4 refuses impossible dates such as "0 0 30 2 *" and stops the engine at startup.
-      - dependency-name: "node-cron"
-        update-types: ["version-update:semver-major"]
       # better-sqlite3 13 and openai 7 require Node.js 22; Nomus supports Node.js 20.
       - dependency-name: "better-sqlite3"
         update-types: ["version-update:semver-major"]

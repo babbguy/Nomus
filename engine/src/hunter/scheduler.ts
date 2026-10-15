@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { regulatorySources } from '../db/schema.js';
@@ -17,7 +17,7 @@ import { runFullAudit } from './data-auditor.js';
 import { checkSourceHealth } from './source-health-checker.js';
 import { startNotificationWorker, stopNotificationWorker } from '../cpg/notify/worker.js';
 
-const tasks: cron.ScheduledTask[] = [];
+const tasks: ScheduledTask[] = [];
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 // Grace window for due-ness so a source scraped just under its frequency ago

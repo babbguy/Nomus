@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import cron from 'node-cron';
+
+// A cron expression the scheduler accepts. Surrounding quotes are stripped (a
+// common .env shell-quoting issue); an invalid or impossible expression, such
+// as "0 0 30 2 *", is a configuration error rather than a crash at startup.
+const cronExpression = (fallback: string) => z.string().default(fallback)
+  .transform((v) => v.replace(/^['"]|['"]$/g, ''))
+  .refine((v) => cron.validate(v), { message: 'must be a valid, possible cron expression (for example "0 2 * * *")' });
 
 const envSchema = z.object({
   NOMUS_ENV: z.enum(['development', 'staging', 'production']).default('development'),
@@ -52,8 +60,8 @@ const envSchema = z.object({
   NOMUS_SENTRY_DSN: z.string().optional(),
   NOMUS_SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
 
-  // Scheduling — strip surrounding quotes (common .env shell-quoting issue)
-  NOMUS_SCRAPE_CRON: z.string().default('0 2 * * *').transform((v) => v.replace(/^['"]|['"]$/g, '')),
+  // Scheduling
+  NOMUS_SCRAPE_CRON: cronExpression('0 2 * * *'),
 
   // Raw snapshot retention (days). UNSET by default = raw snapshots are kept
   // FOREVER, because they are the byte-exact provenance record behind the
@@ -65,7 +73,7 @@ const envSchema = z.object({
   // Scout
   NOMUS_CONGRESS_GOV_API_KEY: z.string().default('DEMO_KEY'), // Free from https://api.congress.gov/sign-up/
   NOMUS_SCOUT_ENABLED: z.enum(['true', 'false']).default('true'),
-  NOMUS_SCOUT_CRON: z.string().default('0 */6 * * *').transform((v) => v.replace(/^['"]|['"]$/g, '')),
+  NOMUS_SCOUT_CRON: cronExpression('0 */6 * * *'),
   NOMUS_SCOUT_KEYWORD_THRESHOLD: z.coerce.number().min(0).max(1).default(0.15),
   NOMUS_SCOUT_AUTO_PROMOTE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
   NOMUS_SCOUT_LLM_BATCH_SIZE: z.coerce.number().int().min(1).max(20).default(10),
