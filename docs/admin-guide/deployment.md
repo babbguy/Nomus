@@ -231,10 +231,18 @@ The admin organization, bootstrap key and admin user are created on first start 
 | `NOMUS_GOOGLE_AI_KEY` | unset |
 | `NOMUS_OPENAI_API_KEY` | unset |
 | `NOMUS_LLM_CLASSIFIER_PROVIDER` | `anthropic` (`anthropic`, `google`, `openai`) |
-| `NOMUS_LLM_CLASSIFIER_MODEL` | `claude-haiku-4-5-20251001` |
+| `NOMUS_LLM_CLASSIFIER_MODEL` | `claude-haiku-5-5` |
 | `NOMUS_LLM_TRANSLATOR_PROVIDER` | `anthropic` |
-| `NOMUS_LLM_TRANSLATOR_MODEL` | `claude-haiku-4-5-20251001` |
+| `NOMUS_LLM_TRANSLATOR_MODEL` | `claude-haiku-5-5` |
 | `NOMUS_LLM_FALLBACK_PROVIDER` | `none` (`anthropic`, `google`, `openai`, `none`) |
+
+The model is a setting you can change: set the `*_MODEL` variables, or change the model under
+Admin, LLM Providers (a value saved there takes precedence over the environment). When you switch
+a role to another provider, set a model from that provider too. The models Nomus suggests are
+`claude-haiku-5-5` (Anthropic), `gemini-3.8-flash` (Google) and `gpt-6-luna` (OpenAI); any current
+chat model from the same provider also works. Claude 4.7 and later and OpenAI reasoning models do
+not accept a sampling temperature, so Nomus sends `temperature: 0` only to the older models that
+still accept it.
 
 ### Request limits
 

@@ -19,6 +19,17 @@ const MAX_RETRIES = 5;
 const BASE_DELAY = 2000;
 const MAX_DELAY = 60000;
 
+/**
+ * Whether `model` accepts a non-default `temperature`. Only the GPT-3.5 and
+ * GPT-4 families (gpt-4, gpt-4-turbo, gpt-4o, gpt-4.1 and their snapshots
+ * and fine-tunes) do; reasoning models (o-series, GPT-5 and later) reject it
+ * at their default reasoning effort. A model this check does not recognise
+ * gets no temperature, which every model accepts.
+ */
+export function acceptsTemperature(model: string): boolean {
+  return /^(?:ft:)?gpt-(?:3\.5|4)(?:[.-]|o|$)/.test(model);
+}
+
 export const openaiProvider: LLMProvider = {
   async generate(systemPrompt: string, userMessage: string, model: string): Promise<LLMResponse> {
     const client = getClient();
@@ -28,8 +39,11 @@ export const openaiProvider: LLMProvider = {
       try {
         const response = await client.chat.completions.create({
           model,
-          temperature: 0,
-          max_tokens: 16384,
+          // max_tokens is deprecated and refused by reasoning models;
+          // max_completion_tokens is accepted by every chat model.
+          max_completion_tokens: 16384,
+          // Deterministic sampling where the model still allows choosing it.
+          ...(acceptsTemperature(model) ? { temperature: 0 } : {}),
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage },

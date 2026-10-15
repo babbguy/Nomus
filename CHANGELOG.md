@@ -207,6 +207,15 @@ All notable changes to this project are documented here. The format follows
   migration stops the engine at startup instead of drifting.
 
 ### Changed
+- **Default LLM models.** The classifier and translator now default to `claude-haiku-5-5` instead
+  of `claude-haiku-4-5-20251001`, and the dashboard's LLM Providers page suggests
+  `gemini-3.8-flash` for Google (was `gemini-2.0-flash`, which Google has shut down) and
+  `gpt-6-luna` for OpenAI (was `gpt-4o-mini`, deprecated by OpenAI). A model you configured, in
+  the environment or on that page, is unchanged. `temperature: 0` is now sent only to models that
+  accept it (Claude 4.6 and earlier, the GPT-3.5 and GPT-4 families): Claude 4.7 and later and
+  OpenAI reasoning models refuse it. OpenAI requests use `max_completion_tokens` instead of the
+  deprecated `max_tokens`, which reasoning models refuse. Cost estimates include the new models'
+  rates and the current Claude Haiku 4.5 and Opus 4.6 rates.
 - **Dependencies.** Patch and minor updates across the workspace, plus these majors:
   TypeScript 6.0, ESLint 10, Vitest 5, Sentry 11, `@anthropic-ai/sdk` 0.134,
   `@hono/node-server` 2, pino 10, glob 13, lucide-react 1, esbuild 0.28 (VS Code extension),

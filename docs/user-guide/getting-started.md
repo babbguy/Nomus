@@ -131,10 +131,11 @@ satisfy them, but replace them anyway.
 ```env
 NOMUS_ANTHROPIC_API_KEY=...
 NOMUS_LLM_CLASSIFIER_PROVIDER=anthropic     # anthropic | google | openai
-NOMUS_LLM_CLASSIFIER_MODEL=claude-haiku-4-5-20251001
+NOMUS_LLM_CLASSIFIER_MODEL=claude-haiku-5-5
 NOMUS_LLM_TRANSLATOR_PROVIDER=anthropic
-NOMUS_LLM_TRANSLATOR_MODEL=claude-haiku-4-5-20251001
+NOMUS_LLM_TRANSLATOR_MODEL=claude-haiku-5-5
 # NOMUS_GOOGLE_AI_KEY=...   NOMUS_OPENAI_API_KEY=...   NOMUS_LLM_FALLBACK_PROVIDER=none
+# With provider google use e.g. gemini-3.8-flash; with openai, gpt-6-luna.
 ```
 
 ### Schedules
@@ -165,7 +166,7 @@ also seeds the regulatory sources and rule sets.
    curl -X POST http://localhost:3100/api/v1/settings/llm/test \
      -H "Authorization: Bearer $NOMUS_ADMIN_BOOTSTRAP_KEY" \
      -H "Content-Type: application/json" \
-     -d '{"provider":"anthropic","model":"claude-haiku-4-5-20251001"}'
+     -d '{"provider":"anthropic","model":"claude-haiku-5-5"}'
    ```
 
    A working provider answers `{"ok": true, "response": "OK", ...}`; a failure returns `400` with

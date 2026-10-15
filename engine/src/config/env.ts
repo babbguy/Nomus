@@ -16,12 +16,12 @@ const envSchema = z.object({
   // LLM — Anthropic
   NOMUS_ANTHROPIC_API_KEY: z.string().optional(),
   NOMUS_LLM_CLASSIFIER_PROVIDER: z.enum(['anthropic', 'google', 'openai']).default('anthropic'),
-  NOMUS_LLM_CLASSIFIER_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  NOMUS_LLM_CLASSIFIER_MODEL: z.string().default('claude-haiku-5-5'),
 
   // LLM — Google
   NOMUS_GOOGLE_AI_KEY: z.string().optional(),
   NOMUS_LLM_TRANSLATOR_PROVIDER: z.enum(['anthropic', 'google', 'openai']).default('anthropic'),
-  NOMUS_LLM_TRANSLATOR_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  NOMUS_LLM_TRANSLATOR_MODEL: z.string().default('claude-haiku-5-5'),
 
   // LLM — OpenAI
   NOMUS_OPENAI_API_KEY: z.string().optional(),

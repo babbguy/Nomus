@@ -26,6 +26,22 @@ const MAX_DELAY = 60000;
 /** Request timeout (ms) */
 const REQUEST_TIMEOUT = 120000;
 
+/**
+ * Whether `model` accepts a non-default `temperature`. Claude 4.7 and later
+ * models reject one with a 400, so it is sent only to the Claude 3 and
+ * Claude 4.0 to 4.6 models that still take it. A model this check does not
+ * recognise gets no temperature, which every model accepts.
+ * https://platform.claude.com/docs/en/about-claude/model-deprecations#api-parameter-deprecations
+ */
+export function acceptsTemperature(model: string): boolean {
+  if (/^claude-3[-.]/.test(model)) return true;
+  const m = /^claude-(?:opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(model);
+  if (!m) return false;
+  const major = Number(m[1]);
+  const minor = m[2] === undefined ? 0 : Number(m[2]);
+  return major < 4 || (major === 4 && minor <= 6);
+}
+
 export const anthropicProvider: LLMProvider = {
   async generate(systemPrompt: string, userMessage: string, model: string): Promise<LLMResponse> {
     const client = getClient();
@@ -36,7 +52,8 @@ export const anthropicProvider: LLMProvider = {
         const response = await client.messages.create({
           model,
           max_tokens: 16384,
-          temperature: 0,
+          // Deterministic sampling where the model still allows choosing it.
+          ...(acceptsTemperature(model) ? { temperature: 0 } : {}),
           system: systemPrompt,
           messages: [{ role: 'user', content: userMessage }],
         });

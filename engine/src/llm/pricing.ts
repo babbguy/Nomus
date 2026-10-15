@@ -2,7 +2,10 @@
  * LLM Token Pricing Table
  *
  * All costs are in dollars per 1 million tokens.
- * Prices are updated as of March 2026.
+ * Each entry is the model's base (standard tier, shortest prompt) rate. The
+ * default models (claude-haiku-5-5, gemini-3.8-flash, gpt-6-luna) and the
+ * other current Claude models were checked against the providers' pricing
+ * pages in October 2026; the others are the rates when they were added.
  * Fallback to conservative estimates for unknown models.
  */
 
@@ -15,14 +18,16 @@ interface ModelPricing {
 
 const MODEL_PRICING: Record<string, ModelPricing> = {
   // Anthropic
-  'claude-opus-4-6':            { inputPer1M: 15.00, outputPer1M: 75.00 },
+  'claude-haiku-5-5':           { inputPer1M: 0.10,  outputPer1M: 0.50 },  // prompts up to 100K tokens
+  'claude-opus-4-6':            { inputPer1M: 5.00,  outputPer1M: 25.00 },
   'claude-sonnet-4-6':          { inputPer1M: 3.00,  outputPer1M: 15.00 },
-  'claude-haiku-4-5-20251001':  { inputPer1M: 0.80,  outputPer1M: 4.00 },
+  'claude-haiku-4-5-20251001':  { inputPer1M: 1.00,  outputPer1M: 5.00 },
   'claude-3-5-sonnet-20241022': { inputPer1M: 3.00,  outputPer1M: 15.00 },
   'claude-3-5-haiku-20241022':  { inputPer1M: 0.80,  outputPer1M: 4.00 },
   'claude-3-haiku-20240307':    { inputPer1M: 0.25,  outputPer1M: 1.25 },
 
   // Google
+  'gemini-3.8-flash':           { inputPer1M: 0.75,  outputPer1M: 3.75 },  // until 2026-12-31; 1.50 / 7.50 from 2027-01-01
   'gemini-2.0-flash':           { inputPer1M: 0.10,  outputPer1M: 0.40 },
   'gemini-2.0-flash-lite':      { inputPer1M: 0.075, outputPer1M: 0.30 },
   'gemini-1.5-flash':           { inputPer1M: 0.075, outputPer1M: 0.30 },
@@ -30,6 +35,7 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   'gemini-2.5-pro':             { inputPer1M: 1.25,  outputPer1M: 10.00 },
 
   // OpenAI
+  'gpt-6-luna':                 { inputPer1M: 0.10,  outputPer1M: 0.50 },  // prompts up to 272K tokens
   'gpt-4o':                     { inputPer1M: 2.50,  outputPer1M: 10.00 },
   'gpt-4o-mini':                { inputPer1M: 0.15,  outputPer1M: 0.60 },
   'gpt-4-turbo':                { inputPer1M: 10.00, outputPer1M: 30.00 },

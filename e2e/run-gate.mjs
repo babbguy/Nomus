@@ -124,9 +124,11 @@ async function main() {
     NOMUS_OPENAI_API_KEY: 'sk-gate-fake-llm',
     OPENAI_BASE_URL: `${llm.url}/v1`,
     NOMUS_LLM_CLASSIFIER_PROVIDER: 'openai',
-    NOMUS_LLM_CLASSIFIER_MODEL: 'gpt-4o-mini',
+    // OpenAI's suggested model (as in the dashboard); the fake refuses the
+    // parameters that model refuses.
+    NOMUS_LLM_CLASSIFIER_MODEL: 'gpt-6-luna',
     NOMUS_LLM_TRANSLATOR_PROVIDER: 'openai',
-    NOMUS_LLM_TRANSLATOR_MODEL: 'gpt-4o-mini',
+    NOMUS_LLM_TRANSLATOR_MODEL: 'gpt-6-luna',
     NOMUS_LLM_FALLBACK_PROVIDER: 'none',
     // No scheduled scraping or Scout news cycle during the run: both fetch
     // the live internet. (Feb 30 never comes.) The gate drives the pipeline

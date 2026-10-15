@@ -138,6 +138,17 @@ function cpgCompile(user) {
   return '{}';
 }
 
+// Parameters the real API refuses, so a request the provider would reject
+// fails here too: max_tokens is refused by reasoning models (every model
+// outside the GPT-3.5 and GPT-4 families), and so is a non-default temperature.
+const refusedParameter = (body) => {
+  const reasoning = !/^(?:ft:)?gpt-(?:3\.5|4)(?:[.-]|o|$)/.test(String(body.model ?? ''));
+  if (!reasoning) return null;
+  if (body.max_tokens !== undefined) return "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.";
+  if (body.temperature !== undefined && body.temperature !== 1) return "Unsupported value: 'temperature' does not support this value with this model. Only the default (1) value is supported.";
+  return null;
+};
+
 /** Start the fake LLM on `port` (0 = any). Every request is appended to `logFile`. */
 export function startFakeLlm({ port = 0, logFile }) {
   const calls = [];
@@ -146,13 +157,23 @@ export function startFakeLlm({ port = 0, logFile }) {
     for await (const c of req) body += c;
     let parsed = {};
     try { parsed = JSON.parse(body); } catch { /* answered below */ }
+    const refused = refusedParameter(parsed);
+    if (refused) {
+      const entry = { t: new Date().toISOString(), url: req.url, kind: 'refused-parameter', model: parsed.model, error: refused };
+      calls.push(entry);
+      if (logFile) fs.appendFileSync(logFile, `${JSON.stringify(entry)}
+`);
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: refused, type: 'invalid_request_error', param: null, code: 'unsupported_parameter' } }));
+      return;
+    }
     const msgs = Array.isArray(parsed.messages) ? parsed.messages : [];
     const text = (m) => (typeof m?.content === 'string' ? m.content : Array.isArray(m?.content) ? m.content.map((p) => p.text ?? '').join('') : '');
     const system = text(msgs.find((m) => m.role === 'system'));
     const user = text(msgs.find((m) => m.role === 'user'));
     let kind; let content;
     try { [kind, content] = respond(system, user); } catch (e) { kind = 'handler-error'; content = '{}'; }
-    const entry = { t: new Date().toISOString(), url: req.url, kind, system: system.slice(0, 160), user: user.slice(0, 300), content: String(content).slice(0, 300) };
+    const entry = { t: new Date().toISOString(), url: req.url, kind, model: parsed.model, system: system.slice(0, 160), user: user.slice(0, 300), content: String(content).slice(0, 300) };
     // CPG compile prompts are kept whole, so the gate can prove no example code was sent.
     if (kind === 'cpg-compile') entry.requestBody = body;
     calls.push(entry);
