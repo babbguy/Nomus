@@ -89,6 +89,7 @@ export default function RuleManager() {
   }, [activeSourceId, jurisdiction, includeInactive, offset]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: the loader only sets state after its awaited request settles
     void load();
   }, [load]);
 

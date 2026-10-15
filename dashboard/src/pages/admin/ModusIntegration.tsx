@@ -93,6 +93,7 @@ export default function ModusIntegration() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: the loader only sets state after its awaited request settles
     load();
     const interval = setInterval(load, 60000);
     return () => clearInterval(interval);

@@ -28,10 +28,19 @@ export default function BadgePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  function load() {
+  // A different org starts a new load: reset during render (not in the
+  // effect) so the previous org's badge or error is never shown for it.
+  const [loadedOrg, setLoadedOrg] = useState(org);
+  if (loadedOrg !== org) {
+    setLoadedOrg(org);
+    if (org) {
+      setLoading(true);
+      setLoadError(null);
+    }
+  }
+
+  function fetchConfig() {
     if (!org) return;
-    setLoading(true);
-    setLoadError(null);
     api.get(`/badge/${org.slug}/config`).then((r) => {
       setConfig(r.data);
       setLoading(false);
@@ -41,8 +50,15 @@ export default function BadgePage() {
     });
   }
 
+  function retry() {
+    if (!org) return;
+    setLoading(true);
+    setLoadError(null);
+    fetchConfig();
+  }
+
   useEffect(() => {
-    load();
+    fetchConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org]);
 
@@ -79,7 +95,7 @@ export default function BadgePage() {
   }
 
   if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
-  if (loadError) return <ErrorState message={loadError} onRetry={load} />;
+  if (loadError) return <ErrorState message={loadError} onRetry={retry} />;
 
   return (
     <div>

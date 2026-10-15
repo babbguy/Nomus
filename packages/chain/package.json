@@ -23,6 +23,6 @@
     "build": "tsc"
   },
   "dependencies": {
-    "ethers": "^6.14.3"
+    "ethers": "^6.17.0"
   }
 }
