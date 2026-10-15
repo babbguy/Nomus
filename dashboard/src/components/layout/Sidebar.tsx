@@ -50,7 +50,7 @@ const GOVERNANCE_ICONS: Record<string, React.ComponentType<{ size?: number }>> =
   '/governance': Gavel,
   '/governance/policies': FileCheck2,
   '/governance/cases': FolderGit2,
-  '/governance/exceptions': ShieldOff, Plug,
+  '/governance/exceptions': ShieldOff,
   '/governance/boards': UsersRound,
   '/governance/quorum': Scale,
   '/governance/access': KeyRound,

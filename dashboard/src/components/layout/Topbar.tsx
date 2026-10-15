@@ -77,6 +77,7 @@ export default function Topbar() {
       {/* Mobile menu button */}
       <button
         onClick={toggleSidebar}
+        aria-label="Open navigation"
         className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition md:hidden"
       >
         <Menu size={20} />

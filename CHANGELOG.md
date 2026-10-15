@@ -332,6 +332,9 @@ All notable changes to this project are documented here. The format follows
   while the user has a temporary password.
 
 ### Fixed
+- Dashboard: a window narrowed below 768 px (or a rotated tablet) kept the sidebar open over the
+  page. Crossing the breakpoint now closes it on narrow screens and opens it on wide ones. On a
+  phone the footer wraps and drops its tagline, and the menu button is labelled for screen readers.
 - Corporate policy governance: the exceptions page showed **Revoke** to anyone holding
   `decision.revoke` in any scope, and the server then refused those without it on every
   repository the exception covers. Each listed exception now carries `viewer.revoke`, the server's
