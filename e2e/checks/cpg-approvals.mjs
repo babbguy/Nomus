@@ -11,7 +11,8 @@
 // against the published instance key. Runs after every other cpg-* area,
 // because decisions bind (repo, fingerprint) across branches. Governance is
 // switched on for this area and off again at the end, and the grants given to
-// dev@ (self-approval check) and legal-reviewer@ (exception.approve) are revoked.
+// dev@ (self-approval check), legal-reviewer@ (exception.approve) and
+// ai-reviewer@ (decision.revoke on another repository) are revoked.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -69,6 +70,7 @@ export async function cpgApprovalsChecks(ctx) {
     enable.status === 200 && typeof keyRes.json?.key === 'string' && devGrant.status === 201, '200, key, 201', `${enable.status} ${keyRes.status} ${devGrant.status}`)) return;
 
   let legalGrant = null;
+  let revokerGrant = null;
   try {
     const repo = preparePolicyRepo(ctx, path.join(work, 'policy-repo'));
     const cli = path.join(repoRoot, 'packages', 'scanner', 'dist', 'index.js');
@@ -187,12 +189,30 @@ export async function cpgApprovalsChecks(ctx) {
         && again.status === 409 && again.json?.code === 'already_revoked',
       '201, needs_review, in_review, 409 already_revoked', `${revoked.status} ${afterRevoke?.status} ${reopened} ${again.status} ${again.json?.code}`);
 
+    // ── who may revoke a standing exception: decision.revoke on every repository its pattern touches ──
+    const revokerRole = await owner.client.post('/api/v1/cpg/roles', { key: 'gate_repo_revoker', name: 'Gate Repo Revoker', permissions: ['case.read', 'decision.revoke'] });
+    revokerGrant = await owner.client.post(`/api/v1/cpg/users/${users['ai-reviewer'].id}/grants`, { roleId: revokerRole.json?.id, scopeType: 'repo', scopeId: 'gate-org/ui-repo' });
+    const unused = await exceptions.post('/api/v1/cpg/proposals', {
+      scope: 'standing', expiresAt: inDays(30), rationale: RATIONALE,
+      pattern: { repos: [REPO], paths: ['src/unused/**'], policyKey: 'corp.no-direct-openai', policyVersion: legacyVersion },
+    });
+    await ai.post(`/api/v1/cpg/proposals/${unused.json?.id}/votes`, { vote: 'approve' });
+    const unusedId = (await legal.post(`/api/v1/cpg/proposals/${unused.json?.id}/votes`, { vote: 'approve' })).json?.decisionIds?.[0];
+    const mayRevoke = async (client) => (await client.get('/api/v1/cpg/exceptions')).json?.items?.find((x) => x.id === unusedId)?.viewer?.revoke;
+    const [byOwner, byAi] = [await mayRevoke(exceptions), await mayRevoke(ai)];
+    const refused = await ai.post(`/api/v1/cpg/decisions/${unusedId}/revoke`, { reason: 'Gate: revoking from another repository.' });
+    gate.check('GET /cpg/exceptions says who may revoke the src/unused/** exception: exceptions@ (Exception Approver) yes; ai-reviewer@ (decision.revoke on another repository only) no, and its revocation is 403',
+      revokerGrant.status === 201 && !!unusedId && byOwner === true && byAi === false && refused.status === 403,
+      'grant 201, exception active, true / false, 403', `${revokerGrant.status} ${unusedId ? 'active' : 'not finalized'} ${byOwner} / ${byAi}, ${refused.status}`);
+
     // ── 11 (5b). the decision pages in a browser, with a pending proposal to vote on ──
     const pending = await ai.post('/api/v1/cpg/proposals', { caseId, scope: 'snippet', outcome: 'approve', fingerprints: [legacy], expiresAt: inDays(30), rationale: RATIONALE });
     if (gate.check('ai-reviewer@ proposes approving the legacy finding again after the revocation: pending, 1 of 2',
       pending.status === 201 && pending.json?.status === 'pending', '201 pending', `${pending.status} ${pending.json?.status}`)) {
-      await approvalPageChecks(ctx, { caseId, pendingId: pending.json.id, status: () => status(legacy) });
+      await approvalPageChecks(ctx, { caseId, pendingId: pending.json.id, status: () => status(legacy), revocableProposalId: unused.json?.id });
     }
+    const cleanup = await exceptions.post(`/api/v1/cpg/decisions/${unusedId}/revoke`, { reason: 'Gate: the revocation checks are done.' });
+    gate.equal('exceptions@ revokes the src/unused/** exception after the page checks', cleanup.status, 201);
 
     // ── Phase 6 (engine): the CI verdict on this branch, then the merged PR closes the case ──
     const ci = ctx.data.api.withKey(keyRes.json.key);
@@ -224,6 +244,7 @@ export async function cpgApprovalsChecks(ctx) {
     data.cpg.decisions = { piiStatus: rejected?.status, legacyStatus: (await status(legacy))?.status };
   } finally {
     const revoke = await owner.client.post(`/api/v1/cpg/grants/${devGrant.json?.id}/revoke`, { reason: 'Gate: self-approval check done' });
+    if (revokerGrant?.json?.id) await owner.client.post(`/api/v1/cpg/grants/${revokerGrant.json.id}/revoke`, { reason: 'Gate: revocation checks done' });
     if (legalGrant) {
       const revokeLegal = await owner.client.post(`/api/v1/cpg/grants/${legalGrant.json?.id}/revoke`, { reason: 'Gate: standing exception check done' });
       gate.equal("legal-reviewer@'s Exception Approver grant revoked", revokeLegal.status, 200);
