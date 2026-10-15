@@ -226,6 +226,7 @@ All notable changes to this project are documented here. The format follows
   esbuild's dev server).
 
 ### Changed
+- The GitHub Action runs on Node.js 24 (`using: node24`); Node.js 20 is end of life.
 - **Package names.** The scanner package `@nomus/scanner` is now `nomus-scan` (imports become
   `nomus-scan` and `nomus-scan/corporate`) and the MCP server `@nomus/mcp-server` is now
   `nomus-mcp`. The published `nomus-mcp` bundles the private `@nomus/shared` code and depends on
