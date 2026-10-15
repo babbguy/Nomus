@@ -271,6 +271,10 @@ All notable changes to this project are documented here. The format follows
   while the user has a temporary password.
 
 ### Fixed
+- LLM provider fallback: when the primary provider failed, the fallback was sent the primary role's model ID
+  (for example a Claude model sent to Google), so it failed exactly when it was needed. The fallback now runs
+  its own provider's default model with that model's request rules, and is skipped, with a logged warning,
+  when it has no API key or is not a known provider.
 - A second developer signing in to VS Code in the same organization revoked the first
   developer's key. Signing in now replaces only your own extension key.
 - Corporate policy governance: a repository named as `github.com/owner/name` and as `owner/name`

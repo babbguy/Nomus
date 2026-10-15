@@ -157,6 +157,16 @@ export function startFakeLlm({ port = 0, logFile }) {
     for await (const c of req) body += c;
     let parsed = {};
     try { parsed = JSON.parse(body); } catch { /* answered below */ }
+    // Anthropic's Messages API (the engine is pointed here with ANTHROPIC_BASE_URL) is always "down": a
+    // primary provider that fails, so the gate can show the fallback provider answering with its own model.
+    if (req.url.startsWith('/v1/messages')) {
+      const entry = { t: new Date().toISOString(), url: req.url, kind: 'primary-down', model: parsed.model };
+      calls.push(entry);
+      if (logFile) fs.appendFileSync(logFile, `${JSON.stringify(entry)}\n`);
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'Gate fake: this provider is unavailable.' } }));
+      return;
+    }
     const refused = refusedParameter(parsed);
     if (refused) {
       const entry = { t: new Date().toISOString(), url: req.url, kind: 'refused-parameter', model: parsed.model, error: refused };

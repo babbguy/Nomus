@@ -156,6 +156,26 @@ export async function cpgPolicyChecks(ctx) {
   gate.check('the fake-LLM log shows each compile prompt carried the policy text and none of the example code', compileCalls.length === 4 && carriedText && leaked.length === 0,
     'policy text present, example code absent', `${compileCalls.length} prompts, text ${carriedText}, leaked ${leaked.length}`);
 
+  // ── 6b. provider fallback: the fallback runs its own model ──────
+  // Anthropic is the translator's provider (claude-haiku-5-5) and the fake refuses every request to it; OpenAI
+  // is the fallback. The compile must be answered by OpenAI with OpenAI's default model, never the Claude ID.
+  const translatorCfg = (provider, model) => ({ translator: { provider, model }, fallback: { provider: provider === 'openai' ? 'none' : 'openai' } });
+  const fbKey = await adminKey.put('/api/v1/settings/llm/api-keys', { anthropic: 'sk-ant-gate-fake-primary' });
+  const fbSet = await adminKey.put('/api/v1/settings/llm', translatorCfg('anthropic', 'claude-haiku-5-5'));
+  const fbMark = ctx.llm.calls.length;
+  const cFallback = await compile(TEXT.taste, [{ path: 'src/app/ui.js', code: 'export const x = 1;' }]);
+  const fbCalls = ctx.llm.calls.slice(fbMark);
+  const fbRestore = await adminKey.put('/api/v1/settings/llm', translatorCfg('openai', 'gpt-6-luna'));
+  const fbDown = fbCalls.filter((c) => c.kind === 'primary-down');
+  const fbAnswered = fbCalls.filter((c) => c.kind === 'cpg-compile');
+  gate.check('provider fallback: with Anthropic (claude-haiku-5-5) failing, the compile is answered by the OpenAI fallback with gpt-6-luna, and no Claude model ID reaches OpenAI',
+    fbKey.status === 200 && fbSet.status === 200 && fbRestore.status === 200 && cFallback.status === 201 && cFallback.json?.status === 'rejected_unexpressible'
+      && cFallback.json?.provider === 'openai' && cFallback.json?.model === 'gpt-6-luna'
+      && fbDown.length === 1 && fbDown[0].model === 'claude-haiku-5-5'
+      && fbAnswered.length === 1 && fbAnswered[0].model === 'gpt-6-luna' && fbCalls.every((c) => c.kind === 'primary-down' || c.model === 'gpt-6-luna'),
+    'primary tried once with claude-haiku-5-5; fallback request model and compile record: openai / gpt-6-luna',
+    `${fbKey.status}/${fbSet.status}/${fbRestore.status} ${cFallback.status} ${cFallback.json?.status} ${cFallback.json?.provider}/${cFallback.json?.model}; fake log: ${fbCalls.map((c) => `${c.kind}:${c.model}`).join(', ')}`);
+
   // ── 7. corp.no-direct-openai: four-eyes, activation, bundle ──────
   const p1 = await author.post('/api/v1/cpg/policies', { compileRecordId: cOpenai.json?.id, policyKey: 'corp.no-direct-openai', title: 'No direct OpenAI calls', tier: 'prohibited', owningBoardIds: [aiId, legalId], graceDays: 0 });
   const p1Version = p1.json?.policy?.pendingVersionId;
