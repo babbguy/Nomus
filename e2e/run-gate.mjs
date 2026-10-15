@@ -123,6 +123,8 @@ async function main() {
     // Every LLM role goes to the deterministic fake (OpenAI-compatible).
     NOMUS_OPENAI_API_KEY: 'sk-gate-fake-llm',
     OPENAI_BASE_URL: `${llm.url}/v1`,
+    // Anthropic also points at the fake, which refuses every request: the cpg-policy area uses it as a failing primary.
+    ANTHROPIC_BASE_URL: llm.url,
     NOMUS_LLM_CLASSIFIER_PROVIDER: 'openai',
     // OpenAI's suggested model (as in the dashboard); the fake refuses the
     // parameters that model refuses.
