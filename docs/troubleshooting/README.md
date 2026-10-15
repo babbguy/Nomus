@@ -77,6 +77,8 @@ NOMUS_SCRAPE_CRON=0 2 * * *
 NOMUS_SCRAPE_CRON="0 2 * * *"
 ```
 
+The engine refuses to start on an invalid or impossible expression (such as `0 0 30 2 *`) and names the setting. To turn scheduled scraping or Scout off, set `NOMUS_SCRAPE_ENABLED=false` or `NOMUS_SCOUT_ENABLED=false` rather than an expression that never fires.
+
 ### PM2 (running without Docker)
 
 The repository ships `ecosystem.config.cjs` (and an `/opt/nomus` variant at `infra/ecosystem.cjs`). The engine uses SQLite, so run exactly one instance in `fork` mode, never cluster mode.
