@@ -1,7 +1,8 @@
 // 8. Regulation pipeline through the manual-upload path, with the fake LLM:
 // uploading the Illinois AI Video Interview Act (820 ILCS 42) produces the
-// expected signed rules; an identical re-upload changes nothing; and the
-// upload path never touches the live source URL or its scrape health.
+// expected signed rules; an identical re-upload changes nothing and does not
+// ask the LLM again; and the upload path never touches the live source URL or
+// its scrape health.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -83,7 +84,9 @@ export async function pipelineChecks(ctx) {
   gate.equal('re-upload: no policy events', r2.newEvents.filter((e) => e.event?.startsWith('policy.')).map((e) => e.event), []);
   gate.check('re-upload: no request outside this machine', r2.external.length === 0, 'only loopback', r2.external.map((n) => n.url).slice(0, 3));
   gate.equal('re-upload: source health still untouched', health(s2.source), health(s0.source));
-  if (r2.llmCalls > 0) gate.note(`identical re-upload re-ran extraction: ${r2.llmCalls} LLM calls, outcome "${r2.done?.outcome}" (uploads always reprocess the full file by design)`);
+  // The no-op must not rest on the LLM answering the same twice: models without temperature 0 sample.
+  gate.check('re-upload: answered "no change" without asking the LLM again', r2.done?.outcome === 'no_change' && r2.llmCalls === 0,
+    'outcome no_change, 0 LLM calls', `outcome ${r2.done?.outcome}, ${r2.llmCalls} LLM calls`);
 
   const badIds = events.events.filter((e) => e.id !== undefined && !/^\d+$/.test(e.id)).map((e) => `${e.event} id=${e.id}`);
   gate.check('every stream event id is a sequence number (so Last-Event-ID replay resumes correctly)', badIds.length === 0, 'numeric ids (or none)', [...new Set(badIds.map((x) => x.replace(/id=.*/, 'id=<uuid>')))].slice(0, 4));

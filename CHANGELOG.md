@@ -327,6 +327,11 @@ All notable changes to this project are documented here. The format follows
   while the user has a temporary password.
 
 ### Fixed
+- Regulation uploads: re-uploading a document identical to the one a source last promoted ran
+  extraction again, and with the current default models, which sample instead of using
+  temperature 0, could rewrite rules from unchanged law. It is now answered "No changes detected"
+  without calling the LLM; a document whose processing failed or was rejected is still processed
+  in full.
 - The Compose TLS profile's proxy sent dashboard traffic to port 80, but the dashboard image's
   unprivileged Nginx listens on 8080, so every dashboard page through the proxy failed with 502. It
   now proxies to port 8080.
