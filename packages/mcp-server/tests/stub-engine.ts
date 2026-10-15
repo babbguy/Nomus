@@ -3,7 +3,7 @@
  *
  * A real node:http server on a loopback ephemeral port, so BOTH HTTP stacks
  * used by the MCP server hit it: the server's own fetch client and the
- * @nomus/scanner axios call inside runScanFromContents. No live network.
+ * nomus-scan axios call inside runScanFromContents. No live network.
  */
 
 import { createServer, type Server, type IncomingMessage } from 'node:http';

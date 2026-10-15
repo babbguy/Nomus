@@ -2,8 +2,9 @@
 # Nomus — CI
 # =============================================================================
 # Runs on every PR and every push to main and develop. "Release packaging"
-# runs what the tag workflows (release.yml, publish.yml) depend on, so a broken
-# release is caught before a tag is pushed.
+# runs what the tag workflows (release.yml, publish.yml, publish-npm.yml,
+# publish-vscode.yml, publish-action.yml) depend on, so a broken release is
+# caught before a tag is pushed.
 # =============================================================================
 
 name: CI

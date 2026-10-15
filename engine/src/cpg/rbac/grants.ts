@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { canonicalRepoPattern, isCanonicalRepo } from '@nomus/scanner/corporate';
+import { canonicalRepoPattern, isCanonicalRepo } from 'nomus-scan/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgRolePermissions, cpgRoles, cpgTeams, cpgUserRoles } from '../../db/schema-cpg.js';
 import { users } from '../../db/schema.js';

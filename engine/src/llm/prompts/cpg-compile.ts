@@ -2,7 +2,7 @@ import type { ZodTypeAny } from 'zod';
 import {
   DATA_CATEGORIES, DATA_LABELS, EMITTED_CAPABILITIES, FLOW_SINKS, FLOW_SOURCES, KNOWN_SDKS, LANGUAGES,
   MAX_BOUNDED_REPEAT, MAX_QUANTIFIERS, MAX_UNBOUNDED_QUANTIFIERS, corporateRuleSchema,
-} from '@nomus/scanner/corporate';
+} from 'nomus-scan/corporate';
 
 /**
  * The corporate-policy compile prompt (design spec §8.1). The LLM turns one

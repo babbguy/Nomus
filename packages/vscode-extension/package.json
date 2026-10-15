@@ -8,12 +8,14 @@
   "author": "babbguy",
   "repository": {
     "type": "git",
-    "url": "https://github.com/babbguy/Nomus.git",
+    "url": "git+https://github.com/babbguy/Nomus.git",
     "directory": "packages/vscode-extension"
   },
-  "homepage": "https://github.com/babbguy/Nomus#readme",
-  "bugs": "https://github.com/babbguy/Nomus/issues",
-  "publisher": "nomus",
+  "homepage": "https://github.com/babbguy/Nomus/tree/main/packages/vscode-extension#readme",
+  "bugs": {
+    "url": "https://github.com/babbguy/Nomus/issues"
+  },
+  "publisher": "babbguy",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -23,12 +25,19 @@
   ],
   "keywords": [
     "ai",
+    "ai-compliance",
+    "ai-governance",
     "compliance",
     "regulatory",
     "eu-ai-act",
+    "sarif",
     "scanner"
   ],
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#181818",
+    "theme": "dark"
+  },
   "main": "./dist/extension.js",
   "activationEvents": [
     "onLanguage:typescript",
@@ -242,16 +251,18 @@
     "watch": "node esbuild.mjs --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npx --yes @vscode/vsce@4 package --no-dependencies"
+    "package": "vsce package --no-dependencies"
   },
   "dependencies": {
-    "@nomus/scanner": "*",
+    "nomus-scan": "*",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "4.0.0",
     "esbuild": "^0.28.2",
+    "ovsx": "1.2.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.4"
   }

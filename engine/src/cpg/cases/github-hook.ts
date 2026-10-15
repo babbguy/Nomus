@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { canonicalRepo } from '@nomus/scanner/corporate';
+import { canonicalRepo } from 'nomus-scan/corporate';
 import { githubAppInstallations } from '../../db/schema.js';
 import { getOrgSettings } from '../rbac/seed.js';
 import { closeForPullRequest } from '../ci/pr-closed.js';

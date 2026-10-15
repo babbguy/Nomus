@@ -1,6 +1,6 @@
 # Nomus AI Compliance
 
-![Nomus](media/logo-wide.png)
+![Nomus](https://raw.githubusercontent.com/babbguy/Nomus/main/packages/vscode-extension/media/logo-wide.png)
 
 **Know where AI lives in your codebase and which regulatory obligations may apply.**
 
@@ -52,7 +52,7 @@ The **Corporate Policies** view lists the findings by group, the repository and 
 bundle status (`verified`, or `offline (cached …)`). When the bundle cannot be used (offline with no
 or an expired cache, refused, or failing verification) corporate findings are cleared and the
 extension says why: it never shows an empty list as if nothing were wrong. See
-[Corporate Policies in the CLI and VS Code](../../docs/user-guide/corporate-policies.md).
+[Corporate Policies in the CLI and VS Code](https://github.com/babbguy/Nomus/blob/main/docs/user-guide/corporate-policies.md).
 
 ### AI Bill of Materials (AI-BOM)
 
@@ -117,21 +117,20 @@ If the workspace folder contains a `.nomus.yml` (or `.nomus.yaml` / `.nomus.json
 
 ## Getting Started
 
-This extension is not published to the VS Code Marketplace. Build and install it from a source checkout:
+Install **Nomus AI Compliance** (`babbguy.nomus`) from the Extensions view (search for "Nomus"),
+or from the command line:
 
 ```bash
-# from the repository root
-npm install
-npm run build:vscode-extension                   # bundles to packages/vscode-extension/dist
-cd packages/vscode-extension
-npm run package                                  # creates nomus-1.0.0.vsix (runs @vscode/vsce via npx)
-code --install-extension nomus-1.0.0.vsix
+code --install-extension babbguy.nomus
 ```
 
-You can also install the `.vsix` from VS Code: open the Extensions view, click the `...` menu,
-choose **Install from VSIX...** and pick the file.
+The extension is published to the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=babbguy.nomus) and to
+[Open VSX](https://open-vsx.org/extension/babbguy/nomus) (for VSCodium and other editors that use it).
+Each [GitHub release](https://github.com/babbguy/Nomus/releases) also attaches the `.vsix`; to install
+it, open the Extensions view, click the `...` menu, choose **Install from VSIX...** and pick the file.
 
-1. Start a Nomus engine (see the [deployment guide](../../docs/admin-guide/deployment.md); locally `npm run dev:engine` serves `http://localhost:3100`).
+1. Start a Nomus engine (see the [deployment guide](https://github.com/babbguy/Nomus/blob/main/docs/admin-guide/deployment.md); locally `npm run dev:engine` serves `http://localhost:3100`).
 2. Set `nomus.apiUrl` if your engine is elsewhere, then run **Nomus: Sign In** (or set `nomus.apiKey`).
    With the Docker Compose setup the engine is `http://localhost:3100` and the dashboard is
    `http://localhost:8080`; set `nomus.dashboardUrl` to the dashboard URL so **Open Dashboard**

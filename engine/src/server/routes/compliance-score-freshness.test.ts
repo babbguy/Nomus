@@ -21,7 +21,7 @@ import { runMigrations } from '../../db/migrate.js';
 import { seedDatabase } from '../../db/seed.js';
 import { apiKeys, organizations, githubAppInstallations } from '../../db/schema.js';
 import { initSigningKeys } from '../../core/signing.js';
-import type { Finding } from '@nomus/scanner';
+import type { Finding } from 'nomus-scan';
 import type { AppEnv } from '../app.js';
 import { compliancePostureRoutes } from './compliance-posture.js';
 import { adminRuleRoutes } from './admin-rules.js';

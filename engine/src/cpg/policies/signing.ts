@@ -1,4 +1,4 @@
-import { canonicalJson, policyActivationPayload, sha256Hex, type BundlePolicy } from '@nomus/scanner/corporate';
+import { canonicalJson, policyActivationPayload, sha256Hex, type BundlePolicy } from 'nomus-scan/corporate';
 import { signData, verifySignature } from '../../core/signing.js';
 import { CpgError } from '../errors.js';
 

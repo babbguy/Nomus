@@ -31,7 +31,7 @@ function setup() {
 const doc = (rel: string, text: string) => ({ uri: vscode.Uri.file(join(root, rel)), fileName: join(root, rel), getText: () => text, languageId: 'typescript' }) as unknown as vscode.TextDocument;
 
 // The controller loads the scanner lazily; load it once up front (it is large) so no test pays for it.
-beforeAll(async () => { await import('@nomus/scanner'); }, 120_000);
+beforeAll(async () => { await import('nomus-scan'); }, 120_000);
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'nomus-ctl-'));

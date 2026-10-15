@@ -1,8 +1,8 @@
-# @nomus/scanner
+# nomus-scan
 
 AI regulatory applicability engine. Scans codebases to detect AI SDK usage, identify AI capabilities, match applicable regulatory obligations, and produce findings with remediation suggestions.
 
-Workspace-internal package (`private: true`, not published to npm). It provides a CLI binary, `nomus-scan` (`dist/index.js`), and a programmatic API.
+Published to npm as [`nomus-scan`](https://www.npmjs.com/package/nomus-scan). It provides a CLI binary, `nomus-scan`, and a programmatic API. Node.js 20.19 or later.
 
 The scanner detects AI SDK usage locally, then asks a running Nomus engine (`POST /api/v1/simulate`) which obligations apply. It needs an engine URL (default `http://localhost:3100`) and an API key. If the engine cannot be reached, the scan fails closed (CLI exit code 3) rather than reporting a pass.
 
@@ -10,19 +10,18 @@ The scanner detects AI SDK usage locally, then asks a running Nomus engine (`POS
 
 ### CLI
 
-From a source checkout:
-
 ```bash
-npm install                      # repository root, once
-npm run build:packages           # builds shared, scanner, chain, mcp-server
-
-export NOMUS_API_KEY=nk_live_...                        # create one under Settings, API Keys in the dashboard
-node packages/scanner/dist/index.js .                  # Scan current directory
-node packages/scanner/dist/index.js ./src --json       # JSON output
-node packages/scanner/dist/index.js ./src --sarif      # SARIF output (for CI integrations)
-node packages/scanner/dist/index.js . --fail-on=high   # Fail on high+ severity findings
-node packages/scanner/dist/index.js . --no-corporate   # Skip your organization's corporate policies
+export NOMUS_API_KEY=nk_live_...     # create one under Settings, API Keys in the dashboard
+npx nomus-scan .                     # Scan current directory
+npx nomus-scan ./src --json          # JSON output
+npx nomus-scan ./src --sarif         # SARIF output (for CI integrations)
+npx nomus-scan . --fail-on=high      # Fail on high+ severity findings
+npx nomus-scan . --no-corporate      # Skip your organization's corporate policies
 ```
+
+To pin a version in a project, install it as a dev dependency (`npm install --save-dev nomus-scan`)
+and run `npx nomus-scan` from there. From a source checkout, `npm run build:packages` builds it and
+`node packages/scanner/dist/index.js` runs it.
 
 The path and flags may come in any order; `--help` prints usage and `--version` the version. Exit codes: `0` pass, `1` findings at or above `--fail-on` (default `critical`), `2` usage or configuration error (an unknown flag, or a missing `.nomus.yml`), `3` Nomus API unreachable or unusable. A scan that detects no AI SDK usage passes without contacting the engine.
 
@@ -36,13 +35,13 @@ second SARIF run (`automationDetails.id: nomus-corporate/`). They never change t
 results or the exit code. A bundle that does not verify exits `3` with the reason; a bundle that
 cannot be fetched is reported on stderr as NOT checked, and the regulatory scan runs as before.
 `--no-corporate` skips corporate policies. Corporate rules ignore `.nomus.yml` `ignore`
-and `detectors`. See [Corporate Policies in the CLI and VS Code](../../docs/user-guide/corporate-policies.md).
+and `detectors`. See [Corporate Policies in the CLI and VS Code](https://github.com/babbguy/Nomus/blob/main/docs/user-guide/corporate-policies.md).
 
 ### Programmatic
 
 ```typescript
-// from another workspace package that depends on @nomus/scanner
-import { runScan } from '@nomus/scanner';
+// npm install nomus-scan
+import { runScan } from 'nomus-scan';
 
 // Without a `config` option, runScan loads .nomus.yml from rootDir.
 const result = await runScan({
@@ -127,13 +126,14 @@ TypeScript, JavaScript, Python, Java, Go.
 
 | Export | Description |
 |--------|-------------|
-| `@nomus/scanner` | Main `runScan` function |
-| `@nomus/scanner/sarif` | SARIF report formatter |
-| `@nomus/scanner/detect` | Import detection utilities |
-| `@nomus/scanner/capabilities` | AI capability detection |
-| `@nomus/scanner/reporter` | Console/JSON output formatters |
-| `@nomus/scanner/detector` | Detector plugin registry |
-| `@nomus/scanner/corporate` | Corporate policy library: rule schema and vocabularies, glob and regex safety, the deterministic matcher (`evaluateCorporateRules`), the finding fingerprint, repository and language helpers, and the signed-bundle client (`fetchCorporateBundle`, `verifyCorporateBundle`). Pure and LLM-free; only the bundle client uses the network |
+| `nomus-scan` | Main `runScan` function |
+| `nomus-scan/sarif` | SARIF report formatter |
+| `nomus-scan/detect` | Import detection utilities |
+| `nomus-scan/capabilities` | AI capability detection |
+| `nomus-scan/reporter` | Console/JSON output formatters |
+| `nomus-scan/detector` | Detector plugin registry |
+| `nomus-scan/config` | `.nomus.yml` loader |
+| `nomus-scan/corporate` | Corporate policy library: rule schema and vocabularies, glob and regex safety, the deterministic matcher (`evaluateCorporateRules`), the finding fingerprint, repository and language helpers, and the signed-bundle client (`fetchCorporateBundle`, `verifyCorporateBundle`). Pure and LLM-free; only the bundle client uses the network |
 
 ## Build
 
@@ -155,4 +155,4 @@ The scanner reports regulatory applicability information. It is not legal advice
 | `src/match/rule-matcher.ts` | Rule-to-signal matching logic |
 | `src/output/sarif.ts` | SARIF output for CI/CD integration |
 | `src/config/schema.ts` | `.nomus.yml` config schema |
-| `src/corporate/` | Corporate policy library (`@nomus/scanner/corporate`), shared with the engine, the VS Code extension and the GitHub Action |
+| `src/corporate/` | Corporate policy library (`nomus-scan/corporate`), shared with the engine, the VS Code extension and the GitHub Action |

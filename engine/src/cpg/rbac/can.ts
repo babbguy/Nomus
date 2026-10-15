@@ -1,7 +1,7 @@
 import type { Db } from '../../db/client.js';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { isScopable } from './catalog.js';
-import { compileGlob } from '@nomus/scanner/corporate';
+import { compileGlob } from 'nomus-scan/corporate';
 
 /**
  * The CPG permission check (design spec §3.3).

@@ -4,7 +4,7 @@ import type { Db } from '../../db/client.js';
 import {
   canonicalJson, ciRunPayloadSchema, CI_RUN_KIND, normalizeSnippet, parseFingerprint, sha256Hex,
   type CiEvaluateRequest, type CiEvaluateResponse, type FindingResolution,
-} from '@nomus/scanner/corporate';
+} from 'nomus-scan/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgCiRuns } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';

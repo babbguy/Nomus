@@ -4,7 +4,7 @@
 
 Nomus detects AI SDK usage in your code, asks a Nomus engine which regulatory obligations apply to the detected capabilities in your chosen jurisdictions, and reports them directly on your pull requests.
 
-The action needs a Nomus engine that you run yourself and an API key for it (`api-key`, ideally stored as a repository secret). See the [deployment guide](../../docs/admin-guide/deployment.md) for running one; it must be reachable from the GitHub runner. This package is workspace-internal (`private: true`, not published to npm); the action is used straight from this repository with a committed `dist/index.js`.
+The action needs a Nomus engine that you run yourself and an API key for it (`api-key`, ideally stored as a repository secret). See the [deployment guide](https://github.com/babbguy/Nomus/blob/main/docs/admin-guide/deployment.md) for running one; it must be reachable from the GitHub runner. The action is published from [babbguy/Nomus](https://github.com/babbguy/Nomus) (`packages/github-action`) to [babbguy/nomus-action](https://github.com/babbguy/nomus-action) on each release; use `@v1` for the latest 1.x release or a full version tag such as `@v1.2.0`.
 
 ## Features
 
@@ -34,7 +34,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - uses: babbguy/Nomus/packages/github-action@main
+      - uses: babbguy/nomus-action@v1
         with:
           api-key: ${{ secrets.NOMUS_API_KEY }}
           api-url: https://nomus.example.com
@@ -92,7 +92,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - uses: babbguy/Nomus/packages/github-action@main
+      - uses: babbguy/nomus-action@v1
         with:
           api-key: ${{ secrets.NOMUS_API_KEY }}
           api-url: https://nomus.example.com
@@ -104,7 +104,7 @@ jobs:
 ## Example: Conditional Downstream Steps
 
 ```yaml
-- uses: babbguy/Nomus/packages/github-action@main
+- uses: babbguy/nomus-action@v1
   id: scan
   with:
     api-key: ${{ secrets.NOMUS_API_KEY }}
@@ -159,7 +159,7 @@ When a pull request is closed, the action closes its review case (as merged or n
 
 For an organization without corporate policies nothing changes: `corporate-status` is `disabled` and there is no second check run, upload or comment.
 
-To make the gate binding, require the check in branch protection and protect the workflow file with `CODEOWNERS`; see [Enforcing in CI](../../docs/admin-guide/corporate-policies.md#enforcing-in-ci).
+To make the gate binding, require the check in branch protection and protect the workflow file with `CODEOWNERS`; see [Enforcing in CI](https://github.com/babbguy/Nomus/blob/main/docs/admin-guide/corporate-policies.md#enforcing-in-ci).
 
 ## Behavior on errors
 
@@ -170,7 +170,7 @@ The corporate policy gate fails closed too: no answer, an error status, a respon
 ## Links
 
 - [Report issues](https://github.com/babbguy/Nomus/issues)
-- [Scanner package](../scanner/README.md)
+- [Scanner package](https://github.com/babbguy/Nomus/tree/main/packages/scanner#readme)
 
 ---
 

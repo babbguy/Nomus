@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { canonicalJson, MAX_SNIPPET_LINES, normalizeSnippet, parseFingerprint, sha256Hex } from '@nomus/scanner/corporate';
+import { canonicalJson, MAX_SNIPPET_LINES, normalizeSnippet, parseFingerprint, sha256Hex } from 'nomus-scan/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import {
   cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgJustifications, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions,

@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { compileGlobList } from '@nomus/scanner/corporate';
+import { compileGlobList } from 'nomus-scan/corporate';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import type { CpgActor } from '../../../cpg/rbac/can.js';

@@ -99,7 +99,7 @@ export async function cpgVscodeChecks(ctx) {
     } finally {
       await browser.close();
     }
-    if (!gate.check('dev@ signs in to the extension with the device flow', typeof callback === 'string' && callback.startsWith('vscode://nomus.nomus/auth-callback?'), 'vscode://… callback', callback)) return;
+    if (!gate.check('dev@ signs in to the extension with the device flow', typeof callback === 'string' && callback.startsWith('vscode://babbguy.nomus/auth-callback?'), 'vscode://… callback', callback)) return;
     await state.uriHandler.handleUri(vscode.Uri.parse(callback));
     gate.check('the extension holds a user-bound key for dev@', state.messages.some((m) => m.text.includes(`Signed in as ${users.dev.email}`)), `Signed in as ${users.dev.email}`, state.messages.map((m) => m.text).slice(-2));
     await waitFor(async () => (await renderTree(state.trees.get('nomus.corporate'))).some((r) => /verified/.test(r.label)), { timeout: 15_000 }).catch(() => {});

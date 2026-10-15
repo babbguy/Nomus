@@ -18,7 +18,7 @@ import { getDb, closeDb } from '../../db/client.js';
 import { runMigrations } from '../../db/migrate.js';
 import { initSigningKeys } from '../../core/signing.js';
 import { scanFindings, organizations, githubAppInstallations } from '../../db/schema.js';
-import type { Finding } from '@nomus/scanner';
+import type { Finding } from 'nomus-scan';
 
 const ORG_ID = 'test-org-' + randomUUID();
 const INSTALLATION_ID = 999_001;

@@ -4,8 +4,8 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import {
   bundleHashOf, bundleSignedText, canonicalJson, corporateRuleSchema, policyActivationPayload, ruleHashOf,
   type BundlePolicy, type CorporateBundle,
-} from '@nomus/scanner/corporate';
-import type { CorporateFinding } from '@nomus/scanner';
+} from 'nomus-scan/corporate';
+import type { CorporateFinding } from 'nomus-scan';
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 export const SPKI = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');

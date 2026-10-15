@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { caseStatusSchema, parseFingerprint, type CaseStatus, type FindingResolution } from '@nomus/scanner/corporate';
+import { caseStatusSchema, parseFingerprint, type CaseStatus, type FindingResolution } from 'nomus-scan/corporate';
 import { cpgCaseEvents, cpgCaseFindings, cpgCaseRevisions, cpgPolicies, cpgPolicyHeads, cpgPolicyVersions, cpgSnippets } from '../../db/schema-cpg.js';
 import { listBoards } from '../boards/service.js';
 import { can, type CpgActor } from '../rbac/can.js';

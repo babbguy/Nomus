@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { fingerprintOf, requestReviewResponseSchema } from '@nomus/scanner/corporate';
+import { fingerprintOf, requestReviewResponseSchema } from 'nomus-scan/corporate';
 import { getDb } from '../../db/client.js';
 import { runMigrations } from '../../db/migrate.js';
 import { rawSqlite } from '../../db/migrations/runner.js';

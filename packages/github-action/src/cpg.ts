@@ -3,12 +3,12 @@
 
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { runCorporateScanOnDisk, type CorporateFinding, type CorporateScanOutcome } from '@nomus/scanner';
+import { runCorporateScanOnDisk, type CorporateFinding, type CorporateScanOutcome } from 'nomus-scan';
 import {
   bundleFailureOf, canonicalRepo, ciEvaluateRequestSchema, CorporateBundleError, fetchCorporateBundle, prClosedRequestSchema,
   prClosedResponseSchema, verifyCiVerdict, type CiEvaluateResponse, type CorporateBundle,
-} from '@nomus/scanner/corporate';
-import { formatCorporateSarif, CORPORATE_SARIF_CATEGORY } from '@nomus/scanner/sarif';
+} from 'nomus-scan/corporate';
+import { formatCorporateSarif, CORPORATE_SARIF_CATEGORY } from 'nomus-scan/sarif';
 import { createCorporateCheckRun, createFailClosedCheckRun } from './cpg-check-run.js';
 import { postCorporateComment } from './cpg-comment.js';
 import { repoRoot } from './findings.js';

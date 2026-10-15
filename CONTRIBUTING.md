@@ -109,14 +109,24 @@ to `CHANGELOG.md`:
 
 ```bash
 npm version X.Y.Z --no-git-tag-version
+npm pkg set dependencies.nomus-scan=X.Y.Z -w packages/mcp-server   # nomus-mcp pins nomus-scan
 npm version X.Y.Z --no-git-tag-version --workspaces
 node scripts/check-version.mjs        # prints X.Y.Z when every package agrees
 ```
 
-Pushing the `vX.Y.Z` tag runs two workflows. `release.yml` creates the GitHub release, with
-the `CHANGELOG.md` section as its notes and the VS Code extension `.vsix` attached.
-`publish.yml` pushes the `nomus-engine` and `nomus-dashboard` images to `ghcr.io`. Both
-refuse a tag that does not match the package versions. The CI check "Release packaging"
+Pushing the `vX.Y.Z` tag runs these workflows, and each refuses a tag that does not match the
+package versions:
+
+| Workflow | Publishes |
+|----------|-----------|
+| `release.yml` | The GitHub release, with the `CHANGELOG.md` section as its notes and the VS Code extension `.vsix` attached |
+| `publish.yml` | The `nomus-engine` and `nomus-dashboard` images to `ghcr.io` |
+| `publish-npm.yml` | `nomus-scan` and `nomus-mcp` to npm, with provenance (trusted publishing, no token) |
+| `publish-vscode.yml` | The extension `babbguy.nomus` to the Visual Studio Marketplace (`VSCE_PAT`) and Open VSX (`OVSX_PAT`) |
+| `publish-action.yml` | `packages/github-action` to `babbguy/nomus-action`, tagged `vX.Y.Z` with `vX` moved to it (`ACTION_REPO_TOKEN`) |
+
+A publishing step whose secret is not set is skipped with a notice. Running a publish workflow by
+hand (`workflow_dispatch`) is a dry run that publishes nothing. The CI check "Release packaging"
 runs the same packaging steps on every pull request.
 
 ## Commit and PR style

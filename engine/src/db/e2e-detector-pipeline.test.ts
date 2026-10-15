@@ -30,7 +30,7 @@ import {
   ImportDetector,
   type DetectorContext,
   type DetectorPlugin,
-} from '@nomus/scanner';
+} from 'nomus-scan';
 
 interface MatchedRule {
   ruleKey: string;

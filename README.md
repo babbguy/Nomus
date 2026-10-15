@@ -74,6 +74,52 @@ on the same origin under `/api/v1`. The scanner, GitHub Action, VS Code extensio
 server are clients of a running engine: they detect capabilities locally and ask the
 engine which rules apply.
 
+## Install
+
+Each release is published to these channels (the engine itself runs from the Docker images or
+from source, see [Quick start](#quick-start)):
+
+| Channel | Install |
+|---------|---------|
+| Scanner CLI ([npm](https://www.npmjs.com/package/nomus-scan)) | `npx nomus-scan .` |
+| MCP server ([npm](https://www.npmjs.com/package/nomus-mcp)) | `npx -y nomus-mcp`, configured in your MCP client as below |
+| VS Code extension | Install `babbguy.nomus` from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=babbguy.nomus) or [Open VSX](https://open-vsx.org/extension/babbguy/nomus) (`code --install-extension babbguy.nomus`) |
+| GitHub Action | `uses: babbguy/nomus-action@v1` ([babbguy/nomus-action](https://github.com/babbguy/nomus-action)) |
+| Docker | `docker pull ghcr.io/babbguy/nomus-engine` and `docker pull ghcr.io/babbguy/nomus-dashboard` |
+
+The scanner, the MCP server and the extension need Node.js 20.19 or later and talk to a Nomus
+engine you run, with an API key from the dashboard (Settings, API Keys). The scanner reads the
+engine URL from `.nomus.yml` in the scanned directory (see the
+[scanner README](packages/scanner/README.md)) and the key from `NOMUS_API_KEY`.
+
+MCP client configuration (VS Code `.vscode/mcp.json` shown; see the
+[MCP server guide](docs/user-guide/mcp-server.md) for other clients):
+
+```json
+{
+  "servers": {
+    "nomus": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "nomus-mcp"],
+      "env": {
+        "NOMUS_API_URL": "http://localhost:3100",
+        "NOMUS_API_KEY": "nk_live_your_key_here"
+      }
+    }
+  }
+}
+```
+
+GitHub Action:
+
+```yaml
+- uses: babbguy/nomus-action@v1
+  with:
+    api-key: ${{ secrets.NOMUS_API_KEY }}
+    api-url: https://nomus.example.com
+```
+
 ## Quick start
 
 ### Docker

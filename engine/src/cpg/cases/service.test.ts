@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { fingerprintOf } from '@nomus/scanner/corporate';
+import { fingerprintOf } from 'nomus-scan/corporate';
 import { runMigrations } from '../../db/migrate.js';
 import { caseFixtures } from '../__fixtures__/case-fixtures.js';
 import { CpgError } from '../errors.js';

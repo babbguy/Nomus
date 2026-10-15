@@ -2,8 +2,8 @@ import * as core from '@actions/core';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import type { ScanResult } from '@nomus/scanner';
-import { formatSarifReport } from '@nomus/scanner/sarif';
+import type { ScanResult } from 'nomus-scan';
+import { formatSarifReport } from 'nomus-scan/sarif';
 import { repoRoot } from './findings.js';
 
 type Octokit = ReturnType<typeof import('@actions/github').getOctokit>;

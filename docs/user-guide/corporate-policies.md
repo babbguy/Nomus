@@ -60,10 +60,10 @@ The CLI checks corporate policies automatically when it has an API key
 
 ```bash
 export NOMUS_API_KEY=nk_live_...
-node packages/scanner/dist/index.js .                 # console: regulatory report, then a "Corporate policies" section
-node packages/scanner/dist/index.js . --json          # adds "corporate" and "corporateFindings" to the JSON
-node packages/scanner/dist/index.js . --sarif         # adds a second SARIF run (category nomus-corporate/)
-node packages/scanner/dist/index.js . --no-corporate  # regulatory scan only; the bundle is not fetched
+npx nomus-scan .                 # console: regulatory report, then a "Corporate policies" section
+npx nomus-scan . --json          # adds "corporate" and "corporateFindings" to the JSON
+npx nomus-scan . --sarif         # adds a second SARIF run (category nomus-corporate/)
+npx nomus-scan . --no-corporate  # regulatory scan only; the bundle is not fetched
 ```
 
 The API key needs the `read:policies` scope (to download the bundle) as well as `evaluate`.

@@ -28,7 +28,7 @@ let bob: TestUser;
 /** The full device flow for a signed-in user: callback with the session, then the token exchange. */
 async function deviceSignIn(user: TestUser): Promise<string> {
   const state = randomUUID();
-  setState('device_auth_pending', state, 'vscode://nomus.nomus/auth-callback', 60_000);
+  setState('device_auth_pending', state, 'vscode://babbguy.nomus/auth-callback', 60_000);
   const cb = await call(app, 'GET', `/api/v1/auth/device/callback?device_state=${state}`, { cookie: user.cookie });
   expect(cb.status).toBe(302);
   const code = new URL(cb.headers.get('location')!.replace('vscode://', 'http://')).searchParams.get('code')!;
@@ -94,7 +94,7 @@ describe('device sign-in mints user-bound keys', () => {
   it('the token step refuses a user deactivated after the code was issued', async () => {
     const carol = makeUser(orgId);
     const state = randomUUID();
-    setState('device_auth_pending', state, 'vscode://nomus.nomus/auth-callback', 60_000);
+    setState('device_auth_pending', state, 'vscode://babbguy.nomus/auth-callback', 60_000);
     const cb = await call(app, 'GET', `/api/v1/auth/device/callback?device_state=${state}`, { cookie: carol.cookie });
     const code = new URL(cb.headers.get('location')!.replace('vscode://', 'http://')).searchParams.get('code')!;
     getDb().update(users).set({ isActive: false }).where(eq(users.id, carol.id)).run();

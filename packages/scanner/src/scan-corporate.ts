@@ -20,7 +20,7 @@ import type { CorporateFinding, CorporateFindingStatus } from './match/rule-matc
  * The bundle is fetched and its signatures verified BEFORE any of its rules
  * is used (`fetchCorporateBundle` throws NomusApiError on any failure, so a
  * tampered bundle never reaches the matcher). Evaluation is the pure,
- * deterministic matcher of `@nomus/scanner/corporate`: no LLM, no network.
+ * deterministic matcher of `nomus-scan/corporate`: no LLM, no network.
  * The only clock read is the grace-period check, and callers can pin it
  * with `now`.
  *

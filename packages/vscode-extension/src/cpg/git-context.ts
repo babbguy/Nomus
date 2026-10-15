@@ -101,7 +101,7 @@ export async function readGitContext(root: string): Promise<GitContext> {
     return { ok: false, error: 'invalid_repo', message: 'The "origin" remote is a local path, not a hosted repository.' };
   }
   // Loaded on first use: the corporate library pulls in the detectors.
-  const { canonicalRepo } = await import('@nomus/scanner/corporate');
+  const { canonicalRepo } = await import('nomus-scan/corporate');
   const repo = canonicalRepo(url);
   if (!repo) return { ok: false, error: 'invalid_repo', message: 'The "origin" remote is not a recognised repository URL.' };
   return { ok: true, repo, branch, headSha: resolveBranchSha(dirs.gitDir, dirs.commonDir, branch) };

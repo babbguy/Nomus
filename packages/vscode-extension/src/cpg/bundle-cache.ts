@@ -1,12 +1,12 @@
 // Copyright 2026 babbguy
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
-import type { BundleFetchResult, CorporateBundle, FetchBundleOptions } from '@nomus/scanner/corporate';
+import type { BundleFetchResult, CorporateBundle, FetchBundleOptions } from 'nomus-scan/corporate';
 
 /** The scanner's corporate library, loaded on first use (it pulls in the detectors). */
-type CorporateLib = typeof import('@nomus/scanner/corporate');
+type CorporateLib = typeof import('nomus-scan/corporate');
 let libPromise: Promise<CorporateLib> | null = null;
-const corporateLib = (): Promise<CorporateLib> => (libPromise ??= import('@nomus/scanner/corporate'));
+const corporateLib = (): Promise<CorporateLib> => (libPromise ??= import('nomus-scan/corporate'));
 
 /**
  * The extension's copy of the org's signed corporate policy bundle (design

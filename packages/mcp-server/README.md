@@ -1,4 +1,4 @@
-# @nomus/mcp-server
+# nomus-mcp
 
 **Live, provenance-cited regulatory applicability for AI coding agents.**
 
@@ -13,7 +13,7 @@ legal disclaimer.
 
 - **Transport:** stdio (what `claude mcp add` and editors spawn)
 - **Detection:** code you pass to `check_applicability` / `scan_code` is analyzed **in-process**
-  by the `@nomus/scanner` detector plugins — your source code is never sent to the Nomus
+  by the `nomus-scan` detector plugins — your source code is never sent to the Nomus
   API. Only the derived capability signals (e.g. `text_generation`) go over the wire.
 - **Fail-closed:** if the Nomus API is unreachable, tools return an explicit error stating
   that compliance status is **unknown**. They never return an empty "no obligations" success.
@@ -23,8 +23,7 @@ legal disclaimer.
 ## Requirements
 
 - Node.js 20.19+ (or 22.12+), the same as the rest of the repo
-- A running Nomus engine (for local development `http://localhost:3100`; see the [deployment guide](../../docs/admin-guide/deployment.md))
-- A source checkout built with `npm run build:packages` (this package is `private: true` and is not published to npm)
+- A running Nomus engine (for local development `http://localhost:3100`; see the [deployment guide](https://github.com/babbguy/Nomus/blob/main/docs/admin-guide/deployment.md))
 - A Nomus API key (the engine issues `nk_live_…` keys) with the `read:policies` and `evaluate` scopes
 
 ## Configuration
@@ -51,12 +50,10 @@ treat that warning as a reminder to keep the key out of version control.
 
 ## Client setup
 
-The server is run from your checkout. Build it first, then point your client at the built entry point (replace `<repo>` with the absolute path of your checkout):
-
-```bash
-npm install
-npm run build:packages     # produces packages/mcp-server/dist/index.js
-```
+The server is published to npm as [`nomus-mcp`](https://www.npmjs.com/package/nomus-mcp); clients
+start it with `npx -y nomus-mcp`, which downloads it on first use. Put a version after the name
+(`nomus-mcp@1.2.0`) to pin one. From a source checkout, `npm run build:packages` builds
+`packages/mcp-server/dist/index.js`, which you can run with `node` in place of `npx -y nomus-mcp`.
 
 ### Claude Code
 
@@ -64,7 +61,7 @@ npm run build:packages     # produces packages/mcp-server/dist/index.js
 claude mcp add nomus \
   --env NOMUS_API_URL=http://localhost:3100 \
   --env NOMUS_API_KEY=nk_live_your_key_here \
-  -- node <repo>/packages/mcp-server/dist/index.js
+  -- npx -y nomus-mcp
 ```
 
 ### VS Code (`.vscode/mcp.json`)
@@ -74,8 +71,8 @@ claude mcp add nomus \
   "servers": {
     "nomus": {
       "type": "stdio",
-      "command": "node",
-      "args": ["<repo>/packages/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "nomus-mcp"],
       "env": {
         "NOMUS_API_URL": "http://localhost:3100",
         "NOMUS_API_KEY": "nk_live_your_key_here"
@@ -91,8 +88,8 @@ claude mcp add nomus \
 {
   "mcpServers": {
     "nomus": {
-      "command": "node",
-      "args": ["<repo>/packages/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "nomus-mcp"],
       "env": {
         "NOMUS_API_URL": "http://localhost:3100",
         "NOMUS_API_KEY": "nk_live_your_key_here"
@@ -102,7 +99,7 @@ claude mcp add nomus \
 }
 ```
 
-See also the [MCP server user guide](../../docs/user-guide/mcp-server.md).
+See also the [MCP server user guide](https://github.com/babbguy/Nomus/blob/main/docs/user-guide/mcp-server.md).
 
 ---
 
@@ -173,7 +170,7 @@ A compliance tool that fails open is worse than no tool. This server follows a f
 - **403 (scopes)** → names the missing key scopes.
 - **429** → bounded backoff honoring `Retry-After` (2 retries), then an explicit rate-limit error.
 
-The same applies to `scan_code`: the underlying `@nomus/scanner` throws `NomusApiError` on
+The same applies to `scan_code`: the underlying `nomus-scan` throws `NomusApiError` on
 any backend problem, and that error is surfaced explicitly — a backend outage can never make a
 scan look like a pass.
 

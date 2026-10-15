@@ -3,7 +3,7 @@
 
 import * as vscode from 'vscode';
 import { z } from 'zod';
-import type { CorporateFinding } from '@nomus/scanner';
+import type { CorporateFinding } from 'nomus-scan';
 import type { CaseTracker } from './case-status';
 import type { CorporateController } from './corporate-controller';
 import type { CpgClient, CpgResult } from './cpg-client';
@@ -79,8 +79,8 @@ export async function requestReview(d: CaseCommandDeps): Promise<void> {
   // 3. A fresh scan of the workspace with the verified bundle.
   const bundle = await d.corporate.ensureBundle(true);
   if (!bundle) return void error('Corporate policy findings cannot be checked right now (see the Corporate Policies view), so no review was requested.');
-  const { runCorporateScanOnDisk } = await import('@nomus/scanner');
-  const { findingsStatusResponseSchema, requestReviewResponseSchema } = await import('@nomus/scanner/corporate');
+  const { runCorporateScanOnDisk } = await import('nomus-scan');
+  const { findingsStatusResponseSchema, requestReviewResponseSchema } = await import('nomus-scan/corporate');
   const findings = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: 'Nomus: Checking corporate policies…' },
     async () => (await runCorporateScanOnDisk(root, bundle)).findings,
@@ -203,7 +203,7 @@ export async function replyToChangeRequest(d: CaseCommandDeps, arg?: string | { 
 export async function resubmit(d: CaseCommandDeps): Promise<void> {
   const kase = d.cases.openCase();
   if (!kase) return void info('There is no open review case for this branch.');
-  const { caseStatusSchema } = await import('@nomus/scanner/corporate');
+  const { caseStatusSchema } = await import('nomus-scan/corporate');
   const res = await d.client.request('POST', `/cases/${kase.id}/resubmit`, caseStatusSchema, {});
   if (!res.ok) return void error(failureText(res, 'the resubmission was'));
   await d.cases.accept(res.data);

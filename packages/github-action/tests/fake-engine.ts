@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 import {
   bundleHashOf, bundleSignedText, canonicalJson, corporateRuleSchema, policyActivationPayload, ruleHashOf,
   type BundlePolicy, type CiEvaluateRequest,
-} from '@nomus/scanner/corporate';
+} from 'nomus-scan/corporate';
 
 export const ORG = '6f1c2a4e-9b7d-4c3e-8a21-0d5e6f7a8b9c';
 export const CASE = '3d6c0b9a-8f7e-4d5c-9b4a-3c2d1e0f9a8b';

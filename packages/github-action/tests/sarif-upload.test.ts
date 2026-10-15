@@ -7,8 +7,8 @@ vi.mock('@actions/core', () => ({
   warning: vi.fn(),
 }));
 
-// Mock @nomus/scanner/sarif
-vi.mock('@nomus/scanner/sarif', () => ({
+// Mock nomus-scan/sarif
+vi.mock('nomus-scan/sarif', () => ({
   formatSarifReport: vi.fn((_findings: any[], _rootDir: string) => ({
     $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
     version: '2.1.0',

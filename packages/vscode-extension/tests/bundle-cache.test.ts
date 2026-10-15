@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CorporateBundleError, type BundleFetchResult, type FetchBundleOptions } from '@nomus/scanner/corporate';
+import { CorporateBundleError, type BundleFetchResult, type FetchBundleOptions } from 'nomus-scan/corporate';
 import { BundleCache, REVALIDATE_MS, type CachedBundleRecord } from '../src/cpg/bundle-cache';
 import { SPKI, signedBundle, signedPolicy } from './helpers/corporate';
 

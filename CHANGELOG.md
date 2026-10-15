@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format follows
   has a section for the current version, `npm pack` of the scanner and MCP server contains
   every entry point, the extension packages with `vsce`, and both images build for both
   platforms.
+- **Published packages.** A `vX.Y.Z` tag also publishes the scanner CLI to npm as `nomus-scan`
+  (`npx nomus-scan .`) and the MCP server as `nomus-mcp` (`npx -y nomus-mcp`), with npm trusted
+  publishing and provenance; the VS Code extension as `babbguy.nomus` to the Visual Studio
+  Marketplace and Open VSX; and the GitHub Action to
+  [babbguy/nomus-action](https://github.com/babbguy/nomus-action), so workflows use
+  `uses: babbguy/nomus-action@v1`. A registry whose credentials are not configured is skipped
+  with a notice, and a manual run of each workflow is a dry run.
 - Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
   export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
   every signed decision, revocation, case closure record and CI verdict, verifiable offline with the
@@ -64,7 +71,7 @@ All notable changes to this project are documented here. The format follows
   are refused. A failing scan opens or updates the branch's review case from CI and attaches the
   pull request; a scan whose blocking findings were fixed posts a new revision, so the case moves
   on. Each run is stored with a verdict signed by the instance key (`verifyCiVerdict()` in
-  `@nomus/scanner/corporate` verifies it offline) and listed by `GET /api/v1/cpg/ci/runs`; a case's
+  `nomus-scan/corporate` verifies it offline) and listed by `GET /api/v1/cpg/ci/runs`; a case's
   closure record now lists its CI runs. `POST /api/v1/cpg/ci/pr-closed` closes the case as merged
   or closed unmerged.
 - Corporate policy governance, phase 5 (decisions and exceptions, dashboard): the case page shows
@@ -166,7 +173,7 @@ All notable changes to this project are documented here. The format follows
   version with a change note, and the version history with the changes of each version). The
   rules no setting can change (no self-approval, no bulk decisions on the prohibited tier,
   advisory never blocks) are shown and cannot be configured.
-- Corporate policy governance, phase 2 (scanner library): `@nomus/scanner/corporate`, the pure
+- Corporate policy governance, phase 2 (scanner library): `nomus-scan/corporate`, the pure
   library the engine, the VS Code extension and the GitHub Action share for corporate policies: the
   rule schema and closed vocabularies, globs, regex safety, the deterministic matcher, the finding
   fingerprint, repository and language helpers, and the signed-bundle client. Scans stay
@@ -219,6 +226,17 @@ All notable changes to this project are documented here. The format follows
   esbuild's dev server).
 
 ### Changed
+- The GitHub Action runs on Node.js 24 (`using: node24`); Node.js 20 is end of life.
+- **Package names.** The scanner package `@nomus/scanner` is now `nomus-scan` (imports become
+  `nomus-scan` and `nomus-scan/corporate`) and the MCP server `@nomus/mcp-server` is now
+  `nomus-mcp`. The published `nomus-mcp` bundles the private `@nomus/shared` code and depends on
+  the same `nomus-scan` version. The scanner build no longer ships its test files or source maps.
+- **VS Code extension ID.** The publisher is now `babbguy`, so the extension ID is
+  `babbguy.nomus` and the sign-in callback is `vscode://babbguy.nomus/auth-callback`. An
+  extension installed from an earlier `.vsix` (`nomus.nomus`) is a different extension: uninstall
+  it and install `babbguy.nomus`, then sign in again.
+- `@vscode/vsce` and `ovsx` are pinned dev dependencies of the extension (covered by the
+  lockfile) instead of being fetched with `npx` at packaging time.
 - **Default LLM models.** The classifier and translator now default to `claude-haiku-5-5` instead
   of `claude-haiku-4-5-20251001`, and the dashboard's LLM Providers page suggests
   `gemini-3.8-flash` for Google (was `gemini-2.0-flash`, which Google has shut down) and

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
 import * as vscode from 'vscode';
-import type { CorporateFinding } from '@nomus/scanner';
+import type { CorporateFinding } from 'nomus-scan';
 import type { BundleState } from './bundle-cache';
 import type { GitContext } from './git-context';
 import type { CaseView } from './case-status';

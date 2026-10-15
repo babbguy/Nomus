@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import * as vscode from 'vscode';
 
 const { runScan, runScanFromContents } = vi.hoisted(() => ({ runScan: vi.fn(), runScanFromContents: vi.fn() }));
-vi.mock('@nomus/scanner', () => ({ runScan, runScanFromContents }));
+vi.mock('nomus-scan', () => ({ runScan, runScanFromContents }));
 
 import { scanWorkspace, scanCurrentFile } from '../src/commands';
 

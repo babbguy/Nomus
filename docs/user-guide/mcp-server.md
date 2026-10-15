@@ -1,6 +1,6 @@
 # Nomus MCP Server
 
-Connect your Nomus engine to an AI coding agent. The Nomus MCP server (`@nomus/mcp-server`, binary
+Connect your Nomus engine to an AI coding agent. The Nomus MCP server (`nomus-mcp`, binary
 `nomus-mcp`) gives any [Model Context Protocol](https://modelcontextprotocol.io) client (Claude Code,
 VS Code, Cursor, and other MCP-capable tools) provenance-cited regulatory applicability answers from
 a Nomus engine you run.
@@ -16,18 +16,14 @@ Ask your coding agent things like:
 
 ## Setup
 
-`@nomus/mcp-server` is a private workspace package: it is not published to npm, so `npx` will not
-find it. Run it from a checkout of this repo.
+### 1. Install
 
-### 1. Build it
+Nothing to install up front: `nomus-mcp` is published to npm, and the client configurations below
+start it with `npx -y nomus-mcp` (Node.js 20.19 or later), which downloads it on first use. To pin a
+version, write `nomus-mcp@1.2.0` instead of `nomus-mcp`.
 
-```bash
-npm install
-npm run build:packages        # builds shared, scanner, chain and mcp-server
-```
-
-This produces `packages/mcp-server/dist/index.js`. Use its absolute path below
-(`/path/to/nomus` is your checkout).
+To run it from a checkout of this repo instead, run `npm install` and `npm run build:packages`, then
+use `node /path/to/nomus/packages/mcp-server/dist/index.js` in place of `npx -y nomus-mcp`.
 
 ### 2. Get an API key
 
@@ -50,7 +46,7 @@ keep the key out of version control.
 ### Claude Code
 
 ```bash
-claude mcp add nomus   --env NOMUS_API_URL=http://localhost:3100   --env NOMUS_API_KEY=nk_live_your_key_here   -- node /path/to/nomus/packages/mcp-server/dist/index.js
+claude mcp add nomus   --env NOMUS_API_URL=http://localhost:3100   --env NOMUS_API_KEY=nk_live_your_key_here   -- npx -y nomus-mcp
 ```
 
 ### VS Code
@@ -62,8 +58,8 @@ Add to `.vscode/mcp.json` (do not commit the key):
   "servers": {
     "nomus": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/path/to/nomus/packages/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "nomus-mcp"],
       "env": {
         "NOMUS_API_URL": "http://localhost:3100",
         "NOMUS_API_KEY": "nk_live_your_key_here"

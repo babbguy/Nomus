@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { sha256Hex } from '@nomus/scanner/corporate';
+import { sha256Hex } from 'nomus-scan/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { users } from '../../db/schema.js';
 import { cpgIntegrations, cpgJustifications, cpgNotificationDeliveries, cpgPolicyVersions } from '../../db/schema-cpg.js';

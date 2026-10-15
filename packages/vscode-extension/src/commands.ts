@@ -13,7 +13,7 @@ const SUPPORTED_LANGUAGES = new Set([
 type ApiKeyGetter = () => Promise<string | undefined>;
 
 /**
- * Name-based check for @nomus/scanner's NomusApiError (mirrors the
+ * Name-based check for nomus-scan's NomusApiError (mirrors the
  * scanner's own `isNomusApiError` guard). Checked by name rather than a
  * static `instanceof` import so the scanner stays lazily loaded via the
  * dynamic imports below.
@@ -85,8 +85,8 @@ export async function scanCurrentFile(
   let corporateFindings: Awaited<ReturnType<CorporateController['evaluateDocument']>> | undefined;
   try {
     corporateFindings = corporate ? await corporate.evaluateDocument(document) : undefined;
-    const { detectImportsInContent } = await import('@nomus/scanner/detect');
-    const { mapCapabilities, getAllCapabilities } = await import('@nomus/scanner/capabilities');
+    const { detectImportsInContent } = await import('nomus-scan/detect');
+    const { mapCapabilities, getAllCapabilities } = await import('nomus-scan/capabilities');
 
     const content = document.getText();
     const imports = detectImportsInContent(content, document.fileName);
@@ -109,7 +109,7 @@ export async function scanCurrentFile(
 
     if (apiKey) {
       const config = vscode.workspace.getConfiguration('nomus');
-      const { runScanFromContents } = await import('@nomus/scanner');
+      const { runScanFromContents } = await import('nomus-scan');
       const files = new Map([[document.fileName, content]]);
       const rootDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
       const apiUrl = config.get<string>('apiUrl', 'http://localhost:3100');
@@ -191,7 +191,7 @@ export async function scanWorkspace(
       // The verified bundle (or none): the scan never fetches one itself here,
       // so an unusable bundle is reported once, with the scan's result.
       const corporateBundle = corporate ? await corporate.bundleForWorkspaceScan() : null;
-      const { runScan } = await import('@nomus/scanner');
+      const { runScan } = await import('nomus-scan');
       // The workspace's .nomus.yml takes precedence over the jurisdictions setting.
       const workspaceConfig = await loadWorkspaceConfig(
         folder.uri.fsPath,

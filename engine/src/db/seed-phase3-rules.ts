@@ -348,7 +348,7 @@ const PHASE3_RULES: Phase3Rule[] = [
   // EU AI Act Article 50: Transparency obligations.
   // NOT deferred by the 2026 Digital Omnibus (CELEX 32026R1744) — these apply
   // from 2026-08-02, while the Annex III obligations above were deferred to
-  // 2027-12-02. Capabilities emitted by @nomus/scanner TransparencyDetector.
+  // 2027-12-02. Capabilities emitted by nomus-scan TransparencyDetector.
   {
     ruleKey: 'eu_ai_act.art50.1.chatbot_disclosure',
     sourceName: 'EU AI Act',

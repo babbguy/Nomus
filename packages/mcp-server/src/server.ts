@@ -13,10 +13,11 @@
  *    429 → bounded backoff then explicit rate-limit error.
  */
 
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { runScanFromContents, isNomusApiError, type ScanResult } from '@nomus/scanner';
+import { runScanFromContents, isNomusApiError, type ScanResult } from 'nomus-scan';
 import { LEGAL_DISCLAIMER, JURISDICTIONS } from '@nomus/shared';
 import type { NomusMcpConfig } from './config.js';
 import { NomusClient, NomusHttpError, FAIL_CLOSED_NOTE } from './api-client.js';
@@ -24,7 +25,8 @@ import { buildProvenance, type Provenance } from './provenance.js';
 import { deriveCapabilitiesFromCode, SUPPORTED_LANGUAGES } from './detection.js';
 
 export const SERVER_NAME = 'nomus';
-export const SERVER_VERSION = '1.1.0';
+// package.json sits one level up from both src/ and the built dist/.
+export const SERVER_VERSION: string = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
 
 // ─── Engine response shapes (fields we rely on) ─────────────────
 
@@ -130,7 +132,7 @@ function mapError(err: unknown): CallToolResult {
     return toolError(err.message);
   }
   if (isNomusApiError(err)) {
-    // Thrown by @nomus/scanner when its own call to /api/v1/simulate
+    // Thrown by nomus-scan when its own call to /api/v1/simulate
     // failed. Inspect the underlying axios error for a status when present.
     const detail = err.detail as { response?: { status?: number; data?: unknown } } | undefined;
     const status = detail?.response?.status;

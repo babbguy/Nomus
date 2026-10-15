@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
 import * as vscode from 'vscode';
-import type { CaseStatus } from '@nomus/scanner/corporate';
+import type { CaseStatus } from 'nomus-scan/corporate';
 import { apiUrlSetting, type CpgClient } from './cpg-client';
 import { caseNotices, closedNotice } from './corporate-format';
 import { readGitContext } from './git-context';
@@ -87,7 +87,7 @@ export class CaseTracker {
     // No repository: the Corporate Policies view already says why on its repository row.
     if (!git?.ok) return this.set(null);
     const key = `${CASE_STATE_PREFIX}${apiUrlSetting()}|${git.repo}@${git.branch}`;
-    const { caseByBranchResponseSchema } = await import('@nomus/scanner/corporate');
+    const { caseByBranchResponseSchema } = await import('nomus-scan/corporate');
     const res = await this.client.request('GET', `/cases/by-branch?repo=${encodeURIComponent(git.repo)}&branch=${encodeURIComponent(git.branch)}`, caseByBranchResponseSchema);
     const stored = this.context.globalState.get<StoredCase>(key);
     if (res.ok) {
@@ -111,7 +111,7 @@ export class CaseTracker {
    * when governance is switched off, and then it is not closed.
    */
   private async reportClosed(previous: CaseStatus): Promise<void> {
-    const { caseStatusSchema } = await import('@nomus/scanner/corporate');
+    const { caseStatusSchema } = await import('nomus-scan/corporate');
     const { z } = await import('zod');
     const res = await this.client.request('GET', `/cases/${previous.id}`, z.object({ case: caseStatusSchema }).passthrough());
     if (res.ok && res.data.case.state === 'closed') this.show('info', closedNotice(previous.ref, res.data.case.closeReason));

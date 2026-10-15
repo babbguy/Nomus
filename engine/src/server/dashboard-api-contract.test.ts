@@ -582,7 +582,7 @@ describe('CPG API contracts', () => {
       const body: unknown = await res.json();
       expect(() => schema.parse(body), path).not.toThrow();
     }
-    const { corporateBundleSchema } = await import('@nomus/scanner/corporate');
+    const { corporateBundleSchema } = await import('nomus-scan/corporate');
     const bundle = await session('GET', '/api/v1/cpg/bundle');
     expect(bundle.status).toBe(200);
     expect(corporateBundleSchema.safeParse(await bundle.json()).success).toBe(true);

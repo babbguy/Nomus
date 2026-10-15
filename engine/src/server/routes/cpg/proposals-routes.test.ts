@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
-import { fingerprintOf, findingsStatusResponseSchema, requestReviewResponseSchema } from '@nomus/scanner/corporate';
+import { fingerprintOf, findingsStatusResponseSchema, requestReviewResponseSchema } from 'nomus-scan/corporate';
 import { getDb } from '../../../db/client.js';
 import { runMigrations } from '../../../db/migrate.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';

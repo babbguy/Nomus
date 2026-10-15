@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { and, desc, eq, lt, or, sql, type SQL } from 'drizzle-orm';
 import {
   caseByBranchResponseSchema, findingsStatusRequestSchema, findingsStatusResponseSchema, justificationInputSchema, parseFingerprint, requestReviewRequestSchema, requestReviewResponseSchema,
-} from '@nomus/scanner/corporate';
+} from 'nomus-scan/corporate';
 import type { AppEnv } from '../../app.js';
 import { getDb, type Db } from '../../../db/client.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';

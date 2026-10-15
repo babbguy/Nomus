@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { CaseStatus } from '@nomus/scanner/corporate';
+import type { CaseStatus } from 'nomus-scan/corporate';
 import { CaseTracker } from '../src/cpg/case-status';
 import { CorporateViewProvider } from '../src/cpg/corporate-view';
 import { caseNotices, closedNotice } from '../src/cpg/corporate-format';
@@ -20,7 +20,7 @@ const REPO = 'gate-example/policy-repo';
 const BRANCH = 'feat/policy-check';
 vi.mock('../src/cpg/git-context', () => ({ readGitContext: async () => ({ ok: true, repo: 'gate-example/policy-repo', branch: 'feat/policy-check', headSha: null }) }));
 let scanned = [corporateFinding()];
-vi.mock('@nomus/scanner', () => ({ runCorporateScanOnDisk: async () => ({ findings: scanned }) }));
+vi.mock('nomus-scan', () => ({ runCorporateScanOnDisk: async () => ({ findings: scanned }) }));
 
 const FP_A = corporateFinding().fingerprint;
 const FP_B = `${'b'.repeat(64)}:corp.no-pii-to-ai:1`;

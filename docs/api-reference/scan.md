@@ -1,6 +1,6 @@
 # Scan Endpoints and Scanner
 
-The engine does **not** run scans itself. Scanning is done by the `@nomus/scanner` package (CLI
+The engine does **not** run scans itself. Scanning is done by the `nomus-scan` package (CLI
 `nomus-scan`, the GitHub Action, the VS Code extension, the MCP server). The engine provides
 (a) the rules the scanner matches against and (b) the `/api/v1/scan/*` endpoints that store and
 serve the findings a scanner uploads. Source: `engine/src/server/routes/scan.ts`.
@@ -159,22 +159,17 @@ Change a finding's status. Only findings in your organization can be changed.
 
 ## Running a scan
 
-All scanner packages are private workspace packages in this repo (not published to npm). Build
-them from a source checkout:
-
-```bash
-npm install
-npm run build:packages        # builds shared, scanner, chain, mcp-server
-```
+The scanner is published to npm as `nomus-scan` (Node.js 20.19 or later). From a source checkout,
+`npm run build:packages` builds it and `node packages/scanner/dist/index.js` runs it.
 
 ### CLI
 
 ```bash
-node packages/scanner/dist/index.js [<path>] [--json | --sarif] [--fail-on=<severity>]
+npx nomus-scan [<path>] [--json | --sarif] [--fail-on=<severity>]
 ```
 
 - `<path>` defaults to `.`. Because the first argument is always read as the path, put it first when you also pass flags (`... . --json`, not `... --json`).
-- The scanner command name is `nomus-scan` (the `bin` of `@nomus/scanner`); the package is not published to npm, so run it by path as shown, or link it yourself. Output is a console report by default, `--json` for JSON or `--sarif`
+- Output is a console report by default, `--json` for JSON or `--sarif`
   for SARIF 2.1.0 on stdout.
 - `--fail-on=critical|high|medium|low` (default `critical`) sets the severity at which the exit code
   becomes `1`.
@@ -230,7 +225,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - uses: babbguy/Nomus/packages/github-action@main
+      - uses: babbguy/nomus-action@v1
         with:
           api-key: ${{ secrets.NOMUS_API_KEY }}
           api-url: https://nomus.example.com    # your engine; the default is http://localhost:3100

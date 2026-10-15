@@ -7,7 +7,7 @@ import { rolePermissionKeys, type GrantRow, type RoleRow } from './rbac/grants.j
 import {
   FINGERPRINT_RE, LANGUAGES, POLICY_KEY_RE, TIERS, caseStatusSchema, ciEvaluateResponseSchema, corporateRuleSchema, findingResolutionSchema,
   repoInputSchema, repoPatternInputSchema, requestReviewRequestSchema,
-} from '@nomus/scanner/corporate';
+} from 'nomus-scan/corporate';
 import { quorumConfigSchema } from './quorum/schema.js';
 import { requirementSchema } from './quorum/evaluate.js';
 import { boardsOfUser } from './boards/service.js';
@@ -524,7 +524,7 @@ export function serializeTeam(db: Db, team: { id: string; key: string; name: str
 
 // ─── Review cases (Phase 4, E40 to E52) ────────────────────────────────
 // The shared client contracts (request review, case status, finding
-// resolutions) are in @nomus/scanner/corporate; these are engine-only.
+// resolutions) are in nomus-scan/corporate; these are engine-only.
 
 const fingerprintSchema = z.string().regex(FINGERPRINT_RE);
 const caseStateSchema = z.enum(['open', 'in_review', 'changes_requested', 'decided', 'closed']);

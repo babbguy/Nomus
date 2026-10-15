@@ -1,7 +1,7 @@
 /**
  * In-process capability detection for `check_applicability`.
  *
- * Runs the full @nomus/scanner detector registry (the same 6 plugins the
+ * Runs the full nomus-scan detector registry (the same 6 plugins the
  * scan pipeline uses) over a single in-memory code snippet — no filesystem,
  * no network. The derived capabilities feed POST /api/v1/simulate.
  */
@@ -16,7 +16,7 @@ import {
   DataFlowDetector,
   mergeSignals,
   type DetectorSignal,
-} from '@nomus/scanner';
+} from 'nomus-scan';
 
 /** Languages the scanner's detectors understand, mapped to file extensions. */
 const LANGUAGE_EXTENSIONS: Record<string, string> = {

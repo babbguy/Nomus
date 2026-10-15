@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- Renamed from `@nomus/scanner` to `nomus-scan` and published to npm (`npx nomus-scan .`). The
+  subpath exports are unchanged (`nomus-scan/corporate`, `nomus-scan/sarif`, ...). The package
+  no longer contains compiled tests or source maps.
+
 ### Added
 - Corporate policies in scans. `ScanOptions.corporate` (`{ mode: 'auto' | 'off', bundle?, now? }`,
   default off) fetches and verifies the org's signed bundle before any rule is used, then evaluates
@@ -17,7 +22,7 @@
   "corporate policies were NOT checked" warning and the regulatory scan runs as before.
 - The bundle client classifies failures (`unreachable`, `http` with the status, `invalid`) and
   returns the key the bundle was verified with, so clients can re-verify a cached copy offline.
-- `@nomus/scanner/corporate`: the corporate policy library shared by the engine, the VS Code
+- `nomus-scan/corporate`: the corporate policy library shared by the engine, the VS Code
   extension and the GitHub Action. It holds the corporate rule schema and its closed vocabularies
   (SDK families, detector capabilities, data patterns, data flows), the glob engine, static regex
   safety checks, the deterministic matcher (`evaluateCorporateRules`, `evaluateRuleOnText`) over
@@ -28,7 +33,7 @@
 ### Changed
 - The CLI sets its exit code with `process.exitCode` instead of calling `process.exit()`.
 - The SDK-usage detector adds `endLine` (the last line of the call expression) to its signal metadata.
-- `NomusApiError` moved to `src/errors.ts`; it is still exported from `@nomus/scanner` as before.
+- `NomusApiError` moved to `src/errors.ts`; it is still exported from `nomus-scan` as before.
 
 ## [1.0.0] - 2026-10-07
 

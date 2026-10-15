@@ -1,5 +1,5 @@
 import type { Db } from '../../db/client.js';
-import type { PrClosedRequest } from '@nomus/scanner/corporate';
+import type { PrClosedRequest } from 'nomus-scan/corporate';
 import { closeCase } from '../cases/close.js';
 import { findOpenCase } from '../cases/service.js';
 

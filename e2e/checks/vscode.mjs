@@ -64,8 +64,8 @@ export async function vscodeChecks(ctx) {
   } finally {
     await browser.close();
   }
-  const cbOk = typeof callback === 'string' && callback.startsWith('vscode://nomus.nomus/auth-callback?');
-  gate.check('dashboard login hands a one-time code back to vscode://nomus.nomus/auth-callback', cbOk, 'vscode://nomus.nomus/auth-callback?code=…&state=…', callback);
+  const cbOk = typeof callback === 'string' && callback.startsWith('vscode://babbguy.nomus/auth-callback?');
+  gate.check('dashboard login hands a one-time code back to vscode://babbguy.nomus/auth-callback', cbOk, 'vscode://babbguy.nomus/auth-callback?code=…&state=…', callback);
   if (!cbOk) return;
   const cb = new URL(callback.replace('vscode://', 'http://'));
   gate.equal('the callback carries the state the extension sent', cb.searchParams.get('state'), sentState);

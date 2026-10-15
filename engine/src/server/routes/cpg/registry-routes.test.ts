@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { verifyCorporateBundle } from '@nomus/scanner/corporate';
+import { verifyCorporateBundle } from 'nomus-scan/corporate';
 import { getDb } from '../../../db/client.js';
 import { runMigrations } from '../../../db/migrate.js';
 import { seedDatabase } from '../../../db/seed.js';

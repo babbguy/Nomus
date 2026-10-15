@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
 import * as vscode from 'vscode';
-import type { CorporateBundle, CorporateFinding } from '@nomus/scanner';
+import type { CorporateBundle, CorporateFinding } from 'nomus-scan';
 import type { DiagnosticsProvider } from '../diagnostics';
 import { BundleCache, DEFAULT_MAX_CACHE_AGE_HOURS, type BundleState } from './bundle-cache';
 import type { CorporateViewProvider } from './corporate-view';
@@ -211,7 +211,7 @@ export class CorporateController {
       if (!root || document.uri.scheme !== 'file') return [];
       const bundle = await this.ensureBundle();
       if (!bundle) return [];
-      const { runCorporateScan } = await import('@nomus/scanner');
+      const { runCorporateScan } = await import('nomus-scan');
       const outcome = await runCorporateScan([[document.fileName, document.getText()]], root, bundle, { now: this.now() });
       const findings = outcome.findings.filter((f) => f.file === document.fileName);
       this.findings.set(document.uri.toString(), { uri: document.uri, findings });
