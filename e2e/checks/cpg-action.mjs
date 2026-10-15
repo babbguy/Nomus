@@ -157,6 +157,10 @@ export async function cpgActionChecks(ctx) {
       'pass, success, edited once, revision +1 resolved 1',
       `${r2.outputs['corporate-status']} exit ${r2.code} (regulatory ${r2.outputs.status}), ${corporateRuns()[1]?.conclusion}, ${marked().length} comment(s) updated ${marked()[0]?.updates}, revisions ${revs(before)} -> ${revs(after)} resolved ${latest?.resolvedCount}; legacy ${data.cpg.decisions.legacyStatus}`);
     const corporate = corporateLine(r2.stdout);
+    gate.check('6b. the job log names each file count: source files scanned for the regulatory scan, files checked for corporate policies',
+      /^ {3}Source files scanned for the regulatory scan: \d+\r?$/m.test(r2.stdout) && !!corporate && !/^ {3}Files scanned:/m.test(r2.stdout),
+      '"Source files scanned for the regulatory scan: N" and "Corporate policies: P, files checked: N, …"',
+      r2.stdout.split(/\r?\n/).filter((l) => /files (scanned|checked)/i.test(l)).join(' | '));
 
     // ── 7. fail closed: no answer, a 500, a tampered verdict ──
     const closedPort = await freePort();

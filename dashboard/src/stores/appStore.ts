@@ -7,6 +7,7 @@ interface AppState {
   activeContext: 'nomus' | 'modus';
   theme: Theme;
   toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
   setContext: (ctx: 'nomus' | 'modus') => void;
   toggleTheme: () => void;
 }
@@ -28,7 +29,8 @@ function applyTheme(theme: Theme) {
 }
 
 /** Below Tailwind's md breakpoint the sidebar is an overlay over the page. */
-export const isNarrowViewport = () => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 767px)').matches;
+export const NARROW_VIEWPORT = '(max-width: 767px)';
+export const isNarrowViewport = () => typeof window !== 'undefined' && !!window.matchMedia?.(NARROW_VIEWPORT).matches;
 
 const initialTheme = getInitialTheme();
 applyTheme(initialTheme);
@@ -39,6 +41,7 @@ export const useAppStore = create<AppState>((set) => ({
   activeContext: 'nomus',
   theme: initialTheme,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   setContext: (activeContext) => set({ activeContext }),
   toggleTheme: () =>
     set((s) => {

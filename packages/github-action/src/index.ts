@@ -46,7 +46,7 @@ async function run(): Promise<void> {
       failOn,
     });
 
-    core.info(`   Files scanned: ${result.fileCount}`);
+    core.info(`   Source files scanned for the regulatory scan: ${result.fileCount}`);
     core.info(`   AI imports found: ${result.importCount}`);
     core.info(`   Findings: ${result.counts.total} (${result.counts.critical} critical, ${result.counts.high} high)`);
 

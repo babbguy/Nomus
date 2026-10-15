@@ -125,6 +125,17 @@ async function visit(ctx, s, who, route, { must = [], mustNot = [], expectLandin
   return { problems, text };
 }
 
+/** Viewport screenshots of the current page at phone, tablet and desktop widths (<name>-<width>.png). */
+async function screenshotsAt(ctx, page, name) {
+  const size = page.viewportSize();
+  for (const width of [400, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(ctx.shotsDir, `${name}-${width}.png`) }).catch(() => {});
+  }
+  if (size) await page.setViewportSize(size);
+}
+
 /** Run a UI step; record failures (with the page's errors) instead of throwing. */
 async function uiStep(s, label, fn) {
   const before = s.state.issues.length;
@@ -509,10 +520,11 @@ async function caseChecks(ctx, browser) {
  * cpg-approvals area decided. The Legal reviewer sees the voting panel and
  * approves the pending proposal through the UI; its developer is never
  * offered a decision on their own case; the exceptions page lists the
- * src/legacy/** exception. Called by cpg-approvals while governance is on;
- * the rows are reported under cpg-browser.
+ * src/legacy/** exception. A standing exception proposed from a case finding
+ * opens prefilled, and Revoke shows only to who may revoke. Called by
+ * cpg-approvals while governance is on; the rows are reported under cpg-browser.
  */
-export async function approvalPageChecks(ctx, { caseId, pendingId, status }) {
+export async function approvalPageChecks(ctx, { caseId, pendingId, status, revocableProposalId }) {
   const { gate } = ctx;
   const { users } = ctx.data.cpg;
   const area = gate.area;
@@ -537,7 +549,51 @@ export async function approvalPageChecks(ctx, { caseId, pendingId, status }) {
     const exceptions = await visit(ctx, legal, 'legal-reviewer', '/governance/exceptions', { must: ['Standing exceptions', 'src/legacy/**', 'corp.no-direct-openai', 'Revoked'] });
     gate.check('Legal reviewer /governance/exceptions lists the src/legacy/** exception with its status and history, no 4xx',
       exceptions.problems.length === 0, 'src/legacy/** listed', exceptions.problems.slice(0, 4));
+
+    // Propose a standing exception from the legacy finding: the form opens prefilled; the snippet condition is sent.
+    const LEGACY_FILE = 'src/legacy/old_chat.ts';
+    await visit(ctx, legal, 'legal-reviewer', `/governance/cases/${caseId}`);
+    let form = null;
+    const opened = await uiStep(legal, 'propose a standing exception from a finding', async () => {
+      await legal.page.click(`[data-testid=case-findings] > li:has-text("${LEGACY_FILE}") button:has-text("Propose a standing exception")`);
+      await legal.page.waitForSelector('[data-testid=standing-prefill]', { timeout: 10_000 });
+      form = await legal.page.evaluate(() => ({
+        path: location.pathname, policy: document.querySelector('#se-policy')?.selectedOptions?.[0]?.textContent ?? null,
+        repos: document.querySelector('#se-repos')?.value, paths: document.querySelector('#se-paths')?.value,
+      }));
+    });
+    await screenshotsAt(ctx, legal.page, 'cpg-legal-reviewer_exception-prefilled');
+    const sent = await uiStep(legal, 'submit the prefilled proposal', async () => {
+      await legal.page.fill('#se-snippet', 'openai');
+      await legal.page.check('label:has-text("Ignore case") input[type=checkbox]');
+      await legal.page.fill('#se-rationale', 'Gate: the legacy chat keeps its client until the gateway release.');
+      await legal.page.click('form button[type=submit]:has-text("Propose")');
+      await legal.page.waitForSelector('[data-testid=exceptions-notice]', { timeout: 10_000 });
+    });
+    const proposed = ((await users['legal-reviewer'].client.get('/api/v1/cpg/proposals?scope=standing&status=pending')).json?.items ?? [])
+      .find((p) => p.caseId === caseId && p.pattern?.paths?.[0] === LEGACY_FILE);
+    gate.check('Propose a standing exception on the legacy finding opens /governance/exceptions with the policy, repository and file filled in; the proposal records the case and the "snippet matches" condition',
+      opened.length === 0 && sent.length === 0 && form?.path === '/governance/exceptions' && /\(corp\.no-direct-openai v\d+, prohibited\)$/.test(form?.policy ?? '')
+        && form?.repos === 'gate-org/policy-repo' && form?.paths === LEGACY_FILE
+        && JSON.stringify(proposed?.pattern?.repos) === '["gate-org/policy-repo"]' && JSON.stringify(proposed?.pattern?.conditions?.snippetMustMatch) === '{"source":"openai","flags":"i"}',
+      'prefilled form; proposal with the case, repository, file and snippet condition',
+      [...opened, ...sent, JSON.stringify(form), JSON.stringify(proposed?.pattern ?? null)].slice(0, 5));
     await legal.context.close();
+
+    // Revoke shows only to who may revoke the exception (decision.revoke on every repository it touches).
+    const revokeButtons = async (client, who) => {
+      const s = await openAs(browser, ctx, client);
+      const shown = await visit(ctx, s, who, '/governance/exceptions', { must: ['src/unused/**'] });
+      const count = await s.page.locator(`#proposal-${revocableProposalId} button:has-text("Revoke")`).count();
+      await screenshotsAt(ctx, s.page, `cpg-${who}_exceptions`);
+      await s.context.close();
+      return { count, problems: shown.problems };
+    };
+    const owner = await revokeButtons(users.exceptions.client, 'exceptions');
+    const other = await revokeButtons(users['ai-reviewer'].client, 'ai-reviewer');
+    gate.check('the active src/unused/** exception shows Revoke to exceptions@ and not to ai-reviewer@ (decision.revoke on another repository only), no 4xx',
+      owner.count === 1 && other.count === 0 && owner.problems.length === 0 && other.problems.length === 0,
+      'Revoke 1 / 0', [`exceptions@ ${owner.count}, ai-reviewer@ ${other.count}`, ...owner.problems, ...other.problems].slice(0, 4));
 
     const dev = await openAs(browser, ctx, users.dev.client);
     const own = await visit(ctx, dev, 'dev', `/governance/cases/${caseId}`, {

@@ -212,7 +212,8 @@ export function caseDetail(db: Db, c: CaseRow, origin: string, actor: CpgActor) 
     viewer: {
       comment: can(actor, 'case.comment', repo), review: can(actor, 'case.review', repo),
       close, withdraw: close || c.openedBy === `user:${actor.userId}`,
-      revoke: can(actor, 'decision.revoke', repo), selfApproval: isSelfApproval(db, c, actor.userId),
+      revoke: can(actor, 'decision.revoke', repo), proposeException: can(actor, 'exception.propose', repo),
+      selfApproval: isSelfApproval(db, c, actor.userId),
     },
     revisions: revisions.map(revisionOf),
     justifications: justifications.map((j) => justificationOf(j, names)),

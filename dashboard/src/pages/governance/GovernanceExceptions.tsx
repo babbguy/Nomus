@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldOff } from 'lucide-react';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -14,11 +14,11 @@ import {
 } from '../../api/cpg';
 import { useCpgMe } from '../../hooks/useCpgMe';
 import { useCpgLoad } from '../../hooks/useCpgLoad';
-import { hasOrgPermission } from '../../lib/cpg-permissions';
+import { hasOrgPermission, holdsPermission } from '../../lib/cpg-permissions';
 import { formatUtc, policyErrorMessage } from '../../lib/cpg-policy';
 import {
-  EXCEPTION_STATUSES, EXCEPTION_STATUS_LABEL, EXCEPTION_STATUS_VARIANT, exceptionActions, exceptionRows, isoInDays, parseDays,
-  requirementText, scopeRule, type ExceptionRow, type ExceptionStatus,
+  EXCEPTION_STATUSES, EXCEPTION_STATUS_LABEL, EXCEPTION_STATUS_VARIANT, exceptionRows, isoInDays, parseDays,
+  requirementText, scopeRule, snippetPatternError, type ExceptionRow, type ExceptionStatus, type StandingPrefill,
 } from '../../lib/cpg-approvals';
 import GovernanceHeader from './GovernanceHeader';
 import { FilterTabs, InfoNote } from './parts';
@@ -27,35 +27,50 @@ import { ExpiryField, ProposalCard, RationaleField, RevokeModal, inputCls } from
 /**
  * /governance/exceptions (E54, E55, E57, E58, E60): standing exceptions,
  * pending, active, expired, revoked, lapsed (the policy has a newer version)
- * or not approved, including proposals made outside any case. Propose, vote
- * and revoke; the server checks every write on each repository a pattern covers.
+ * or not approved, including proposals made outside any case. Propose (also
+ * from a case finding, which opens the form prefilled), vote and revoke; the
+ * server checks every write on each repository a pattern covers.
  */
 export default function GovernanceExceptions() {
   const { me } = useCpgMe();
   const readsPolicies = hasOrgPermission(me, 'policy.read');
   const readsMembers = hasOrgPermission(me, 'org.members.read');
-  const actions = exceptionActions(me);
+  const canPropose = holdsPermission(me, 'exception.propose');
+  const location = useLocation();
+  const navigate = useNavigate();
   const { data: rows, error, fetchedAt, reload, retryKeepingData } = useCpgLoad(
     async () => exceptionRows(...await Promise.all([listStandingProposals(), listStandingExceptions()])), 'Failed to load the standing exceptions');
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<ExceptionStatus | ''>('');
   const [policyKey, setPolicyKey] = useState('');
-  const [proposing, setProposing] = useState(false);
+  // "Propose a standing exception" on a case finding arrives with the form's starting values.
+  const [prefill] = useState(() => (location.state as { propose?: StandingPrefill } | null)?.propose ?? null);
+  const [proposing, setProposing] = useState(prefill !== null);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [policies, setPolicies] = useState<PolicyHead[]>([]);
   const [quorum, setQuorum] = useState<QuorumConfig | null>(null);
+  const [refsLoaded, setRefsLoaded] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
+
+  // Consume the prefill once, so reloading the page does not open the form again.
+  useEffect(() => {
+    if (prefill) navigate('.', { replace: true, state: null });
+  }, [prefill, navigate]);
 
   // Reference data, each only when the caller may read it: policies and quorum (policy.read), teams (org.members.read).
   useEffect(() => {
     let cancelled = false;
     if (readsPolicies) {
-      listPolicies().then((p) => { if (!cancelled) setPolicies(p); }).catch(() => {});
-      getQuorum().then((q) => { if (!cancelled) setQuorum(q.config); }).catch(() => {});
+      void Promise.allSettled([
+        listPolicies().then((p) => { if (!cancelled) setPolicies(p); }),
+        getQuorum().then((q) => { if (!cancelled) setQuorum(q.config); }),
+      ]).then(() => { if (!cancelled) setRefsLoaded(true); });
     }
     if (readsMembers) listTeams().then((t) => { if (!cancelled) setTeams(t.filter((x) => !x.archivedAt)); }).catch(() => {});
     return () => { cancelled = true; };
   }, [readsPolicies, readsMembers]);
+  // The form picks its policy when it opens, so it waits for the policies.
+  const refsReady = me !== null && (!readsPolicies || refsLoaded);
 
   const changed = (text: string) => { setNotice(text); setProposing(false); setRevoking(null); reload(); };
   const boards = new Map([...(me?.boards ?? []), ...policies.flatMap((p) => p.owningBoards)].map((b) => [b.id, b.name]));
@@ -71,7 +86,7 @@ export default function GovernanceExceptions() {
         icon={ShieldOff}
         title="Standing exceptions"
         subtitle="Approvals that cover future findings matching a pattern, pinned to one policy version, always with an expiry"
-        actions={actions.propose && !readOnly ? <Button size="sm" onClick={() => setProposing(true)}>Propose an exception</Button> : undefined}
+        actions={canPropose && !readOnly ? <Button size="sm" onClick={() => setProposing(true)}>Propose an exception</Button> : undefined}
       />
       {readOnly && (
         <InfoNote role="status">{readOnly}</InfoNote>
@@ -106,13 +121,15 @@ export default function GovernanceExceptions() {
               {shown.map((r) => (
                 <ProposalCard key={r.proposal.id} proposal={r.proposal} boardName={boardName} onChanged={changed} voteHidden={readOnly}
                   status={<Badge variant={EXCEPTION_STATUS_VARIANT[r.status]} className="whitespace-nowrap">{EXCEPTION_STATUS_LABEL[r.status]}</Badge>}
-                  subject={<ExceptionSubject row={r} teamName={teamName} canRevoke={actions.revoke && !readOnly} onRevoke={setRevoking} />} />
+                  subject={<ExceptionSubject row={r} teamName={teamName} writable={!readOnly} onRevoke={setRevoking} />} />
               ))}
             </ul>
           )}
       <DataFreshness fetchedAt={fetchedAt} />
 
-      {proposing && <StandingModal policies={policies} quorum={quorum} teams={teams} onClose={() => setProposing(false)} onDone={changed} />}
+      {proposing && canPropose && !readOnly && refsReady && (
+        <StandingModal policies={policies} quorum={quorum} teams={teams} initial={prefill} onClose={() => setProposing(false)} onDone={changed} />
+      )}
       {revoking && <RevokeModal decisionId={revoking} what="standing exception" onClose={() => setRevoking(null)} onDone={changed} />}
     </div>
   );
@@ -120,8 +137,9 @@ export default function GovernanceExceptions() {
 
 const lines = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean);
 
-function ExceptionSubject({ row: { proposal: p, exception: x, status }, teamName, canRevoke, onRevoke }: {
-  row: ExceptionRow; teamName: (id: string) => string; canRevoke: boolean; onRevoke: (decisionId: string) => void;
+/** An exception's pattern and state; Revoke shows when the server says the caller may revoke it (decision.revoke on every repository it touches). */
+export function ExceptionSubject({ row: { proposal: p, exception: x, status }, teamName, writable, onRevoke }: {
+  row: ExceptionRow; teamName: (id: string) => string; writable: boolean; onRevoke: (decisionId: string) => void;
 }) {
   const pattern = p.pattern;
   if (!pattern) return null;
@@ -151,30 +169,38 @@ function ExceptionSubject({ row: { proposal: p, exception: x, status }, teamName
             Approved {formatUtc(x.finalizedAt)}.{status === 'lapsed' ? ` It applied to ${x.policyKey} v${x.policyVersion}, which is no longer the active version; propose it again for the current one.`
               : status === 'revoked' || status === 'expired' ? ' It no longer applies.' : ''}
           </p>
-          {status === 'active' && canRevoke && <Button size="sm" variant="ghost" onClick={() => onRevoke(x.id)}>Revoke</Button>}
+          {status === 'active' && x.viewer.revoke && writable && <Button size="sm" variant="ghost" onClick={() => onRevoke(x.id)}>Revoke</Button>}
         </div>
       )}
     </div>
   );
 }
 
-/** Propose a standing exception: a pattern on one active policy version, with an expiry within the configured range. */
-function StandingModal({ policies, quorum, teams, onClose, onDone }: {
-  policies: PolicyHead[]; quorum: QuorumConfig | null; teams: Team[]; onClose: () => void; onDone: (text: string) => void;
+/**
+ * Propose a standing exception: a pattern on one active policy version, with
+ * an expiry within the configured range. Opened from a case finding, it starts
+ * with that finding's policy, repository and file, and records the case.
+ */
+export function StandingModal({ policies, quorum, teams, initial = null, onClose, onDone }: {
+  policies: PolicyHead[]; quorum: QuorumConfig | null; teams: Team[]; initial?: StandingPrefill | null; onClose: () => void; onDone: (text: string) => void;
 }) {
   const [now] = useState(() => Date.now());
   const candidates = policies.filter((p) => p.state === 'active' && p.activeVersion !== null && p.tier !== 'advisory');
-  const [policyId, setPolicyId] = useState(candidates[0]?.policyId ?? '');
+  const [policyId, setPolicyId] = useState((initial ? candidates.find((p) => p.policyKey === initial.policyKey) : candidates[0])?.policyId ?? '');
   const policy = candidates.find((p) => p.policyId === policyId);
   const rule = policy && quorum ? scopeRule(quorum, policy.policyId, policy.tier, 'standing') : null;
   const [days, setDays] = useState(rule ? String(rule.defaultDays) : '30');
-  const [repos, setRepos] = useState('');
+  const [repos, setRepos] = useState(initial?.repo ?? '');
   const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [paths, setPaths] = useState('');
+  const [paths, setPaths] = useState(initial?.path ?? '');
   const [excludePaths, setExcludePaths] = useState('');
   const [branches, setBranches] = useState('');
   const [languages, setLanguages] = useState<string[]>([]);
   const [maxLines, setMaxLines] = useState('');
+  const [snippet, setSnippet] = useState('');
+  const [snippetIgnoreCase, setSnippetIgnoreCase] = useState(false);
+  const snippetFlags = snippetIgnoreCase ? 'i' : '';
+  const snippetProblem = snippet ? snippetPatternError(snippet, snippetFlags) : null;
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,11 +212,12 @@ function StandingModal({ policies, quorum, teams, onClose, onDone }: {
     if (nextRule) setDays(String(nextRule.defaultDays));
   };
   const problem = !quorum ? 'Proposing needs the policies and the quorum configuration, which your role cannot read (policy.read).'
-    : !policy ? 'No active policy can take a standing exception.'
+    : !policy ? (initial ? `${initial.policyKey} has no active version that can take a standing exception.` : 'No active policy can take a standing exception.')
       : !rule ? 'The quorum configuration does not allow standing exceptions for this policy.'
         : lines(repos).length + teamIds.length === 0 ? 'Name at least one repository pattern or team.'
           : lines(paths).length === 0 ? 'Name at least one path glob.'
             : maxLines.trim() && parseDays(maxLines, 400) === null ? 'Lines per finding must be a whole number from 1 to 400.'
+              : snippetProblem ? snippetProblem
               : expiryDays === null ? 'Choose a valid expiry.'
                 : rationale.trim().length < 20 ? 'Write a rationale of at least 20 characters.' : null;
 
@@ -205,10 +232,11 @@ function StandingModal({ policies, quorum, teams, onClose, onDone }: {
         ...(lines(branches).length > 0 ? { branches: lines(branches) } : {}),
         ...(languages.length > 0 ? { languages: languages as StandingPattern['conditions']['languages'] } : {}),
         ...(maxLines.trim() ? { maxLinesPerFinding: Number(maxLines) } : {}),
+        ...(snippet ? { snippetMustMatch: { source: snippet, flags: snippetFlags } } : {}),
       },
     };
     try {
-      await propose({ scope: 'standing', pattern, expiresAt: isoInDays(expiryDays, now), rationale: rationale.trim() });
+      await propose({ scope: 'standing', ...(initial ? { caseId: initial.caseId } : {}), pattern, expiresAt: isoInDays(expiryDays, now), rationale: rationale.trim() });
       onDone('Proposed. The exception applies once its approvers have voted.');
     } catch (err) {
       setError(policyErrorMessage(err, 'Proposing failed'));
@@ -226,9 +254,15 @@ function StandingModal({ policies, quorum, teams, onClose, onDone }: {
   return (
     <Modal open onClose={onClose} title="Propose a standing exception" width="max-w-2xl">
       <form onSubmit={(e) => void submit(e)} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        {initial && (
+          <p className="text-xs text-text-secondary" data-testid="standing-prefill">
+            From a finding of case {initial.caseRef}: its policy, repository and file are filled in. Widen the path to a glob to cover more files.
+          </p>
+        )}
         <div>
           <label htmlFor="se-policy" className="block text-xs text-text-muted mb-1">Policy *</label>
           <select id="se-policy" value={policyId} onChange={(e) => pickPolicy(e.target.value)} className={inputCls}>
+            {!policy && <option value="" disabled>Choose a policy</option>}
             {candidates.map((p) => <option key={p.policyId} value={p.policyId}>{p.title} ({p.policyKey} v{p.activeVersion}, {p.tier})</option>)}
           </select>
           {rule && (
@@ -271,6 +305,13 @@ function StandingModal({ policies, quorum, teams, onClose, onDone }: {
             <label htmlFor="se-lines" className="block text-xs text-text-muted mb-1">At most this many lines per finding</label>
             <input id="se-lines" type="number" min={1} max={400} value={maxLines} onChange={(e) => setMaxLines(e.target.value)} className={`${inputCls} max-w-[8rem]`} />
           </div>
+        </div>
+        <div>
+          <label htmlFor="se-snippet" className="block text-xs text-text-muted mb-1">Only when the snippet matches (regular expression)</label>
+          <input id="se-snippet" value={snippet} maxLength={200} onChange={(e) => setSnippet(e.target.value)} placeholder="legacyClient\.send" className={`${inputCls} font-mono text-xs`} />
+          <label className="flex items-center gap-2 text-xs text-text-secondary mt-1">
+            <input type="checkbox" checked={snippetIgnoreCase} onChange={(e) => setSnippetIgnoreCase(e.target.checked)} />Ignore case
+          </label>
         </div>
         {rule && <ExpiryField id="se-expiry" days={days} setDays={setDays} maxDays={rule.maxDays} now={now} />}
         <RationaleField id="se-rationale" value={rationale} setValue={setRationale} />

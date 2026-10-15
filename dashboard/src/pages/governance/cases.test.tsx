@@ -8,10 +8,13 @@ import { FindingList } from './cases/Findings';
 import * as fx from '../../test/cpg-fixtures';
 import { FindingDecision, type DecisionContext } from './cases/Decisions';
 import { ProposalCard } from './decisions/parts';
+import { ExceptionSubject, StandingModal } from './GovernanceExceptions';
 import {
   caseDetailSchema, caseSummarySchema, ciRunSchema, proposalSchema, revisionDetailSchema, standingExceptionSchema, type CaseDetail, type CpgMe,
 } from '../../api/cpg';
-import { exceptionRows, lapsingCount, parseDays, progressText, quorumProgress, requirementText, scopeRule } from '../../lib/cpg-approvals';
+import {
+  exceptionRows, lapsingCount, parseDays, progressText, quorumProgress, requirementText, scopeRule, snippetPatternError, standingPrefill,
+} from '../../lib/cpg-approvals';
 import { asSentence, breakablePath, caseActions, pageNote, pullRequestUrl, relativeTime, threadsOf } from '../../lib/cpg-cases';
 import { missingPermissions } from '../../lib/cpg-permissions';
 
@@ -50,7 +53,7 @@ const detail: CaseDetail = caseDetailSchema.parse({
     updatedAt: T,
   },
   openedAt: T, openedBy: summary.openedBy, closure: null,
-  viewer: { comment: true, review: true, close: true, withdraw: true, revoke: false, selfApproval: false },
+  viewer: { comment: true, review: true, close: true, withdraw: true, revoke: false, proposeException: false, selfApproval: false },
   revisions: [{ revision: 1, source: 'vscode', headSha: null, findingsDigest: 'b'.repeat(64), addedCount: 1, carriedCount: 0, resolvedCount: 0, createdAt: T }],
   justifications: [{ id: '88888888-8888-4888-8888-888888888888', fingerprint: FP, authorUserId: DEV_ID, authorName: 'Dana Developer', body: 'Streaming is needed first.', createdAt: T }],
   comments: [request, reply],
@@ -58,7 +61,7 @@ const detail: CaseDetail = caseDetailSchema.parse({
 const closedDetail: CaseDetail = caseDetailSchema.parse({
   ...detail,
   case: { ...detail.case, state: 'closed', closeReason: 'closed_by_reviewer', openChangeRequests: [] },
-  viewer: { comment: true, review: true, close: true, withdraw: true, revoke: false, selfApproval: false },
+  viewer: { comment: true, review: true, close: true, withdraw: true, revoke: false, proposeException: false, selfApproval: false },
   closure: {
     reason: 'closed_by_reviewer', note: 'Replaced by another branch.', closedAt: T, closedBy: { actor: `user:${REVIEWER_ID}`, name: 'Rita Reviewer' },
     record: { kind: 'nomus.cpg-case-closure.v1', caseId: CASE_ID }, signature: 'c2lnbmF0dXJl', signatureValid: true,
@@ -110,9 +113,9 @@ describe('case pages: rules', () => {
     expect(caseActions(detail, reviewer).reviewLanes.map((l) => l.boardId)).toEqual([AI]);
     const outsider = caseActions(detail, meAs(REVIEWER_ID, ['case.review']));
     expect([outsider.reviewLanes, outsider.reviewBlocked]).toEqual([[], 'Only members of the AI Review Board or Legal Board can request changes on this case.']);
-    const asDev = caseActions(asViewer(detail, { comment: true, review: false, close: false, withdraw: true, revoke: false, selfApproval: true }), dev);
+    const asDev = caseActions(asViewer(detail, { comment: true, review: false, close: false, withdraw: true, revoke: false, proposeException: false, selfApproval: true }), dev);
     expect([asDev.reviewBlocked, asDev.end, asDev.comment]).toEqual([null, 'withdraw', null]);
-    expect(caseActions(asViewer(detail, { comment: false, review: false, close: false, withdraw: false, revoke: false, selfApproval: false }), meAs(REVIEWER_ID, ['case.read'])))
+    expect(caseActions(asViewer(detail, { comment: false, review: false, close: false, withdraw: false, revoke: false, proposeException: false, selfApproval: false }), meAs(REVIEWER_ID, ['case.read'])))
       .toMatchObject({ end: null, comment: 'Commenting needs the case.comment permission on this repository.' });
   });
 
@@ -277,11 +280,59 @@ describe('case decisions and standing exceptions', () => {
     const done = { ...pending, status: 'finalized' as const, decisionIds: [DECISION_ID] };
     const exception = standingExceptionSchema.parse({
       id: DECISION_ID, proposalId: done.id, caseId: null, policyId: POLICY_ID, policyKey: 'corp.no-direct-openai', policyVersion: 1, pattern,
-      expiresAt: '2026-11-08T08:00:00.000Z', finalizedAt: T, approverUserIds: [REVIEWER_ID], status: 'lapsed', revocation: null,
+      expiresAt: '2026-11-08T08:00:00.000Z', finalizedAt: T, approverUserIds: [REVIEWER_ID], status: 'lapsed', revocation: null, viewer: { revoke: false },
     });
     expect(exceptionRows([pending, vetoed], []).map((r) => r.status)).toEqual(['not_approved', 'pending']);
     expect(exceptionRows([done], [exception])[0]).toMatchObject({ status: 'lapsed', exception: { id: DECISION_ID } });
     const active = { ...exception, status: 'active' as const };
     expect([lapsingCount([active, exception], 'corp.no-direct-openai', 1), lapsingCount([active], 'corp.no-direct-openai', 2)]).toEqual([1, 0]);
+  });
+
+  it('Revoke shows on an active exception only when the server says the caller may revoke it, and never while read-only', () => {
+    const pattern = { repos: ['example-org/app'], teamIds: [], paths: ['src/legacy/**'], excludePaths: [], policyKey: 'corp.no-direct-openai', policyVersion: 1, conditions: {} };
+    const done = { ...proposal, caseId: null, scope: 'standing' as const, pattern, fingerprints: [], status: 'finalized' as const, decisionIds: [DECISION_ID] };
+    const exception = standingExceptionSchema.parse({
+      id: DECISION_ID, proposalId: done.id, caseId: null, policyId: POLICY_ID, policyKey: 'corp.no-direct-openai', policyVersion: 1, pattern,
+      expiresAt: '2026-11-08T08:00:00.000Z', finalizedAt: T, approverUserIds: [REVIEWER_ID], status: 'active', revocation: null, viewer: { revoke: true },
+    });
+    const subject = (revoke: boolean, writable: boolean) => text(
+      <ExceptionSubject row={{ proposal: done, exception: { ...exception, viewer: { revoke } }, status: 'active' }} teamName={(id) => id} writable={writable} onRevoke={() => {}} />,
+    );
+    expect(subject(true, true)).toContain('Revoke');
+    expect(subject(false, true)).not.toContain('Revoke');
+    expect(subject(true, false)).not.toContain('Revoke');
+  });
+
+  it('a case finding offers a standing exception to exception.propose holders on its repository, prefilled with its policy, repository and file', () => {
+    const may = (proposeException: boolean) => asViewer(detail, { ...detail.viewer, proposeException });
+    expect(text(<FindingDecision ctx={ctx({ detail: may(true) })} finding={finding} resolution={resolution} />)).toContain('Propose a standing exception');
+    expect(text(<FindingDecision ctx={ctx({ detail: may(false) })} finding={finding} resolution={resolution} />)).not.toContain('Propose a standing exception');
+    expect(text(<FindingDecision ctx={ctx({ detail: may(true), readOnly: 'This case is closed: it can no longer be changed.' })} finding={finding} resolution={resolution} />))
+      .not.toContain('Propose a standing exception');
+    expect(text(<FindingDecision ctx={ctx({ detail: may(true) })} finding={finding} resolution={{ ...resolution, status: 'excepted', exceptionDecisionId: DECISION_ID }} />))
+      .not.toContain('Propose a standing exception');
+    // Without the board membership a decision needs, the standing exception is still offered next to the reason.
+    const outsider = text(<FindingDecision ctx={ctx({ detail: may(true), me: meAs(REVIEWER_ID, ['case.review', 'exception.propose'], []) })} finding={finding} resolution={resolution} />);
+    expect(outsider).toContain('Only members of a board that owns this policy can propose a decision on it.');
+    expect(outsider).toContain('Propose a standing exception');
+
+    const prefill = standingPrefill(detail, finding);
+    expect(prefill).toEqual({ caseId: CASE_ID, caseRef: 'CPG-6F1C2D3E', policyKey: 'corp.no-direct-openai', repo: 'example-org/support-app', path: 'src/chat.ts' });
+    const head = { ...fx.policyHead, policyId: POLICY_ID, policyKey: 'corp.no-direct-openai', tier: 'prohibited' as const };
+    const other = { ...fx.policyHead, policyId: DECISION_ID, policyKey: 'corp.other' };
+    const form = renderToStaticMarkup(<StandingModal policies={[other, head]} quorum={fx.quorumConfig} teams={[]} initial={prefill} onClose={() => {}} onDone={() => {}} />);
+    expect(form).toContain('From a finding of case CPG-6F1C2D3E: its policy, repository and file are filled in.');
+    expect(form).toMatch(new RegExp(`<option value="${POLICY_ID}" selected="">`));
+    expect(form).toMatch(/id="se-repos"[^>]*>example-org\/support-app<\/textarea>/);
+    expect(form).toMatch(/id="se-paths"[^>]*>src\/chat\.ts<\/textarea>/);
+    expect(form).toContain('Only when the snippet matches (regular expression)');
+    const retired = renderToStaticMarkup(<StandingModal policies={[other]} quorum={fx.quorumConfig} teams={[]} initial={prefill} onClose={() => {}} onDone={() => {}} />);
+    expect(retired).toContain('corp.no-direct-openai has no active version that can take a standing exception.');
+  });
+
+  it('a "snippet matches" pattern must be a valid regular expression of at most 200 characters', () => {
+    expect([snippetPatternError('legacyClient\\.send', ''), snippetPatternError('legacy', 'i')]).toEqual([null, null]);
+    expect(snippetPatternError('legacy(', '')).toBe('The snippet pattern is not a valid regular expression.');
+    expect(snippetPatternError('a'.repeat(201), '')).toBe('The snippet pattern can be at most 200 characters.');
   });
 });

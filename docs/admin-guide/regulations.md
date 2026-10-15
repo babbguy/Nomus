@@ -56,7 +56,7 @@ Source names are unique (case-insensitive), and the API refuses a duplicate with
 | Scrape frequency, headless | Operational settings |
 | Content selector / page range, remove selectors | Parsing settings |
 
-Then either run **Scrape** (the pipeline extracts rules with your LLM provider) or add rules by hand. For a regulation that is not on a scrapeable page, create a Manual source and upload the document, or skip the document entirely and write the rules yourself (see below).
+Then either run **Scrape** (the pipeline extracts rules with your LLM provider) or add rules by hand. For a regulation that is not on a scrapeable page, create a Manual source and upload the document, or skip the document entirely and write the rules yourself (see below). Uploading the same document again changes nothing: the source shows **No changes detected** and the document is not sent to your LLM provider again. A document whose processing failed or was rejected is processed again in full.
 
 ---
 

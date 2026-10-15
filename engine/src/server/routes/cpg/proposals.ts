@@ -113,7 +113,7 @@ cpgProposalRoutes.get('/exceptions', ...auth(true), handle((c) => {
   const items = (getOrgSettings(db, actor.orgId)?.enabled ? standingExceptions(db, actor.orgId) : [])
     .filter((x) => canOnPattern(actor, 'case.read', x.pattern) && (!q.policyKey || x.pattern.policyKey === q.policyKey)
       && (!q.repo || compileGlobList([...x.pattern.repos, ...x.teamRepos])(q.repo)))
-    .map((x) => exceptionOf(x, at))
+    .map((x) => exceptionOf(x, at, actor))
     .filter((x) => q.active === undefined || (x.status === 'active') === (q.active === 'true'));
   return c.json(exceptionListResponseSchema.parse({ items }));
 }));

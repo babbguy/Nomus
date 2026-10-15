@@ -104,6 +104,10 @@ export async function actionChecks(ctx) {
   const got1 = gh.state.reviewComments.map((c) => `${c.path}:${c.line}`).sort();
   gate.equal('one review posted on the PR head commit', gh.state.reviews.map((r) => r.commit_id), [HEAD_SHA]);
   gate.check('review comments cover every finding location inside the diff, and only those', JSON.stringify(got1) === JSON.stringify(want), want, got1);
+  const wrongLanguage = suggestionProblems(gh.state.reviewComments);
+  gate.check("review comment fix suggestions are in the file's language (Python for .py, JavaScript for .ts) and name no model",
+    wrongLanguage.length === 0 && gh.state.reviewComments.some((c) => c.path.endsWith('.py') && /Suggested fix/.test(c.body)),
+    'suggestions on the .py file, none in another language or naming a model', wrongLanguage.slice(0, 3));
   gate.equal('summary comment posted once', gh.state.issueComments.length, 1);
   const summary = gh.state.issueComments[0]?.body ?? '';
   gate.check('summary comment states the findings total', summary.includes('<!-- nomus-scan -->') && new RegExp(`\\b${r1.outputs['total-findings']}\\b`).test(summary), `marker + ${r1.outputs['total-findings']}`, summary.slice(0, 160));
@@ -140,6 +144,17 @@ export async function actionChecks(ctx) {
   gate.equal('run 2 exit code and outputs match run 1', [r2.code, r2.outputs['total-findings'], r2.outputs['compliance-score']], [r1.code, r1.outputs['total-findings'], r1.outputs['compliance-score']]);
 
   ctx.data.action = { repo: repoName, total: Number(r1.outputs['total-findings']), score };
+}
+
+const JS_CODE = /^\s*(import \{|const |await )|;\s*$/m;
+const PY_CODE = /\*\*request|^from \S+ import |^# |\["[^"]+"\]/m;
+const MODEL_ID = /claude-|gpt-|gemini-|sonnet|haiku|opus/i;
+
+/** Each review comment's suggested fix that is in the other language or names a model. */
+function suggestionProblems(comments) {
+  return comments.flatMap((c) => [...c.body.matchAll(/<summary>💡 Suggested fix<\/summary>\n\n```\n([\s\S]*?)\n```/g)].map((m) => m[1])
+    .filter((s) => MODEL_ID.test(s) || (c.path.endsWith('.py') ? JS_CODE.test(s) : PY_CODE.test(s)))
+    .map((s) => `${c.path}:${c.line}: ${s.split('\n').slice(0, 2).join(' / ')}`));
 }
 
 export function parseOutputs(text) {

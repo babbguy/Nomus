@@ -175,6 +175,7 @@ export async function browserChecks(ctx) {
         for (const must of exp.must ?? []) if (must && !text.includes(must)) problems.push(`missing "${must}" (the gate created it)`);
         gate.check(`${who} ${route}`, problems.length === 0, 'renders cleanly with its data', problems.slice(0, 4));
       }
+      if (who === 'member') await layoutChecks(gate, page, webUrl, shotsDir);
       await context.close();
     }
   } finally {
@@ -188,6 +189,63 @@ export async function browserChecks(ctx) {
   // Every page that streamed live updates has been closed.
   const count = (await d.adminKey.get('/api/v1/dashboard/connected-clients')).json?.count;
   gate.equal('after the sweep no SSE connection is left open', count, 0);
+}
+
+/**
+ * The app shell at phone, tablet and desktop widths (screenshots
+ * layout-<width>_<route>.png): nothing is wider than the window and the
+ * sidebar never covers the page. On a phone the sidebar is an overlay that
+ * the menu button opens over a backdrop and that closes when a page is picked.
+ */
+async function layoutChecks(gate, page, webUrl, shotsDir) {
+  const routes = ['/dashboard', '/policies', '/scans', '/attestations', '/settings'];
+  for (const width of [400, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const problems = [];
+    for (const route of routes) {
+      // A fresh load, so the shell starts as it does on a device of this width.
+      await page.goto(`${webUrl}${route}`);
+      await settle(page);
+      await page.screenshot({ path: path.join(shotsDir, `layout-${width}${route.replace(/\//g, '_')}.png`) }).catch(() => {});
+      const m = await shellMetrics(page);
+      if (m.overflow > 0) problems.push(`${route}: ${m.overflow}px wider than the window`);
+      if (m.sidebarRight > m.mainLeft + 1) problems.push(`${route}: the sidebar covers ${Math.round(m.sidebarRight - m.mainLeft)}px of the page`);
+      if (width >= 768 && m.sidebarRight === 0) problems.push(`${route}: no sidebar`);
+    }
+    if (width === 400) {
+      await page.click('button[aria-label="Open navigation"]').catch((err) => problems.push(`menu button: ${String(err.message).split('\n')[0]}`));
+      const open = await shellMetrics(page);
+      await page.screenshot({ path: path.join(shotsDir, 'layout-400_menu-open.png') }).catch(() => {});
+      if (!open.backdrop || open.sidebarRight === 0) problems.push('the menu button does not open the sidebar over a backdrop');
+      await page.click('aside:visible a[href="/policies"]').catch((err) => problems.push(`sidebar link: ${String(err.message).split('\n')[0]}`));
+      await settle(page);
+      const picked = await shellMetrics(page);
+      if (new URL(page.url()).pathname !== '/policies' || picked.sidebarRight > 0 || picked.backdrop) problems.push('picking a page does not close the sidebar');
+    }
+    gate.check(`member pages at ${width} px: nothing wider than the window, the sidebar never covers the page${width === 400 ? ' (an overlay the menu opens and a picked page closes)' : ''}`,
+      problems.length === 0, routes.join(', '), problems.slice(0, 4));
+  }
+  // A wide window narrowed to phone width (or a rotated tablet) closes the sidebar instead of leaving it over the page.
+  await page.setViewportSize({ width: 400, height: 900 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(shotsDir, 'layout-1440-to-400.png') }).catch(() => {});
+  const narrowed = await shellMetrics(page);
+  gate.check('a member page loaded at 1440 px and narrowed to 400 px: the sidebar closes, nothing covers or widens the page',
+    narrowed.sidebarRight === 0 && !narrowed.backdrop && narrowed.overflow <= 0, 'no sidebar, no backdrop, no overflow', JSON.stringify(narrowed));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+}
+
+/** Horizontal overflow, the right edge of the visible sidebar (0 if none), the page's left edge and whether the backdrop shows. */
+function shellMetrics(page) {
+  return page.evaluate(() => {
+    const shown = (el) => el.getBoundingClientRect().width > 0;
+    return {
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      sidebarRight: Math.max(0, ...[...document.querySelectorAll('aside')].filter(shown).map((a) => a.getBoundingClientRect().right)),
+      mainLeft: document.querySelector('main')?.getBoundingClientRect().left ?? 0,
+      backdrop: [...document.querySelectorAll('.sidebar-backdrop')].some(shown),
+    };
+  });
 }
 
 function allowed(method, pathname, status, route) {

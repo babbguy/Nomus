@@ -96,6 +96,7 @@ import { scrapeSource } from './scraper.js';
 import { healContent } from './scrape-healer.js';
 import { scoreDocumentQuality } from './quality-scorer.js';
 import { scoreRules } from './rule-scorer.js';
+import { bulkExtract } from './bulk-extractor.js';
 
 beforeAll(() => {
   closeDb();
@@ -125,13 +126,13 @@ function insertUploadedSource(id: string): void {
   }).run();
 }
 
-function reupload(id: string): void {
+function reupload(id: string, content = UPLOAD): void {
   const now = new Date(Date.now() + 1000).toISOString();
-  const hash = createHash('sha256').update(UPLOAD).digest('hex');
+  const hash = createHash('sha256').update(content).digest('hex');
   const db = getDb();
   db.update(regulatorySources).set({ pendingUploadFile: 'act.html', pendingUploadHash: hash, pendingUploadAt: now })
     .where(eq(regulatorySources.id, id)).run();
-  db.insert(rawSnapshots).values({ id: randomUUID(), sourceId: id, contentHash: hash, content: UPLOAD, scrapedAt: now }).run();
+  db.insert(rawSnapshots).values({ id: randomUUID(), sourceId: id, contentHash: hash, content, scrapedAt: now }).run();
 }
 
 describe('uploaded documents', () => {
@@ -167,6 +168,34 @@ describe('uploaded documents', () => {
       .orderBy(desc(stagedContent.createdAt)).get()!;
     expect(staged.pipelineStatus).toBe('promoted');
     expect(staged.pipelineError).toBeNull();
+  });
+
+  it('an identical re-upload of promoted content is a no-op without asking the LLM again', async () => {
+    const id = randomUUID();
+    insertUploadedSource(id);
+    expect((await runPipeline(id)).status).toBe('completed');
+
+    reupload(id);
+    vi.mocked(bulkExtract).mockClear();
+    vi.mocked(scoreRules).mockClear();
+    const second = await runPipeline(id);
+    expect(second).toMatchObject({ status: 'no_change', rulesCreated: 0, rulesUpdated: 0 });
+    expect(bulkExtract).not.toHaveBeenCalled();
+    expect(scoreRules).not.toHaveBeenCalled();
+    const source = getDb().select().from(regulatorySources).where(eq(regulatorySources.id, id)).get()!;
+    expect(source.pendingUploadHash).toBeNull();
+    expect(source.consecutiveFailures).toBe(0);
+  });
+
+  it('a changed re-upload of promoted content is processed', async () => {
+    const id = randomUUID();
+    insertUploadedSource(id);
+    expect((await runPipeline(id)).status).toBe('completed');
+
+    reupload(id, UPLOAD.replace('before the interview', 'in writing before the interview'));
+    vi.mocked(bulkExtract).mockClear();
+    expect((await runPipeline(id)).status).toBe('completed');
+    expect(bulkExtract).toHaveBeenCalled();
   });
 });
 

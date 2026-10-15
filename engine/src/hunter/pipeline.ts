@@ -466,6 +466,21 @@ async function runPipelineSteps(sourceId: string): Promise<PipelineResult> {
       };
     }
 
+    // An upload identical to the content this source last promoted changes
+    // nothing: its rules already exist. Extraction is not repeated, since the
+    // LLM need not answer the same twice (models without temperature 0 sample).
+    // Scrape health is not touched: the upload path never counts as a scrape.
+    if (hasPendingUpload && existingStaged?.pipelineStatus === 'promoted' && existingStaged.contentHash === scrapeResult.contentHash) {
+      const duration = Math.round(performance.now() - startTime);
+      recordPipelineRun(db, source.id, 'no_change', 1, false, null, 0, 0, duration);
+      logger.info({ sourceId, contentHash: scrapeResult.contentHash }, 'Step 1: Upload is identical to the promoted content — stopping');
+      return {
+        sourceId, sourceName: source.name,
+        status: 'no_change', stepReached: 1,
+        rulesCreated: 0, rulesUpdated: 0, durationMs: duration,
+      };
+    }
+
     // Save to content cache for future fallback
     try {
       const { saveCacheContent } = await import('./content-cache.js');

@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, standing exceptions: **Propose a standing exception** on a case
+  finding opens the propose form with the finding's policy, repository and file filled in and
+  records the case. The form gains the "snippet matches" condition (a regular expression, optionally
+  ignoring case) that the API already accepted. Case details report `viewer.proposeException`.
 - **Container images.** Each release publishes `ghcr.io/babbguy/nomus-engine` and
   `ghcr.io/babbguy/nomus-dashboard` for linux/amd64 and linux/arm64, tagged with the version
   (`1.2.0`), the minor line (`1.2`) and `latest`. Each image is signed with cosign (keyless, by
@@ -32,8 +36,9 @@ All notable changes to this project are documented here. The format follows
 - **Security scanning.** CodeQL analyzes the TypeScript/JavaScript sources and the GitHub Actions
   workflows on pull requests and pushes to `develop` and `main` and weekly, and OpenSSF Scorecard
   scores the repository weekly and on pushes to `develop`, publishing its result for the README
-  badge. Dependabot proposes monthly grouped updates for the base images, the Compose images and
-  the GitHub Actions.
+  badge. Dependabot proposes monthly grouped updates for the base images, the Compose images, the
+  GitHub Actions and the npm dependencies of every workspace, holding back the majors listed under
+  "Dependencies" below.
 - Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
   export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
   every signed decision, revocation, case closure record and CI verdict, verifiable offline with the
@@ -327,6 +332,18 @@ All notable changes to this project are documented here. The format follows
   while the user has a temporary password.
 
 ### Fixed
+- Dashboard: a window narrowed below 768 px (or a rotated tablet) kept the sidebar open over the
+  page. Crossing the breakpoint now closes it on narrow screens and opens it on wide ones. On a
+  phone the footer wraps and drops its tagline, and the menu button is labelled for screen readers.
+- Corporate policy governance: the exceptions page showed **Revoke** to anyone holding
+  `decision.revoke` in any scope, and the server then refused those without it on every
+  repository the exception covers. Each listed exception now carries `viewer.revoke`, the server's
+  own check, and the button shows only when it is true.
+- Regulation uploads: re-uploading a document identical to the one a source last promoted ran
+  extraction again, and with the current default models, which sample instead of using
+  temperature 0, could rewrite rules from unchanged law. It is now answered "No changes detected"
+  without calling the LLM; a document whose processing failed or was rejected is still processed
+  in full.
 - The Compose TLS profile's proxy sent dashboard traffic to port 80, but the dashboard image's
   unprivileged Nginx listens on 8080, so every dashboard page through the proxy failed with 502. It
   now proxies to port 8080.
