@@ -351,7 +351,7 @@ interface HealingLogEntry {
 function HealingInfo({ strategy, log }: { strategy: string | null; log: string | null }) {
   const [expanded, setExpanded] = useState(false);
 
-  let entries: HealingLogEntry[] = [];
+  let entries: HealingLogEntry[];
   try {
     entries = log ? JSON.parse(log) : [];
   } catch {
@@ -467,7 +467,7 @@ function VerificationInfo({ item }: { item: StagedItem }) {
     return null;
   }
 
-  let issues: VerificationIssueEntry[] = [];
+  let issues: VerificationIssueEntry[];
   try {
     issues = item.verificationIssues ? JSON.parse(item.verificationIssues) : [];
   } catch {
