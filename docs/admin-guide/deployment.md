@@ -294,6 +294,7 @@ still accept it.
 
 | Variable | Default | Notes |
 |----------|---------|-------|
+| `NOMUS_SCRAPE_ENABLED` | `true` | Scheduled regulation scraping. Manual uploads and on-demand scrapes work either way |
 | `NOMUS_SCRAPE_CRON` | `0 2 * * *` | Regulation scrape schedule |
 | `NOMUS_RAW_SNAPSHOT_RETENTION_DAYS` | unset | Unset keeps raw snapshots forever. If set, older snapshots are purged weekly (each source keeps its latest) |
 | `NOMUS_REQUIRE_RULE_APPROVAL` | `false` | Require manual approval of generated rules |

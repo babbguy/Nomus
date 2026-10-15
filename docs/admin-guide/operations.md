@@ -191,7 +191,7 @@ The engine schedules its own jobs with node-cron in the process's local time zon
 
 | Job | Variable | Default |
 |-----|----------|---------|
-| Regulation scrape pipeline | `NOMUS_SCRAPE_CRON` | `0 2 * * *` |
+| Regulation scrape pipeline | `NOMUS_SCRAPE_ENABLED`, `NOMUS_SCRAPE_CRON` | `true`, `0 2 * * *` |
 | Scout legislative tracking | `NOMUS_SCOUT_ENABLED`, `NOMUS_SCOUT_CRON` | `true`, `0 */6 * * *` |
 | Raw snapshot cleanup (only if retention is set) | `NOMUS_RAW_SNAPSHOT_RETENTION_DAYS` | unset |
 

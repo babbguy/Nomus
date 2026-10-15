@@ -133,9 +133,9 @@ async function main() {
     NOMUS_LLM_TRANSLATOR_MODEL: 'gpt-6-luna',
     NOMUS_LLM_FALLBACK_PROVIDER: 'none',
     // No scheduled scraping or Scout news cycle during the run: both fetch
-    // the live internet. (Feb 30 never comes.) The gate drives the pipeline
-    // itself through the manual-upload path.
-    NOMUS_SCRAPE_CRON: '0 0 30 2 *',
+    // the live internet. The gate drives the pipeline itself through the
+    // manual-upload path.
+    NOMUS_SCRAPE_ENABLED: 'false',
     NOMUS_SCOUT_ENABLED: 'false',
     // The engine's fixed-time jobs (state hash, source health probes, data
     // audit, ledger, expiry sweep, shadow tests) run at local hours 0-6, 12

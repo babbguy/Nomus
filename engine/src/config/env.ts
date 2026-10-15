@@ -61,6 +61,7 @@ const envSchema = z.object({
   NOMUS_SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
 
   // Scheduling
+  NOMUS_SCRAPE_ENABLED: z.enum(['true', 'false']).default('true'),
   NOMUS_SCRAPE_CRON: cronExpression('0 2 * * *'),
 
   // Raw snapshot retention (days). UNSET by default = raw snapshots are kept

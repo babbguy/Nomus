@@ -60,63 +60,66 @@ export function startScheduler(): void {
   }
 
   // Scrape cycle — run pipeline for active sources that are DUE under their
-  // own scrape frequency (per-source freshness, G4).
-  tasks.push(cron.schedule(config.NOMUS_SCRAPE_CRON, async () => {
-    logger.info('Scheduler: Starting scrape cycle...');
-    const scrapeStart = performance.now();
-    const db = getDb();
-    const activeSources = db.select().from(regulatorySources)
-      .where(eq(regulatorySources.isActive, true))
-      .all();
+  // own scrape frequency (per-source freshness, G4). Manual uploads and
+  // on-demand scrapes still work when it is off.
+  if (config.NOMUS_SCRAPE_ENABLED === 'true') {
+    tasks.push(cron.schedule(config.NOMUS_SCRAPE_CRON, async () => {
+      logger.info('Scheduler: Starting scrape cycle...');
+      const scrapeStart = performance.now();
+      const db = getDb();
+      const activeSources = db.select().from(regulatorySources)
+        .where(eq(regulatorySources.isActive, true))
+        .all();
 
-    const nowMs = Date.now();
-    const sources = activeSources.filter((s) => isSourceDue(s, nowMs));
-    const skippedNotDue = activeSources.length - sources.length;
-    if (skippedNotDue > 0) {
-      logger.info({ due: sources.length, skippedNotDue, active: activeSources.length },
-        `Scheduler: ${sources.length}/${activeSources.length} sources due this cycle (${skippedNotDue} within their scrape frequency)`);
-    }
-
-    let totalRulesCreated = 0;
-    let totalRulesUpdated = 0;
-    let totalCostCents = 0;
-    let sourcesSucceeded = 0;
-    let sourcesFailed = 0;
-
-    for (const source of sources) {
-      try {
-        const result = await runPipeline(source.id);
-        if (result.status === 'error') {
-          sourcesFailed++;
-          logger.warn({ sourceId: source.id, sourceName: source.name, error: result.error },
-            'Scheduler: Pipeline returned error for source');
-        } else {
-          sourcesSucceeded++;
-          totalRulesCreated += result.rulesCreated;
-          totalRulesUpdated += result.rulesUpdated;
-        }
-      } catch (err) {
-        sourcesFailed++;
-        logger.error({ sourceId: source.id, sourceName: source.name, error: err },
-          'Scheduler: Pipeline threw for source');
-        captureError(err, { subsystem: 'hunter', context: { sourceId: source.id, job: 'pipeline' } });
+      const nowMs = Date.now();
+      const sources = activeSources.filter((s) => isSourceDue(s, nowMs));
+      const skippedNotDue = activeSources.length - sources.length;
+      if (skippedNotDue > 0) {
+        logger.info({ due: sources.length, skippedNotDue, active: activeSources.length },
+          `Scheduler: ${sources.length}/${activeSources.length} sources due this cycle (${skippedNotDue} within their scrape frequency)`);
       }
-    }
 
-    const scrapeDuration = Math.round(performance.now() - scrapeStart);
-    logger.info({ sourcesSucceeded, sourcesFailed, totalRulesCreated, totalRulesUpdated },
-      'Scheduler: Nightly scrape cycle complete');
+      let totalRulesCreated = 0;
+      let totalRulesUpdated = 0;
+      let totalCostCents = 0;
+      let sourcesSucceeded = 0;
+      let sourcesFailed = 0;
 
-    notifySchedulerSummary({
-      type: 'scrape',
-      sourcesProcessed: sources.length,
-      sourcesFailed,
-      rulesCreated: totalRulesCreated,
-      rulesUpdated: totalRulesUpdated,
-      totalCostCents,
-      durationMs: scrapeDuration,
-    }).catch((err) => logger.error({ error: (err as Error).message }, 'notifySchedulerSummary (scrape) failed'));
-  }));
+      for (const source of sources) {
+        try {
+          const result = await runPipeline(source.id);
+          if (result.status === 'error') {
+            sourcesFailed++;
+            logger.warn({ sourceId: source.id, sourceName: source.name, error: result.error },
+              'Scheduler: Pipeline returned error for source');
+          } else {
+            sourcesSucceeded++;
+            totalRulesCreated += result.rulesCreated;
+            totalRulesUpdated += result.rulesUpdated;
+          }
+        } catch (err) {
+          sourcesFailed++;
+          logger.error({ sourceId: source.id, sourceName: source.name, error: err },
+            'Scheduler: Pipeline threw for source');
+          captureError(err, { subsystem: 'hunter', context: { sourceId: source.id, job: 'pipeline' } });
+        }
+      }
+
+      const scrapeDuration = Math.round(performance.now() - scrapeStart);
+      logger.info({ sourcesSucceeded, sourcesFailed, totalRulesCreated, totalRulesUpdated },
+        'Scheduler: Nightly scrape cycle complete');
+
+      notifySchedulerSummary({
+        type: 'scrape',
+        sourcesProcessed: sources.length,
+        sourcesFailed,
+        rulesCreated: totalRulesCreated,
+        rulesUpdated: totalRulesUpdated,
+        totalCostCents,
+        durationMs: scrapeDuration,
+      }).catch((err) => logger.error({ error: (err as Error).message }, 'notifySchedulerSummary (scrape) failed'));
+    }));
+  }
 
   // Source health check — every 6 hours (G4: the checker existed but was
   // never scheduled; connectivity_status stayed 'unknown' forever). Probes

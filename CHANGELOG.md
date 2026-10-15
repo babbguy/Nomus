@@ -237,7 +237,9 @@ All notable changes to this project are documented here. The format follows
   advisory remains, not reachable: esbuild 0.18 under drizzle-kit's config loader (a
   development-only CLI that never starts esbuild's dev server).
 - `NOMUS_SCRAPE_CRON` and `NOMUS_SCOUT_CRON` are validated at startup: an invalid or impossible
-  expression (such as `0 0 30 2 *`) is reported as a configuration error naming the setting.
+  expression (such as `0 0 30 2 *`) is reported as a configuration error naming the setting. A new
+  `NOMUS_SCRAPE_ENABLED=false` turns scheduled scraping off (as `NOMUS_SCOUT_ENABLED` does for
+  Scout); manual uploads and on-demand scrapes still work.
 
 ### Changed
 - **Pinned images.** The Dockerfiles' base images (`node:22-slim`, `nginxinc/nginx-unprivileged:1.30-alpine`)
