@@ -272310,7 +272310,7 @@ async function run() {
             apiUrl,
             failOn,
         });
-        info(`   Files scanned: ${result.fileCount}`);
+        info(`   Source files scanned for the regulatory scan: ${result.fileCount}`);
         info(`   AI imports found: ${result.importCount}`);
         info(`   Findings: ${result.counts.total} (${result.counts.critical} critical, ${result.counts.high} high)`);
         // Set outputs
