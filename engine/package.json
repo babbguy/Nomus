@@ -28,7 +28,7 @@
     "@nomus/scanner": "*",
     "@nomus/shared": "*",
     "@hono/node-server": "^1.14.3",
-    "@sentry/node": "8.47.0",
+    "@sentry/node": "11.8.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.8.0",
     "cheerio": "^1.0.0",
