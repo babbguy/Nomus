@@ -142,7 +142,7 @@ export async function actionChecks(ctx) {
   ctx.data.action = { repo: repoName, total: Number(r1.outputs['total-findings']), score };
 }
 
-function parseOutputs(text) {
+export function parseOutputs(text) {
   // GITHUB_OUTPUT uses name<<DELIM\nvalue\nDELIM blocks (or name=value lines)
   const out = {};
   const lines = text.split(/\r?\n/);

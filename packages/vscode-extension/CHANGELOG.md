@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Corporate policy findings from your organization's signed policy bundle, evaluated locally on
+  save, on open and with Scan Workspace. They appear as `Nomus Policy` diagnostics over the full
+  matched range (`[Policy · PROHIBITED] corp.key v1: … Status: needs review.`), with Error, Warning
+  or Information by tier and status, a link to the policy page and the owning boards. Regulatory
+  diagnostics are unchanged.
+- **Corporate Policies** view: findings grouped as blocking or advisory/grace period, the
+  repository and branch (read from `.git`), and the bundle status.
+- The bundle is cached per server, re-verified on every use and revalidated with its ETag at most
+  every 5 minutes; **Nomus: Refresh Corporate Policies** revalidates now. Offline, a verified cache
+  is used and marked offline; an expired, missing, refused or tampered bundle clears corporate
+  diagnostics and shows an error, never an empty "no violations" state.
+- Settings `nomus.corporate.enabled` and `nomus.corporate.maxCacheAgeHours`.
+
 ## [1.0.0] - 2026-10-07
 
 Initial public release of the Nomus VS Code extension.

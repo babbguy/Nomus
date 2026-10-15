@@ -43,6 +43,10 @@
     "./detector": {
       "import": "./dist/detect/detector.js",
       "types": "./dist/detect/detector.d.ts"
+    },
+    "./corporate": {
+      "import": "./dist/corporate/index.js",
+      "types": "./dist/corporate/index.d.ts"
     }
   },
   "bin": {

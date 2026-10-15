@@ -35,9 +35,9 @@ export class Position {
 }
 
 export class Uri {
-  constructor(public fsPath: string) {}
+  constructor(public fsPath: string, public scheme = 'file') {}
   static file(path: string) { return new Uri(path); }
-  static parse(str: string) { return new Uri(str); }
+  static parse(str: string) { return new Uri(str, /^([a-zA-Z][\w+.-]*):/.exec(str)?.[1] ?? 'file'); }
   toString() { return this.fsPath; }
 }
 
@@ -68,6 +68,10 @@ export class ThemeColor {
   constructor(public id: string) {}
 }
 
+export class ThemeIcon {
+  constructor(public id: string, public color?: ThemeColor) {}
+}
+
 export class EventEmitter<T> {
   private listeners: ((e: T) => void)[] = [];
   event = (listener: (e: T) => void) => {
@@ -83,6 +87,7 @@ export class TreeItem {
   tooltip?: string;
   command?: { command: string; title: string; arguments?: unknown[] };
   contextValue?: string;
+  iconPath?: ThemeIcon;
 
   constructor(
     public label: string,
@@ -124,6 +129,8 @@ const window = {
   showInformationMessage: () => Promise.resolve(undefined),
   showWarningMessage: () => Promise.resolve(undefined),
   showErrorMessage: () => Promise.resolve(undefined),
+  showQuickPick: (): Promise<unknown> => Promise.resolve(undefined),
+  showInputBox: (): Promise<string | undefined> => Promise.resolve(undefined),
   withProgress: async (_opts: unknown, task: (progress: unknown) => Promise<void>) => task({}),
   onDidChangeActiveTextEditor: () => ({ dispose: () => {} }),
 };
@@ -140,6 +147,7 @@ const workspace = {
 // Mock commands
 const commands = {
   registerCommand: (_command: string, _callback: (...args: unknown[]) => unknown) => ({ dispose: () => {} }),
+  executeCommand: (_command: string, ..._args: unknown[]): Promise<unknown> => Promise.resolve(undefined),
 };
 
 // Mock env

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { eq, and } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
-import { apiKeys, organizations } from '../db/schema.js';
+import { apiKeys, organizations, users } from '../db/schema.js';
 import { env } from '../config/env.js';
 
 export interface TenantContext {
@@ -11,6 +11,13 @@ export interface TenantContext {
   rateLimitRpm: number;
   jurisdictionAccess: string[];
   maxSseConnections: number;
+  /**
+   * Set for a user-bound key (VS Code device sign-in): the key acts as this
+   * user. Null for org keys.
+   */
+  userId: string | null;
+  /** A user-bound key whose user still holds a temporary password. */
+  passwordChangeRequired: boolean;
 }
 
 /**
@@ -29,6 +36,7 @@ export function resolveApiKey(rawKey: string): TenantContext | null {
       keyRateLimitRpm: apiKeys.rateLimitRpm,
       keyIsActive: apiKeys.isActive,
       keyExpiresAt: apiKeys.expiresAt,
+      keyUserId: apiKeys.userId,
       orgId: organizations.id,
       orgIsActive: organizations.isActive,
       orgJurisdictionAccess: organizations.jurisdictionAccess,
@@ -46,6 +54,16 @@ export function resolveApiKey(rawKey: string): TenantContext | null {
     return null;
   }
 
+  // A user-bound key is only as good as its user: an inactive user, or one
+  // who has since moved to another org, makes the key invalid (401).
+  let passwordChangeRequired = false;
+  if (row.keyUserId) {
+    const user = db.select({ isActive: users.isActive, orgId: users.orgId, mustChangePassword: users.mustChangePassword })
+      .from(users).where(eq(users.id, row.keyUserId)).get();
+    if (!user || !user.isActive || user.orgId !== row.orgId) return null;
+    passwordChangeRequired = user.mustChangePassword;
+  }
+
   // Update last_used_at (fire-and-forget, non-blocking)
   db.update(apiKeys)
     .set({ lastUsedAt: new Date().toISOString() })
@@ -59,5 +77,7 @@ export function resolveApiKey(rawKey: string): TenantContext | null {
     rateLimitRpm: row.keyRateLimitRpm,
     jurisdictionAccess: JSON.parse(row.orgJurisdictionAccess) as string[],
     maxSseConnections: env().NOMUS_MAX_SSE_CONNECTIONS_PER_ORG,
+    userId: row.keyUserId ?? null,
+    passwordChangeRequired,
   };
 }

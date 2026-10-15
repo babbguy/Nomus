@@ -5,6 +5,9 @@ import { dirname } from 'node:path';
 import { env } from '../config/env.js';
 import * as schema from './schema.js';
 
+/** A drizzle handle on any SQLite schema: the app's, or a test's own database. */
+export type Db = BetterSQLite3Database<any>;
+
 let _db: BetterSQLite3Database<typeof schema> | null = null;
 let _sqlite: Database.Database | null = null;
 

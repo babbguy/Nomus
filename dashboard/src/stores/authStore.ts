@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useCpgStore } from './cpgStore';
 import { login as apiLogin, logout as apiLogout, getMe, forceChangePassword as apiForceChange, type User, type Org } from '../api/auth';
 
 interface AuthState {
@@ -25,6 +26,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try { await apiLogout(); } catch { /* ignore */ }
+    useCpgStore.getState().reset();
     set({ user: null, org: null, isAuthenticated: false, isLoading: false });
   },
 

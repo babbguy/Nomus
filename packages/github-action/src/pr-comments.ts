@@ -147,8 +147,23 @@ export async function postSummaryComment(
   badgeOrgSlug: string | null,
   complianceScore?: ComplianceScoreResult,
 ): Promise<void> {
+  await upsertMarkedComment(octokit, repo, prNumber, COMMENT_MARKER, () => buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore), 'summary comment');
+}
+
+/**
+ * Edit the PR comment carrying `marker` in place, or post it when there is
+ * none, so re-runs never stack comments. Failures are warnings.
+ */
+export async function upsertMarkedComment(
+  octokit: Octokit,
+  repo: { owner: string; repo: string },
+  prNumber: number,
+  marker: string,
+  buildBody: () => string,
+  label: string,
+): Promise<void> {
   try {
-    const body = buildSummaryBody(result, apiUrl, badgeOrgSlug, complianceScore);
+    const body = buildBody();
 
     // Find existing Nomus comment
     const comments = await octokit.paginate(octokit.rest.issues.listComments, {
@@ -156,7 +171,7 @@ export async function postSummaryComment(
       issue_number: prNumber,
       per_page: 100,
     });
-    const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
+    const existing = comments.find((c) => c.body?.includes(marker));
 
     if (existing) {
       await octokit.rest.issues.updateComment({
@@ -164,17 +179,17 @@ export async function postSummaryComment(
         comment_id: existing.id,
         body,
       });
-      core.info('   Updated existing PR summary comment');
+      core.info(`   Updated existing PR ${label}`);
     } else {
       await octokit.rest.issues.createComment({
         ...repo,
         issue_number: prNumber,
         body,
       });
-      core.info('   Posted PR summary comment');
+      core.info(`   Posted PR ${label}`);
     }
   } catch (err) {
-    core.warning(`Failed to post summary comment: ${err instanceof Error ? err.message : String(err)}`);
+    core.warning(`Failed to post ${label}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

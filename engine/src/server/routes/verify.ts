@@ -13,8 +13,12 @@
  *   subject: { result, jurisdiction, rulesEvaluated: [{ruleKey, version, effect, matched}] },
  *   ruleContext: { stateHash, computedAt } | null,
  *   verification: { algorithm: 'ed25519', publicKey, signedPayloadDescription, instructions },
+ *   corporateGovernance?: { manifestSignatureValid, exceptions, revokedSince, caseClosures, ciRuns },
  *   _disclaimer
  * }
+ * corporateGovernance is present only for an attestation with a corporate
+ * policy manifest (design spec §13): counts and validity only, never policy
+ * keys, repositories or code.
  *
  * PUBLIC-EXPOSURE POLICY (what `subject` contains and why):
  *   EXPOSED  — result, jurisdiction, and the rulesEvaluated entries
@@ -45,6 +49,7 @@ import { isEmailConfigured } from '../../services/notifications.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeJson } from '../utils.js';
 import { logger } from '../../logger.js';
+import { publicGovernanceSummary } from '../../cpg/attestations/governance-bundle.js';
 
 export const verifyPublicRoutes = new Hono();
 
@@ -161,6 +166,7 @@ verifyPublicRoutes.get('/:attestationId', (c) => {
   } catch {
     rulesEvaluated = [];
   }
+  const corporateGovernance = publicGovernanceSummary(db, receipt.id);
 
   return c.json({
     attestationId: receipt.id,
@@ -190,6 +196,7 @@ verifyPublicRoutes.get('/:attestationId', (c) => {
       instructions: verificationInstructions(),
     },
     checkedAt,
+    ...(corporateGovernance ? { corporateGovernance } : {}),
     _disclaimer: LEGAL_DISCLAIMER,
   });
 });

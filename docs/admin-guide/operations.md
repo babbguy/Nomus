@@ -32,6 +32,7 @@ Nomus supports multiple organizations on one instance, each with its own data. A
 | List / create users | `GET`, `POST /api/v1/users` | `platform_admin` session |
 | Get / update / deactivate a user | `GET`, `PATCH`, `DELETE /api/v1/users/:id` | `platform_admin` session |
 | Reset a user's password | `POST /api/v1/users/:id/reset-password` | `platform_admin` session |
+| Make a user Org Admin of their organization (recovery) | `POST /api/v1/tenants/:id/org-admins` | admin |
 
 On first start the engine creates a `nomus-admin` organization, an admin API key from `NOMUS_ADMIN_BOOTSTRAP_KEY`, and an admin user from `NOMUS_ADMIN_EMAIL` / `NOMUS_ADMIN_PASSWORD`. API keys are sent as `Authorization: Bearer <key>`.
 
@@ -71,6 +72,8 @@ POST /api/v1/users
 ```
 
 Roles are `platform_admin` (instance administration) and `member` (default). If `password` is omitted, a temporary one is generated and returned once in the response as `tempPassword`; the user must change it at first sign-in. The invitation email is sent only when `NOMUS_RESEND_API_KEY` is configured; otherwise pass the temporary password to the user yourself.
+
+Inside an organization, what a member may do is set by organization roles (see [Roles and permissions](./roles-and-permissions.md)). A new `member` gets the Developer role; the first member of an organization without an Org Admin also becomes Org Admin, so the first user you invite into a new organization administers it. Org Admins can then invite their own users with `POST /api/v1/cpg/users`. Platform administrators hold no organization role.
 
 ### Change a role, deactivate, reset a password
 

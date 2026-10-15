@@ -169,6 +169,8 @@ interface CallHit {
   capabilities: string[];
   confidence: number;
   line: number;
+  /** Last line of the call expression (equals `line` for single-line calls and the regex engine). */
+  endLine: number;
   evidence: string;
   /** How the call site was attributed to the SDK */
   binding: 'import-traced' | 'name-heuristic' | 'dynamic';
@@ -498,6 +500,7 @@ function findCallsAst(sf: ts.SourceFile, lines: string[], bindings: Bindings): C
         if (resolved && (chain.parts.length > 0 || chain.dynamic)) {
           const { spec, binding } = resolved;
           const line = lineOf(node, sf);
+          const endLine = sf.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
           const evidence = lineTextAt(lines, line);
 
           let hit: CallHit;
@@ -508,6 +511,7 @@ function findCallsAst(sf: ts.SourceFile, lines: string[], bindings: Bindings): C
               capabilities: spec.defaultCapabilities,
               confidence: 0.3,
               line,
+              endLine,
               evidence,
               binding: 'dynamic',
             };
@@ -532,6 +536,7 @@ function findCallsAst(sf: ts.SourceFile, lines: string[], bindings: Bindings): C
               capabilities: known ?? spec.defaultCapabilities,
               confidence: known ? 0.95 : 0.6,
               line,
+              endLine,
               evidence,
               binding,
             };
@@ -629,12 +634,14 @@ function findCallsRegex(content: string): CallHit[] {
       // `anthropic.Anthropic()` constructs a client — it is not an AI call.
       if (CLASS_INDEX.has(method)) continue;
       const known = methods[method];
+      const line = offsetToLine(content, m.index);
       push({
         sdk,
         method,
         capabilities: known ?? defaults,
         confidence: known ? 0.95 : 0.6,
-        line: offsetToLine(content, m.index),
+        line,
+        endLine: line,
         evidence: content.slice(m.index, Math.min(m.index + 200, content.length)).split('\n')[0],
         binding: 'name-heuristic',
       });
@@ -653,12 +660,14 @@ function findCallsRegex(content: string): CallHit[] {
   DYNAMIC_RE.lastIndex = 0;
   let dm: RegExpExecArray | null;
   while ((dm = DYNAMIC_RE.exec(content)) !== null) {
+    const line = offsetToLine(content, dm.index);
     hits.push({
       sdk: dm[1],
       method: null,
       capabilities: ['text_generation'],
       confidence: 0.3,
-      line: offsetToLine(content, dm.index),
+      line,
+      endLine: line,
       evidence: content.slice(dm.index, Math.min(dm.index + 200, content.length)).split('\n')[0],
       binding: 'dynamic',
     });
@@ -709,6 +718,7 @@ export class SdkUsageDetector implements DetectorPlugin {
           metadata: {
             sdk: hit.sdk,
             method: hit.method,
+            endLine: hit.endLine,
             narrowed: true,
             engine,
             binding: hit.binding,

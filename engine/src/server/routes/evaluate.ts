@@ -10,6 +10,9 @@ import { evaluateCompliance } from '../../core/attestation.js';
 import { notifyAttestationStatusChange } from '../../services/attestation-notifier.js';
 import { evaluateRequestSchema, LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeJson } from '../utils.js';
+import { rawSqlite } from '../../db/migrations/runner.js';
+import { governanceExtrasSchema, writeManifest } from '../../cpg/attestations/manifest.js';
+import { CpgError, cpgErrorResponse } from '../../cpg/errors.js';
 
 export const evaluateRoutes = new Hono<AppEnv>();
 
@@ -49,6 +52,13 @@ evaluateRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid input', details: extras.error.issues }, 400);
   }
   const { expiresAt, supersedes } = extras.data;
+  // governance (corporate policies, design spec §13.4): also parsed outside the
+  // shared schema, so neither the signed actionContext nor the receipt changes.
+  const governanceExtras = governanceExtrasSchema.safeParse(body);
+  if (!governanceExtras.success) {
+    return c.json({ error: 'Invalid input', details: governanceExtras.error.issues }, 400);
+  }
+  const { governance } = governanceExtras.data;
 
   if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
     return c.json({ error: 'expiresAt must be in the future' }, 400);
@@ -78,7 +88,19 @@ evaluateRoutes.post('/', async (c) => {
 
   const { action, jurisdiction, context } = parsed.data;
   const actionContext = { action, ...context };
-  const result = evaluateCompliance(orgId, actionContext, jurisdiction, { expiresAt });
+  // With governance, the receipt and its signed manifest are written in one
+  // transaction: a refused manifest leaves no receipt behind.
+  let created: { result: ReturnType<typeof evaluateCompliance>; itemCount?: number };
+  try {
+    created = rawSqlite(db).transaction(() => {
+      const result = evaluateCompliance(orgId, actionContext, jurisdiction, { expiresAt });
+      return governance ? { result, itemCount: writeManifest(db, { id: result.id, orgId, evaluatedAt: result.evaluatedAt }, governance).itemCount } : { result };
+    }).immediate();
+  } catch (err) {
+    if (err instanceof CpgError) return cpgErrorResponse(c, err);
+    throw err;
+  }
+  const { result } = created;
 
   if (supersedeTarget) {
     db.update(attestationReceipts)
@@ -96,6 +118,7 @@ evaluateRoutes.post('/', async (c) => {
   return c.json({
     ...result,
     supersedes: supersedeTarget?.id ?? null,
+    ...(governance ? { governance: { manifest: true, itemCount: created.itemCount } } : {}),
     _disclaimer: LEGAL_DISCLAIMER,
   });
 });

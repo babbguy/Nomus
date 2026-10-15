@@ -27,6 +27,8 @@ export interface ResolvedProvider {
   model: string;
   fallback?: LLMProvider;
   fallbackName?: ProviderName;
+  /** The fallback provider's own model for this role, never the primary's. */
+  fallbackModel?: string;
 }
 
 // ─── Settings Cache ──────────────────────────────────────────
@@ -72,6 +74,38 @@ export function resolveApiKey(dbKey: string, envFallback: string | undefined): s
     }
   }
   return envFallback || undefined;
+}
+
+/**
+ * Each provider's default model (the suggestions of the dashboard's LLM
+ * Providers page). A fallback provider is never the one configured for the
+ * role, so it has no role model of its own: it runs its default, not the
+ * primary's model, whose ID it would reject.
+ */
+export const DEFAULT_MODELS: Record<ProviderName, string> = {
+  anthropic: 'claude-haiku-5-5',
+  google: 'gemini-3.8-flash',
+  openai: 'gpt-6-luna',
+};
+
+const PROVIDER_KEY_SOURCES: Record<ProviderName, { setting: string; env: () => string | undefined }> = {
+  anthropic: { setting: 'llm.apiKeys.anthropic', env: () => env().NOMUS_ANTHROPIC_API_KEY },
+  google: { setting: 'llm.apiKeys.google', env: () => env().NOMUS_GOOGLE_AI_KEY },
+  openai: { setting: 'llm.apiKeys.openai', env: () => process.env.NOMUS_OPENAI_API_KEY },
+};
+
+/**
+ * True when the provider configured for `role` has an API key (settings or
+ * env), i.e. a generate call would be attempted rather than fail for lack of
+ * credentials. Synchronous; makes no network call.
+ */
+export function isLlmProviderConfigured(role: 'classifier' | 'translator' = 'translator'): boolean {
+  const config = env();
+  const providerName = (getSetting(`llm.${role}.provider`)
+    ?? (role === 'classifier' ? config.NOMUS_LLM_CLASSIFIER_PROVIDER : config.NOMUS_LLM_TRANSLATOR_PROVIDER)) as ProviderName;
+  const source = PROVIDER_KEY_SOURCES[providerName];
+  if (!source) return false;
+  return !!resolveApiKey(source.setting, source.env());
 }
 
 // ─── Provider Registry ───────────────────────────────────────
@@ -128,8 +162,13 @@ export async function resolveProvider(role: 'classifier' | 'translator'): Promis
   };
 
   if (fallbackName !== 'none' && fallbackName !== providerName) {
-    result.fallback = await getProviderByName(fallbackName as ProviderName);
-    result.fallbackName = fallbackName as ProviderName;
+    if (Object.hasOwn(DEFAULT_MODELS, fallbackName)) {
+      result.fallback = await getProviderByName(fallbackName as ProviderName);
+      result.fallbackName = fallbackName as ProviderName;
+      result.fallbackModel = DEFAULT_MODELS[fallbackName as ProviderName];
+    } else {
+      logger.warn({ fallback: fallbackName }, `Unknown fallback provider "${fallbackName}" ignored; no fallback is configured`);
+    }
   }
 
   return result;
@@ -146,7 +185,7 @@ export async function generateWithFallback(
   userMessage: string,
   modelOverride?: string,
 ): Promise<LLMResponse> {
-  const { provider, providerName, model, fallback, fallbackName } = await resolveProvider(role);
+  const { provider, providerName, model, fallback, fallbackName, fallbackModel } = await resolveProvider(role);
   const useModel = modelOverride ?? model;
 
   try {
@@ -154,12 +193,17 @@ export async function generateWithFallback(
   } catch (err) {
     if (!fallback) throw err;
 
+    const source = PROVIDER_KEY_SOURCES[fallbackName!];
+    if (!resolveApiKey(source.setting, source.env())) {
+      logger.warn({ provider: providerName, fallback: fallbackName },
+        `Primary provider failed and fallback provider ${fallbackName} is skipped: no API key is configured for it`);
+      throw err;
+    }
+
     const msg = err instanceof Error ? err.message : String(err);
-    logger.warn({ provider: providerName, fallback: fallbackName, error: msg.slice(0, 200) },
+    logger.warn({ provider: providerName, fallback: fallbackName, model: fallbackModel, error: msg.slice(0, 200) },
       `Primary provider failed, falling back to ${fallbackName}`);
 
-    // Fallback uses its own default model if the primary model isn't compatible
-    const fallbackModel = getSetting(`llm.${role}.model`) ?? useModel;
-    return await fallback.generate(systemPrompt, userMessage, fallbackModel);
+    return await fallback.generate(systemPrompt, userMessage, fallbackModel!);
   }
 }

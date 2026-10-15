@@ -8,6 +8,8 @@ import Spinner from '../../components/ui/Spinner';
 import ErrorState from '../../components/ui/ErrorState';
 import ApiKeyRow from '../../components/domain/ApiKeyRow';
 import { useAuthStore } from '../../stores/authStore';
+import { useCpgMe } from '../../hooks/useCpgMe';
+import { hasOrgPermission } from '../../lib/cpg-permissions';
 import { apiErrorMessage } from '../../lib/errors';
 import api from '../../api/client';
 
@@ -46,6 +48,14 @@ const jurisdictionEntries = Object.entries(JURISDICTIONS) as Array<[string, stri
 
 export default function Settings() {
   const { org, user, checkSession } = useAuthStore();
+  // Organization permissions (GET /cpg/me). Platform administrators keep their
+  // v1.1.0 access to /org/*; everyone else needs the permission, so the page
+  // never offers an action the API would refuse with 403.
+  const { me, status: permStatus, error: permError, reload: reloadPerms } = useCpgMe();
+  const isPlatformAdmin = user?.role === 'platform_admin';
+  const permsKnown = isPlatformAdmin || permStatus === 'ready';
+  const canManageKeys = isPlatformAdmin || hasOrgPermission(me, 'org.api_keys.manage');
+  const canEditOrg = isPlatformAdmin || hasOrgPermission(me, 'org.profile.update');
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -95,9 +105,12 @@ export default function Settings() {
   );
 
   useEffect(() => {
-    void loadKeys();
     void loadOrgInfo();
-  }, [loadKeys, loadOrgInfo]);
+  }, [loadOrgInfo]);
+
+  useEffect(() => {
+    if (permsKnown && canManageKeys) void loadKeys();
+  }, [permsKnown, canManageKeys, loadKeys]);
 
   function toggleScope(scope: string) {
     setNewKeyScopes((prev) => (prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]));
@@ -286,7 +299,12 @@ export default function Settings() {
             </p>
           )}
 
-          <Button onClick={saveOrgInfo} disabled={savingOrg} className="text-xs">
+          {permsKnown && !canEditOrg && (
+            <p className="text-xs text-text-muted" data-testid="org-profile-read-only">
+              Read only: changing the organization profile needs the <span className="font-mono">org.profile.update</span> permission. Ask an Org Admin.
+            </p>
+          )}
+          <Button onClick={saveOrgInfo} disabled={savingOrg || !permsKnown || !canEditOrg} className="text-xs">
             <Save size={14} /> {savingOrg ? 'Saving...' : 'Save Organization'}
           </Button>
         </div>
@@ -297,9 +315,22 @@ export default function Settings() {
         <h2 className="text-sm font-semibold text-text-secondary mb-1">API Keys</h2>
         <p className="text-xs text-text-muted mb-4">
           Keys let the scanner, GitHub Action, VS Code extension and MCP server read policies and request
-          attestations for {org?.name ?? 'your organization'}. You can create and revoke your own.
+          attestations for {org?.name ?? 'your organization'}.{canManageKeys ? ' You can create and revoke them.' : ''}
         </p>
 
+        {!permsKnown ? (
+          permStatus === 'error' ? (
+            <ErrorState compact message={permError ?? 'Could not load your permissions'} onRetry={reloadPerms} />
+          ) : (
+            <div className="flex justify-center py-8"><Spinner className="w-6 h-6" /></div>
+          )
+        ) : !canManageKeys ? (
+          <p className="text-sm text-text-muted py-2" data-testid="api-keys-no-permission">
+            You don&apos;t have permission to manage this organization&apos;s API keys
+            (<span className="font-mono text-xs">org.api_keys.manage</span>). Ask an Org Admin for a key or for access.
+          </p>
+        ) : (
+        <>
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex items-center gap-2 flex-wrap">
             <input
@@ -374,6 +405,8 @@ export default function Settings() {
               />
             ))}
           </div>
+        )}
+        </>
         )}
       </Card>
 

@@ -7,10 +7,11 @@ import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
 import { users, organizations } from '../../db/schema.js';
 import { requireSession } from '../middleware/auth.js';
-import { env } from '../../config/env.js';
-import { safeJson, safeParseInt } from '../utils.js';
-import { logger } from '../../logger.js';
-import { getResendApiKey } from '../../services/notifications.js';
+import { actorOf, safeJson, safeParseInt } from '../utils.js';
+import { invitationMessage, makeTemporaryPassword, sendInvitationEmail } from '../../services/invitations.js';
+import { rawSqlite } from '../../db/migrations/runner.js';
+import { applyNewMemberGrants } from '../../cpg/rbac/seed.js';
+import { revokeAllGrantsInOrg } from '../../cpg/rbac/grants.js';
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -100,8 +101,7 @@ userRoutes.post('/', async (c) => {
     .where(eq(organizations.id, parsed.data.orgId)).get();
   if (!org) return c.json({ error: 'Organization not found' }, 404);
 
-  const tempPassword = parsed.data.password || `nomus-${randomUUID().slice(0, 8)}`;
-  const passwordHash = await bcrypt.hash(tempPassword, 12);
+  const { tempPassword, passwordHash } = await makeTemporaryPassword(parsed.data.password);
   const now = new Date().toISOString();
 
   const user = {
@@ -118,46 +118,17 @@ userRoutes.post('/', async (c) => {
     updatedAt: now,
   };
 
-  db.insert(users).values(user).run();
+  // The user and their CPG grants (Developer; Org Admin when the org has no
+  // active Org Admin) are written atomically. Platform admins get no grants.
+  rawSqlite(db).transaction(() => {
+    db.insert(users).values(user).run();
+    applyNewMemberGrants(db, user.orgId, user.id, actorOf(c));
+  })();
 
   // Send invitation email (non-blocking)
-  const config = env();
-  const appUrl = config.NOMUS_CORS_ORIGIN;
   const orgInfo = db.select({ name: organizations.name }).from(organizations)
     .where(eq(organizations.id, parsed.data.orgId)).get();
-
-  if (getResendApiKey()) {
-    fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${getResendApiKey()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: config.NOMUS_FROM_EMAIL,
-        to: user.email,
-        subject: `You've been invited to Nomus — ${orgInfo?.name ?? 'Your Organization'}`,
-        html: `<div style="font-family:-apple-system,system-ui,sans-serif;max-width:480px;margin:0 auto;padding:32px;">
-          <h2 style="color:#0a0b0f;">Welcome to Nomus</h2>
-          <p style="color:#374151;font-size:15px;">You've been invited to <strong>${orgInfo?.name ?? 'your organization'}</strong> on Nomus, the AI regulatory applicability engine.</p>
-          <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:20px 0;">
-            <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">Your login credentials:</p>
-            <p style="margin:0 0 4px;font-size:14px;"><strong>Email:</strong> ${user.email}</p>
-            <p style="margin:0;font-size:14px;"><strong>Temporary Password:</strong> ${tempPassword}</p>
-          </div>
-          <p style="color:#374151;font-size:15px;">You'll be asked to create a new password when you first sign in. You can also sign in with Google or GitHub.</p>
-          <a href="${appUrl}/login" style="display:inline-block;padding:12px 24px;background:#00e5a0;color:#0a0b0f;text-decoration:none;border-radius:8px;font-weight:600;margin-top:8px;">Sign In to Nomus</a>
-          <p style="color:#9ca3af;font-size:11px;margin-top:24px;">Nomus — Regulatory monitoring, not legal advice.</p>
-        </div>`,
-      }),
-    }).catch((err) => {
-      logger.error({ error: (err as Error).message }, 'Failed to send invitation email');
-    });
-  } else {
-    // SECURITY: never log the temp password — this branch fires whenever
-    // NOMUS_RESEND_API_KEY is unset, which can happen in production.
-    logger.info({ email: user.email }, 'Invitation email not sent (no email provider configured); temp password returned in API response only');
-  }
+  sendInvitationEmail({ email: user.email, tempPassword, orgName: orgInfo?.name ?? null });
 
   return c.json({
     id: user.id,
@@ -165,9 +136,7 @@ userRoutes.post('/', async (c) => {
     name: user.name,
     role: user.role,
     tempPassword,
-    message: getResendApiKey()
-      ? 'User created; an invitation email is being sent. They must set a new password on first login.'
-      : 'User created. No email provider is configured, so share the temporary password with them directly. They must set a new password on first login.',
+    message: invitationMessage(),
   }, 201);
 });
 
@@ -220,10 +189,24 @@ userRoutes.patch('/:id', async (c) => {
     updates.orgId = parsed.data.orgId;
   }
 
-  const result = db.update(users).set(updates)
-    .where(eq(users.id, c.req.param('id'))).run();
+  const userId = c.req.param('id');
+  const before = db.select({ orgId: users.orgId }).from(users).where(eq(users.id, userId)).get();
+  if (!before) return c.json({ error: 'User not found' }, 404);
 
-  if (result.changes === 0) return c.json({ error: 'User not found' }, 404);
+  // Moving a user to another org revokes every CPG grant in the old org and
+  // applies the new-member rule in the new one, atomically with the move.
+  const moved = parsed.data.orgId !== undefined && parsed.data.orgId !== before.orgId;
+  const actor = actorOf(c);
+  const changes = rawSqlite(db).transaction(() => {
+    const result = db.update(users).set(updates).where(eq(users.id, userId)).run();
+    if (result.changes > 0 && moved) {
+      revokeAllGrantsInOrg(db, before.orgId, userId, actor, 'user moved');
+      applyNewMemberGrants(db, parsed.data.orgId!, userId, actor);
+    }
+    return result.changes;
+  })();
+
+  if (changes === 0) return c.json({ error: 'User not found' }, 404);
   return c.json({ message: 'User updated' });
 });
 

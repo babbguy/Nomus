@@ -154,23 +154,27 @@ deviceAuthRoutes.post('/token', async (c) => {
   if (!user || !org) {
     return c.json({ error: 'User or organization not found' }, 404);
   }
+  // The code was issued to an active user of this org without a temporary
+  // password; re-check, since either may have changed within the code's TTL.
+  if (!user.isActive || user.orgId !== org.id) {
+    return c.json({ error: 'User not found' }, 401);
+  }
+  if (user.mustChangePassword) {
+    return passwordChangeRequiredResponse(c);
+  }
 
-  // Check for existing VS Code extension key — reuse if active
-  const existingKey = db.select().from(apiKeys)
+  // Re-authenticating replaces only THIS user's extension key. Keys are bound
+  // to their user, so a teammate signing in no longer signs anyone else out.
+  // (v1.1.0 revoked any active "VS Code Extension" key in the whole org.)
+  const revoked = db.update(apiKeys)
+    .set({ isActive: false })
     .where(and(
       eq(apiKeys.orgId, org.id),
+      eq(apiKeys.userId, user.id),
       eq(apiKeys.label, 'VS Code Extension'),
       eq(apiKeys.isActive, true),
     ))
-    .get();
-
-  if (existingKey) {
-    // Revoke old key — user is re-authenticating
-    db.update(apiKeys)
-      .set({ isActive: false })
-      .where(eq(apiKeys.id, existingKey.id))
-      .run();
-  }
+    .run();
 
   // Generate new API key (same logic as tenants.ts)
   const rawKey = `${API_KEY_PREFIX_LIVE}${randomBytes(24).toString('base64url')}`;
@@ -187,9 +191,10 @@ deviceAuthRoutes.post('/token', async (c) => {
     rateLimitRpm: env().NOMUS_RATE_LIMIT_RPM,
     isActive: true,
     createdAt: now,
+    userId: user.id,
   }).run();
 
-  logger.info({ userId: user.id, orgId: org.id }, 'Device auth: API key generated for VS Code');
+  logger.info({ userId: user.id, orgId: org.id, replacedKeys: revoked.changes }, 'Device auth: user-bound API key generated for VS Code');
 
   return c.json({
     apiKey: rawKey,

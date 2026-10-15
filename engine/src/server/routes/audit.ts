@@ -17,6 +17,8 @@ import {
 import { notifyAttestationStatusChange } from '../../services/attestation-notifier.js';
 import { LEGAL_DISCLAIMER } from '@nomus/shared';
 import { safeParseInt, safeJson } from '../utils.js';
+import { corporateGovernanceSection, type CorporateGovernanceSection } from '../../cpg/attestations/governance-bundle.js';
+import { manifestCounts } from '../../cpg/attestations/manifest.js';
 
 export const auditRoutes = new Hono<AppEnv>();
 
@@ -47,6 +49,8 @@ auditRoutes.get('/', (c) => {
     .where(and(...conditions)).get()?.n ?? receipts.length;
 
   const now = new Date().toISOString();
+  // Only attestations with a governance manifest gain the corporateGovernance key.
+  const governance = manifestCounts(db, receipts.map((r) => r.id));
   return c.json({
     count: receipts.length,
     total,
@@ -55,7 +59,11 @@ auditRoutes.get('/', (c) => {
       let rulesEvaluated: unknown;
       try { actionContext = JSON.parse(r.actionContext); } catch { actionContext = r.actionContext; }
       try { rulesEvaluated = JSON.parse(r.rulesEvaluated); } catch { rulesEvaluated = r.rulesEvaluated; }
-      return { ...r, actionContext, rulesEvaluated, status: deriveAttestationStatus(r, now) };
+      const g = governance.get(r.id);
+      return {
+        ...r, actionContext, rulesEvaluated, status: deriveAttestationStatus(r, now),
+        ...(g ? { corporateGovernance: { exceptions: g.decision, caseClosures: g.case_closure, ciRuns: g.ci_run } } : {}),
+      };
     }),
     _disclaimer: LEGAL_DISCLAIMER,
   });
@@ -258,7 +266,8 @@ type ReceiptRow = typeof attestationReceipts.$inferSelect;
 
 interface EvidenceBundle {
   bundleType: 'nomus-attestation-evidence';
-  bundleVersion: 1;
+  /** 1: exactly the v1.1.0 bundle. 2: the same keys plus corporateGovernance (design spec §13.5). */
+  bundleVersion: 1 | 2;
   generatedAt: string;
   attestation: {
     id: string;
@@ -296,6 +305,7 @@ interface EvidenceBundle {
     ruleSignature: string | null;
   }>;
   corpus: { policyStateHash: string; computedAt: string };
+  corporateGovernance?: CorporateGovernanceSection;
   _disclaimer: string;
 }
 
@@ -344,10 +354,11 @@ function buildEvidenceBundle(receipt: ReceiptRow, publicKey: string, generatedAt
     });
 
   const signedPayload = buildSignedReceiptPayload(receipt);
+  const governance = corporateGovernanceSection(db, receipt.id, generatedAt);
 
   return {
     bundleType: 'nomus-attestation-evidence',
-    bundleVersion: 1,
+    bundleVersion: governance ? 2 : 1,
     generatedAt,
     attestation: {
       id: receipt.id,
@@ -377,6 +388,7 @@ function buildEvidenceBundle(receipt: ReceiptRow, publicKey: string, generatedAt
     },
     citedRules,
     corpus: { policyStateHash: receipt.policyStateHash, computedAt: receipt.evaluatedAt },
+    ...(governance ? { corporateGovernance: governance } : {}),
     _disclaimer: LEGAL_DISCLAIMER,
   };
 }
@@ -461,8 +473,37 @@ function renderEvidenceHtml(bundle: EvidenceBundle): string {
 
     <h2 style="font-size:16px;border-bottom:1px solid #d1d5db;padding-bottom:4px;margin-top:28px;">4. Independent verification steps</h2>
     <ol style="font-size:13px;">${instructions}</ol>
-
+${bundle.corporateGovernance ? renderGovernanceHtml(bundle.corporateGovernance) : ''}
     <p style="margin-top:32px;padding-top:12px;border-top:1px solid #d1d5db;font-size:11px;color:#6b7280;">${esc(bundle._disclaimer)}</p>
   </div>
 </body></html>`;
+}
+
+/** Section 5: one row per signed CPG record. No snippets or code: the bundle is for auditors, and code stays in Nomus. */
+function renderGovernanceHtml(g: CorporateGovernanceSection): string {
+  const cell = 'padding:6px 10px;border:1px solid #d1d5db;';
+  const rows = g.items.map((i) => {
+    let p: Record<string, any> = {};
+    try { p = JSON.parse(i.signedPayloadCanonicalJson) as Record<string, any>; } catch { /* shown as blank cells */ }
+    const what = i.type === 'decision' ? `${p.scope ?? ''} exception` : i.type === 'case_closure' ? `case closure (${p.closeReason ?? ''})` : `CI run (${p.verdict ?? ''})`;
+    return `
+    <tr>
+      <td style="${cell}">${esc(what)}</td>
+      <td style="${cell}font-family:monospace;font-size:12px;">${esc(p.policyKey ?? '—')}</td>
+      <td style="${cell}">${esc(p.repo ?? (p.pattern ? (p.pattern.repos ?? []).join(', ') : '—'))}</td>
+      <td style="${cell}">${esc(p.expiresAt ?? '—')}</td>
+      <td style="${cell}text-align:center;">${esc(Array.isArray(p.approverUserIds) ? p.approverUserIds.length : '—')}</td>
+      <td style="${cell}font-weight:bold;">${esc(i.statusAtGeneration)}</td>
+    </tr>`;
+  }).join('');
+  const th = (t: string) => `<th style="${cell}text-align:left;">${t}</th>`;
+  return `
+    <h2 style="font-size:16px;border-bottom:1px solid #d1d5db;padding-bottom:4px;margin-top:28px;">5. Corporate policy exceptions (${g.items.length})</h2>
+    <p style="font-size:13px;">The corporate policy records in force for this attestation, each signed separately with the same key and listed in a signed manifest. The attestation's own signed payload is unchanged.</p>
+    <table style="border-collapse:collapse;width:100%;font-size:13px;">
+      <tr style="background:#f3f4f6;">${['Record', 'Policy', 'Repository', 'Expires', 'Approvers', 'Status'].map(th).join('')}</tr>
+      ${rows || `<tr><td colspan="6" style="${cell}color:#4b5563;">No corporate policy exception was in force for this repository at the attestation instant.</td></tr>`}
+    </table>
+    <ol style="font-size:13px;">${g.instructions.map((s) => `<li style="margin:6px 0;">${esc(s)}</li>`).join('')}</ol>
+`;
 }

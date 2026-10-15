@@ -88,6 +88,10 @@ export async function pipelineChecks(ctx) {
   const badIds = events.events.filter((e) => e.id !== undefined && !/^\d+$/.test(e.id)).map((e) => `${e.event} id=${e.id}`);
   gate.check('every stream event id is a sequence number (so Last-Event-ID replay resumes correctly)', badIds.length === 0, 'numeric ids (or none)', [...new Set(badIds.map((x) => x.replace(/id=.*/, 'id=<uuid>')))].slice(0, 4));
 
+  const refused = (ctx.llm?.calls ?? []).filter((c) => c.kind === 'refused-parameter');
+  gate.check('every LLM request used only parameters the model accepts (no max_tokens or temperature for gpt-6-luna)', refused.length === 0, 'none refused', refused.map((c) => `${c.model}: ${c.error}`).slice(0, 2));
+  const models = [...new Set((ctx.llm?.calls ?? []).map((c) => c.model))];
+  gate.equal('every LLM request named the configured model', models, ['gpt-6-luna']);
   const unknownPrompts = (ctx.llm?.calls ?? []).filter((c) => c.kind === 'unrecognized');
   gate.check('every LLM prompt the pipeline sent is one the fake LLM recognises', unknownPrompts.length === 0, 'none unrecognised', unknownPrompts.map((c) => c.system.slice(0, 80)).slice(0, 2));
   await events.close();

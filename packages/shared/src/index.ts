@@ -16,6 +16,7 @@ export type {
   SSEHeartbeat,
   SSEEvent,
   OperationalSSEEventType,
+  CpgSSEEventType,
   BroadcastEventType,
   BroadcastEvent,
 } from './types/sse-events.js';

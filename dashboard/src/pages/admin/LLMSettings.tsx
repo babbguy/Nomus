@@ -19,9 +19,9 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 const DEFAULT_MODELS: Record<string, string> = {
-  anthropic: 'claude-haiku-4-5-20251001',
-  google: 'gemini-2.0-flash',
-  openai: 'gpt-4o-mini',
+  anthropic: 'claude-haiku-5-5',
+  google: 'gemini-3.8-flash',
+  openai: 'gpt-6-luna',
 };
 
 export default function LLMSettings() {
@@ -91,7 +91,7 @@ export default function LLMSettings() {
         ? config.classifier.model
         : provider === config.translator.provider
           ? config.translator.model
-          : DEFAULT_MODELS[provider] ?? 'gpt-4o-mini';
+          : DEFAULT_MODELS[provider];
       const { data } = await api.post('/settings/llm/test', { provider, model });
       setTestResult((prev) => ({
         ...prev,

@@ -1,0 +1,172 @@
+{
+  "description": "An evidence bundle exported by the unmodified v1.1.0 builder, with the database rows it was built from (test-only signing key, encrypted under the committed test secret).",
+  "rows": {
+    "state_hashes": [
+      {
+        "id": "d8e39e90-dbde-46f8-b7e1-b3193a3999bb",
+        "hash": "SIGNING_KEY:Skb1JKuMmSpNjUOAh1ylC920fRsNIhtQQiWdCOfERJFgPUCibYsJZE224T5BnvWhQ8AO/1wKlBfQegpHGx/aWsF5pUUS3Jy54Qu6aQ==:302a300506032b6570032100c63ef8b28ed5cb75b051992b4692e5ff3a318bc742311547c500d4481ab90bf6",
+        "rule_count": 0,
+        "computed_at": "2026-10-09T22:43:50.056Z"
+      }
+    ],
+    "organizations": [
+      {
+        "id": "6f1d2c3b-4a5e-4f60-9a7b-8c9d0e1f2a3b",
+        "name": "Fixture Org",
+        "slug": "fixture-org",
+        "jurisdiction_access": "[]",
+        "industry": null,
+        "sub_industry": null,
+        "show_org_on_public_verify": 0,
+        "is_active": 1,
+        "created_at": "2026-09-30T10:00:00.000Z",
+        "updated_at": "2026-09-30T10:00:00.000Z"
+      }
+    ],
+    "regulatory_sources": [
+      {
+        "id": "0b6c1f8e-2d3a-4b5c-8d9e-0f1a2b3c4d5e",
+        "name": "Fixture source",
+        "jurisdiction": "EU",
+        "url": "https://gate.example.org/source",
+        "parser_type": "html",
+        "selector_config": "{}",
+        "scrape_frequency_hours": 24,
+        "is_active": 1,
+        "last_scraped_at": null,
+        "last_content_hash": null,
+        "provenance_grade": "G",
+        "tier": 1,
+        "category": "ai_regulation",
+        "origin": null,
+        "registry_key": null,
+        "sla_max_age_hours": 48,
+        "sla_min_completeness": 80,
+        "connectivity_status": "unknown",
+        "connectivity_checked_at": null,
+        "connectivity_error": null,
+        "consecutive_failures": 0,
+        "last_successful_scrape_at": null,
+        "last_successful_strategy": null,
+        "ingestion_mode": "auto",
+        "needs_headless": 0,
+        "needs_manual_upload": 0,
+        "manual_upload_reason": null,
+        "pending_upload_file": null,
+        "pending_upload_hash": null,
+        "pending_upload_at": null,
+        "created_at": "2026-09-30T10:00:00.000Z",
+        "updated_at": "2026-09-30T10:00:00.000Z",
+        "content_verification": null,
+        "content_verification_at": null,
+        "content_verification_issues": null
+      }
+    ],
+    "policy_rules": [
+      {
+        "id": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d",
+        "source_id": "0b6c1f8e-2d3a-4b5c-8d9e-0f1a2b3c4d5e",
+        "rule_key": "eu.fixture.disclosure",
+        "version": 1,
+        "jurisdiction": "EU",
+        "category": "transparency",
+        "conditions": "{\"action\":\"ai_user_interaction\",\"region\":\"EU\"}",
+        "effect": "require_disclosure",
+        "severity": "medium",
+        "human_summary": "Disclose AI interaction.",
+        "legal_reference": "Fixture Art. 1",
+        "effective_date": "2026-01-01",
+        "expires_at": null,
+        "industries": "[\"all\"]",
+        "industry_scope": "global",
+        "industry_notes": "",
+        "is_active": 1,
+        "locked": 0,
+        "signature": "fixture-rule-signature",
+        "created_at": "2026-09-30T10:00:00.000Z",
+        "updated_at": "2026-09-30T10:00:00.000Z"
+      }
+    ],
+    "attestation_receipts": [
+      {
+        "id": "e3e866ad-c238-4dad-9665-a1ed51648f51",
+        "org_id": "6f1d2c3b-4a5e-4f60-9a7b-8c9d0e1f2a3b",
+        "action_context": "{\"action\":\"ai_user_interaction\",\"region\":\"EU\"}",
+        "rules_evaluated": "[{\"ruleKey\":\"eu.fixture.disclosure\",\"version\":1,\"effect\":\"require_disclosure\",\"matched\":true}]",
+        "result": "requires_review",
+        "jurisdiction": "EU",
+        "policy_state_hash": "d073845b5cdcb302b1d3fd8d6d99de0d869743b7688ae8892c73746b9b891794",
+        "signature": "+z9jI0IzAX2c+lb4TTrmcVaien6/KCCb0aT3IqJZL6Y2uM4gTmXJP/zxxB/RBpzOaj7BKfObjer8eFNs9Yu8Dg==",
+        "evaluated_at": "2026-10-09T22:43:50.057Z",
+        "schema_version": 1,
+        "expires_at": null,
+        "revoked_at": null,
+        "revocation_reason": null,
+        "superseded_by": null,
+        "expiry_notified_at": null
+      }
+    ]
+  },
+  "bundle": {
+    "bundleType": "nomus-attestation-evidence",
+    "bundleVersion": 1,
+    "generatedAt": "2026-10-01T09:00:00.000Z",
+    "attestation": {
+      "id": "e3e866ad-c238-4dad-9665-a1ed51648f51",
+      "schemaVersion": 1,
+      "orgId": "6f1d2c3b-4a5e-4f60-9a7b-8c9d0e1f2a3b",
+      "result": "requires_review",
+      "jurisdiction": "EU",
+      "actionContext": {
+        "action": "ai_user_interaction",
+        "region": "EU"
+      },
+      "rulesEvaluated": [
+        {
+          "ruleKey": "eu.fixture.disclosure",
+          "version": 1,
+          "effect": "require_disclosure",
+          "matched": true
+        }
+      ],
+      "policyStateHash": "d073845b5cdcb302b1d3fd8d6d99de0d869743b7688ae8892c73746b9b891794",
+      "evaluatedAt": "2026-10-09T22:43:50.057Z",
+      "expiresAt": null,
+      "revokedAt": null,
+      "revocationReason": null,
+      "supersededBy": null,
+      "status": "valid",
+      "signature": "+z9jI0IzAX2c+lb4TTrmcVaien6/KCCb0aT3IqJZL6Y2uM4gTmXJP/zxxB/RBpzOaj7BKfObjer8eFNs9Yu8Dg=="
+    },
+    "verification": {
+      "algorithm": "ed25519",
+      "publicKey": "MCowBQYDK2VwAyEAxj74so7Vy3WwUZkrRpLl/zoxi8dCMRVHxQDUSBq5C/Y=",
+      "signedPayloadCanonicalJson": "{\"actionContext\":{\"action\":\"ai_user_interaction\",\"region\":\"EU\"},\"evaluatedAt\":\"2026-10-09T22:43:50.057Z\",\"id\":\"e3e866ad-c238-4dad-9665-a1ed51648f51\",\"jurisdiction\":\"EU\",\"orgId\":\"6f1d2c3b-4a5e-4f60-9a7b-8c9d0e1f2a3b\",\"policyStateHash\":\"d073845b5cdcb302b1d3fd8d6d99de0d869743b7688ae8892c73746b9b891794\",\"result\":\"requires_review\"}",
+      "signature": "+z9jI0IzAX2c+lb4TTrmcVaien6/KCCb0aT3IqJZL6Y2uM4gTmXJP/zxxB/RBpzOaj7BKfObjer8eFNs9Yu8Dg==",
+      "signatureValid": true,
+      "signedPayloadDescription": "Ed25519 signature over the UTF-8 bytes of canonical JSON (object keys sorted alphabetically at every depth, no whitespace) of { actionContext, evaluatedAt, id, jurisdiction, orgId, policyStateHash, result }. actionContext and orgId are org-private and are not exposed by the public verify endpoint; the attestation owner can share the exact signed payload via the evidence export (GET /api/v1/attestations/:id/export?format=json).",
+      "instructions": [
+        "Obtain the evidence bundle from the attestation owner (GET /api/v1/attestations/:id/export?format=json, authenticated). It contains the exact signed payload string (verification.signedPayloadCanonicalJson).",
+        "Fetch GET /.well-known/nomus-keys on this Nomus instance and confirm the Ed25519 key matches verification.publicKey (base64-encoded SPKI DER): either compare it with the \"spki\" member of the key (a Nomus extension to the JWK, identical encoding), or import the standard RFC 8037 JWK (\"x\" is the base64url raw 32-byte key, e.g. Node.js crypto.createPublicKey({ key: jwk, format: 'jwk' })) and export it as SPKI DER to compare.",
+        "Verify the Ed25519 signature (base64) over the UTF-8 bytes of the signed payload string with any standard cryptography library (e.g. Node.js crypto.verify with key format der, type spki).",
+        "Re-check the lifecycle status at GET /api/v1/verify/:attestationId. A valid signature does NOT mean the attestation is currently valid: revoked, superseded, and expired attestations keep verifiable signatures but must not be relied upon."
+      ]
+    },
+    "citedRules": [
+      {
+        "ruleKey": "eu.fixture.disclosure",
+        "version": 1,
+        "effect": "require_disclosure",
+        "matched": true,
+        "legalReference": "Fixture Art. 1",
+        "currentVersion": 1,
+        "ruleSignature": "fixture-rule-signature"
+      }
+    ],
+    "corpus": {
+      "policyStateHash": "d073845b5cdcb302b1d3fd8d6d99de0d869743b7688ae8892c73746b9b891794",
+      "computedAt": "2026-10-09T22:43:50.057Z"
+    },
+    "_disclaimer": "Nomus is an automated regulatory monitoring tool, not a law firm or legal advisor. The information provided is generated by AI from publicly available regulatory texts and is for informational purposes only. It does not constitute legal advice, legal opinion, or legal representation. The accuracy, completeness, and applicability of any output is not guaranteed. You should consult a qualified legal professional before making compliance decisions. Use of Nomus does not create an attorney-client relationship."
+  }
+}

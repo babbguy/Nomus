@@ -9,6 +9,7 @@ import { rateLimit } from '../middleware/rate-limit.js';
 import { createApiKey, listApiKeys, revokeApiKey } from '../../tenant/api-keys.js';
 import { actorOf, safeJson } from '../utils.js';
 import { logger } from '../../logger.js';
+import { requireOrgPermission } from '../../cpg/rbac/middleware.js';
 import { invalidateComplianceScore } from '../../core/compliance-score-cache.js';
 
 /**
@@ -16,6 +17,11 @@ import { invalidateComplianceScore } from '../../core/compliance-score-cache.js'
  * is scoped by the session's orgId — there is no org id in any path, so a
  * caller cannot address another organization. Browser sessions only: API keys
  * cannot be used to mint more API keys.
+ *
+ * Since v1.2.0 every route except GET / also requires a CPG permission
+ * (org.profile.update, org.api_keys.manage, org.members.read). Members keep
+ * their v1.1.0 abilities through the Developer role's legacy grants; a
+ * platform_admin session keeps v1.1.0 access (see requireOrgPermission).
  */
 export const orgRoutes = new Hono<AppEnv>();
 
@@ -53,7 +59,7 @@ orgRoutes.get('/', (c) => {
 });
 
 // Update self-manageable profile fields
-orgRoutes.patch('/', async (c) => {
+orgRoutes.patch('/', requireOrgPermission('org.profile.update'), async (c) => {
   const { data: body, error: jsonError } = await safeJson(c);
   if (jsonError) return c.json({ error: jsonError }, 400);
   const parsed = updateOrgProfileSchema.safeParse(body);
@@ -89,12 +95,12 @@ orgRoutes.patch('/', async (c) => {
 });
 
 // API keys for the caller's org
-orgRoutes.get('/api-keys', (c) => {
+orgRoutes.get('/api-keys', requireOrgPermission('org.api_keys.manage'), (c) => {
   const keys = listApiKeys(c.get('orgId')!);
   return c.json({ count: keys.length, keys });
 });
 
-orgRoutes.post('/api-keys', async (c) => {
+orgRoutes.post('/api-keys', requireOrgPermission('org.api_keys.manage'), async (c) => {
   const { data: body, error: jsonError } = await safeJson(c);
   if (jsonError) return c.json({ error: jsonError }, 400);
 
@@ -127,7 +133,7 @@ orgRoutes.post('/api-keys', async (c) => {
   }, 201);
 });
 
-orgRoutes.delete('/api-keys/:keyId', (c) => {
+orgRoutes.delete('/api-keys/:keyId', requireOrgPermission('org.api_keys.manage'), (c) => {
   const orgId = c.get('orgId')!;
   const keyId = c.req.param('keyId');
   if (!revokeApiKey(orgId, keyId)) {
@@ -138,7 +144,7 @@ orgRoutes.delete('/api-keys/:keyId', (c) => {
 });
 
 // Read-only member list (users are managed by platform administrators)
-orgRoutes.get('/members', (c) => {
+orgRoutes.get('/members', requireOrgPermission('org.members.read'), (c) => {
   const members = getDb().select({
     id: users.id,
     name: users.name,

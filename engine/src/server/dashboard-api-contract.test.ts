@@ -534,3 +534,224 @@ describe('JSON response sanity', () => {
     expect(typeof body.count).toBe('number');
   });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// Corporate Policy Governance (/api/v1/cpg, E1–E18). The governance pages
+// use a browser session, so these run as the org's first member (Org Admin
+// + Developer) and parse each body with the engine's zod contract.
+// ════════════════════════════════════════════════════════════════════
+
+describe('CPG API contracts', () => {
+  let cookie = '';
+  let orgId = '';
+
+  beforeAll(async () => {
+    const { makeOrg, makeUser } = await import('../cpg/__fixtures__/rbac-fixtures.js');
+    orgId = makeOrg('Contract');
+    cookie = makeUser(orgId).cookie;
+  });
+
+  async function session(method: string, path: string, body?: unknown) {
+    return app.request(`http://localhost${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
+  it('GET reads return their documented shapes', async () => {
+    const c = await import('../cpg/contracts.js');
+    const reads: Array<[string, { parse: (v: unknown) => unknown }]> = [
+      ['/api/v1/cpg/me', c.meResponseSchema],
+      ['/api/v1/cpg/permissions', c.listOf(c.permissionResponseSchema)],
+      ['/api/v1/cpg/roles', c.listOf(c.roleResponseSchema)],
+      ['/api/v1/cpg/users', c.listOf(c.orgUserResponseSchema)],
+      ['/api/v1/cpg/teams', c.listOf(c.teamResponseSchema)],
+      ['/api/v1/cpg/settings', c.cpgSettingsResponseSchema],
+      ['/api/v1/cpg/audit', c.auditListResponseSchema],
+      // Phase 2: boards, quorum, policy log, bundle (E19, E25, E31, E38)
+      ['/api/v1/cpg/boards', c.listOf(c.boardResponseSchema)],
+      ['/api/v1/cpg/quorum', c.quorumVersionResponseSchema],
+      ['/api/v1/cpg/quorum/versions', c.listOf(c.quorumVersionSummarySchema)],
+      ['/api/v1/cpg/quorum/versions/1', c.quorumVersionResponseSchema],
+      ['/api/v1/cpg/policies', c.listOf(c.policyHeadResponseSchema)],
+    ];
+    for (const [path, schema] of reads) {
+      const res = await session('GET', path);
+      expect(res.status, path).toBe(200);
+      const body: unknown = await res.json();
+      expect(() => schema.parse(body), path).not.toThrow();
+    }
+    const { corporateBundleSchema } = await import('@nomus/scanner/corporate');
+    const bundle = await session('GET', '/api/v1/cpg/bundle');
+    expect(bundle.status).toBe(200);
+    expect(corporateBundleSchema.safeParse(await bundle.json()).success).toBe(true);
+  });
+
+  it('the dashboard zod schemas (dashboard/src/api/cpg-schemas.ts) parse the real responses', async () => {
+    // Loaded by path at run time: the dashboard is another workspace, outside
+    // the engine's tsconfig rootDir. A drift between the two sides fails here.
+    const { pathToFileURL } = await import('node:url');
+    const { resolve } = await import('node:path');
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-schemas.ts')).href);
+    const reads: Array<[string, { safeParse: (v: unknown) => { success: boolean; error?: unknown } }]> = [
+      ['/api/v1/cpg/me', d.meSchema],
+      ['/api/v1/cpg/permissions', d.listOf(d.permissionSchema)],
+      ['/api/v1/cpg/roles', d.listOf(d.roleSchema)],
+      ['/api/v1/cpg/users', d.listOf(d.orgUserSchema)],
+      ['/api/v1/cpg/teams', d.listOf(d.teamSchema)],
+      ['/api/v1/cpg/settings', d.cpgSettingsSchema],
+      ['/api/v1/cpg/audit', d.auditListSchema],
+    ];
+    for (const [path, schema] of reads) {
+      const res = await session('GET', path);
+      expect(res.status, path).toBe(200);
+      const parsed = schema.safeParse(await res.json());
+      expect(parsed.success, `${path}: ${JSON.stringify(parsed.error)}`).toBe(true);
+    }
+
+    // Writes the governance pages make, parsed the same way.
+    const role = await session('POST', '/api/v1/cpg/roles', { key: 'contract_reader', name: 'Contract Reader', permissions: ['case.read'] });
+    expect(role.status).toBe(201);
+    const roleBody = await role.json();
+    expect(d.roleSchema.safeParse(roleBody).success).toBe(true);
+    const team = await session('POST', '/api/v1/cpg/teams', { key: 'contract', name: 'Contract', repoPatterns: ['example-org/*'] });
+    expect(team.status).toBe(201);
+    const teamBody = await team.json();
+    expect(d.teamSchema.safeParse(teamBody).success).toBe(true);
+    const invite = await session('POST', '/api/v1/cpg/users', { email: 'contract-user@example.org', name: 'Contract User' });
+    expect(invite.status).toBe(201);
+    const inviteBody = await invite.json();
+    expect(d.inviteResultSchema.safeParse(inviteBody).success).toBe(true);
+    const grant = await session('POST', `/api/v1/cpg/users/${inviteBody.user.id}/grants`, { roleId: roleBody.id, scopeType: 'team', scopeId: teamBody.id });
+    expect(grant.status).toBe(201);
+    const grantBody = await grant.json();
+    expect(d.grantSchema.safeParse(grantBody).success).toBe(true);
+    const revoked = await session('POST', `/api/v1/cpg/grants/${grantBody.id}/revoke`, { reason: 'contract test' });
+    expect(d.grantSchema.safeParse(await revoked.json()).success).toBe(true);
+    const user = await session('PATCH', `/api/v1/cpg/users/${inviteBody.user.id}`, { isActive: false });
+    expect(d.orgUserSchema.safeParse(await user.json()).success).toBe(true);
+    const patchedRole = await session('PATCH', `/api/v1/cpg/roles/${roleBody.id}`, { permissions: ['case.read', 'case.comment'] });
+    expect(d.roleSchema.safeParse(await patchedRole.json()).success).toBe(true);
+    const archived = await session('POST', `/api/v1/cpg/roles/${roleBody.id}/archive`, {});
+    expect(d.roleSchema.safeParse(await archived.json()).success).toBe(true);
+    const patchedTeam = await session('PATCH', `/api/v1/cpg/teams/${teamBody.id}`, { archived: true });
+    expect(d.teamSchema.safeParse(await patchedTeam.json()).success).toBe(true);
+    const settings = await session('PATCH', '/api/v1/cpg/settings', { reviewerContextLlm: false });
+    expect(d.cpgSettingsSchema.safeParse(await settings.json()).success).toBe(true);
+    const audit = await session('GET', '/api/v1/cpg/audit?limit=2');
+    const auditBody = await audit.json();
+    expect(d.auditListSchema.safeParse(auditBody).success).toBe(true);
+    expect(typeof auditBody.nextCursor).toBe('string');
+    const next = await session('GET', `/api/v1/cpg/audit?limit=2&cursor=${auditBody.nextCursor}`);
+    expect(d.auditListSchema.safeParse(await next.json()).success).toBe(true);
+  });
+
+  it('the dashboard registry schemas (cpg-schemas.ts, cpg-quorum.ts) parse the real Phase 2 responses', async () => {
+    const { pathToFileURL } = await import('node:url');
+    const { resolve } = await import('node:path');
+    const d = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-schemas.ts')).href);
+    const q = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-quorum.ts')).href);
+    const board = await session('POST', '/api/v1/cpg/boards', { key: 'contract-board', name: 'Contract Board', kind: 'governance' });
+    expect(board.status).toBe(201);
+    const boardBody = await board.json();
+    expect(d.boardSchema.safeParse(boardBody).success).toBe(true);
+    const meRes = await (await session('GET', '/api/v1/cpg/me')).json();
+    const member = await session('POST', `/api/v1/cpg/boards/${boardBody.id}/members`, { userId: meRes.user.id });
+    expect(d.boardMemberSchema.safeParse(await member.json()).success).toBe(true);
+    const patched = await session('PATCH', `/api/v1/cpg/boards/${boardBody.id}`, { description: 'contract' });
+    expect(d.boardSchema.safeParse(await patched.json()).success).toBe(true);
+    const removed = await session('POST', `/api/v1/cpg/boards/${boardBody.id}/members/${meRes.user.id}/remove`, {});
+    expect(d.boardMemberSchema.safeParse(await removed.json()).success).toBe(true);
+    const current = await (await session('GET', '/api/v1/cpg/quorum')).json();
+    expect(q.quorumVersionSchema.safeParse(current).success).toBe(true);
+    const put = await session('PUT', '/api/v1/cpg/quorum', { config: { ...current.config, proposalLapseDays: 31 }, changeNote: 'contract' });
+    expect(put.status).toBe(201);
+    expect(q.quorumVersionSchema.safeParse(await put.json()).success).toBe(true);
+    const reads: Array<[string, { safeParse: (v: unknown) => { success: boolean; error?: unknown } }]> = [
+      ['/api/v1/cpg/boards', d.listOf(d.boardSchema)],
+      ['/api/v1/cpg/quorum/versions', d.listOf(q.quorumVersionSummarySchema)],
+      ['/api/v1/cpg/quorum/versions/1', q.quorumVersionSchema],
+      ['/api/v1/cpg/policies', d.listOf(d.policyHeadSchema)],
+      ['/api/v1/cpg/me', d.meSchema],
+    ];
+    for (const [path, schema] of reads) {
+      const res = await session('GET', path);
+      expect(res.status, path).toBe(200);
+      const parsed = schema.safeParse(await res.json());
+      expect(parsed.success, `${path}: ${JSON.stringify(parsed.error)}`).toBe(true);
+    }
+    const archived = await session('POST', `/api/v1/cpg/boards/${boardBody.id}/archive`, {});
+    expect(d.boardSchema.safeParse(await archived.json()).success).toBe(true);
+  });
+
+  it('the dashboard quorum schema (cpg-quorum.ts) accepts and refuses exactly what the engine schema does', async () => {
+    const { pathToFileURL } = await import('node:url');
+    const { resolve } = await import('node:path');
+    const q = await import(pathToFileURL(resolve(__dirname, '../../../dashboard/src/api/cpg-quorum.ts')).href);
+    const { quorumConfigSchema, SEED_QUORUM_CONFIG } = await import('../cpg/quorum/schema.js');
+    const seed = SEED_QUORUM_CONFIG as unknown as Record<string, any>;
+    const edit = (fn: (c: any) => void) => { const c = JSON.parse(JSON.stringify(seed)); fn(c); return c; };
+    const corpus: unknown[] = [
+      seed,
+      edit((c) => { c.proposalLapseDays = 90; }),
+      edit((c) => { c.proposalLapseDays = 91; }),
+      edit((c) => { c.tiers.prohibited.bulk = { ...c.tiers['review-required'].bulk }; }),
+      edit((c) => { c.tiers['review-required'].bulk = { allowed: false }; }),
+      edit((c) => { c.tiers['review-required'].snippet.approvals = 0; }),
+      edit((c) => { c.tiers['review-required'].snippet.approvals = 11; }),
+      edit((c) => { c.tiers.prohibited.snippet.defaultExpiryDays = 91; }),
+      edit((c) => { c.tiers.prohibited.standing.maxExpiryDays = 120; }),
+      edit((c) => { c.standingExceptions.defaultExpiryDays = 91; }),
+      edit((c) => { c.standingExceptions.maxExpiryDays = 366; }),
+      edit((c) => { c.policyApproval.approvals = 0; }),
+      edit((c) => { c.policyApproval.approvals = 6; }),
+      edit((c) => { c.policyApproval.allowSelfApproval = true; }),
+      edit((c) => { c.tiers.advisory.blocking = true; }),
+      edit((c) => { c.gracePeriod.newPolicyDefaultDays = 0; c.gracePeriod.newVersionDefaultDays = 365; }),
+      edit((c) => { c.gracePeriod.newVersionDefaultDays = -1; }),
+      edit((c) => { c.tiers['review-required'].snippet.extraBoardIds = ['not-a-uuid']; }),
+      edit((c) => { c.tiers['review-required'].snippet.requiredPermission = 'case.review'; }),
+      edit((c) => { c.tiers['review-required'].snippet.boardCoverage = 'some_owning'; }),
+      edit((c) => { c.policyOverrides = { '00000000-0000-4000-8000-000000000000': { bulk: { allowed: false } } }; }),
+      edit((c) => { c.policyOverrides = { 'not-a-uuid': {} }; }),
+      edit((c) => { c.schemaVersion = 2; }),
+      edit((c) => { c.extra = true; }),
+      edit((c) => { delete c.gracePeriod; }),
+    ];
+    const verdicts = corpus.map((c) => [quorumConfigSchema.safeParse(c).success, q.quorumConfigSchema.safeParse(c).success]);
+    for (const [i, [engine, dashboard]] of verdicts.entries()) expect(dashboard, `corpus case ${i}`).toBe(engine);
+    expect(verdicts.filter(([e]) => e).length).toBe(5);
+  });
+
+  it('write routes are registered and never 5xx on invalid input', async () => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    for (const [method, path] of [
+      ['POST', '/api/v1/cpg/roles'], ['PATCH', `/api/v1/cpg/roles/${id}`], ['POST', `/api/v1/cpg/roles/${id}/archive`],
+      ['POST', '/api/v1/cpg/users'], ['PATCH', `/api/v1/cpg/users/${id}`], ['POST', `/api/v1/cpg/users/${id}/grants`],
+      ['POST', `/api/v1/cpg/grants/${id}/revoke`], ['POST', '/api/v1/cpg/teams'], ['PATCH', `/api/v1/cpg/teams/${id}`],
+      ['PATCH', '/api/v1/cpg/settings'],
+      ['POST', '/api/v1/cpg/boards'], ['PATCH', `/api/v1/cpg/boards/${id}`], ['POST', `/api/v1/cpg/boards/${id}/archive`],
+      ['POST', `/api/v1/cpg/boards/${id}/members`], ['POST', `/api/v1/cpg/boards/${id}/members/${id}/remove`],
+      ['PUT', '/api/v1/cpg/quorum'], ['POST', '/api/v1/cpg/compile'], ['POST', '/api/v1/cpg/policies'],
+      ['POST', `/api/v1/cpg/policies/${id}/versions`], ['POST', `/api/v1/cpg/policies/${id}/retire`],
+      ['POST', `/api/v1/cpg/policy-versions/${id}/votes`], ['POST', `/api/v1/cpg/policy-versions/${id}/withdraw`],
+    ] as const) {
+      const res = await session(method, path, { unexpected: true });
+      expect([400, 403, 404], `${method} ${path}`).toContain(res.status);
+      const body = await res.json();
+      expect(typeof body.code, `${method} ${path}`).toBe('string');
+    }
+    const e18 = await req('POST', `/api/v1/tenants/${orgId}/org-admins`, { userId: 'not-a-uuid' });
+    expect(e18.status).toBe(400);
+  });
+
+  it('every CPG route answers 401 without credentials', async () => {
+    for (const path of ['/api/v1/cpg/me', '/api/v1/cpg/roles', '/api/v1/cpg/users', '/api/v1/cpg/teams', '/api/v1/cpg/settings', '/api/v1/cpg/audit', '/api/v1/cpg/permissions',
+      '/api/v1/cpg/boards', '/api/v1/cpg/quorum', '/api/v1/cpg/quorum/versions', '/api/v1/cpg/policies', '/api/v1/cpg/policies/export', '/api/v1/cpg/bundle',
+      '/api/v1/cpg/compile/00000000-0000-4000-8000-000000000000', '/api/v1/cpg/audit/export', '/api/v1/cpg/ci/runs']) {
+      const res = await app.request(`http://localhost${path}`);
+      expect(res.status, path).toBe(401);
+    }
+  });
+});
