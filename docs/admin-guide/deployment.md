@@ -48,6 +48,19 @@ docker pull ghcr.io/babbguy/nomus-engine:1.2.0
 docker pull ghcr.io/babbguy/nomus-dashboard:1.2.0
 ```
 
+Each image is signed with cosign (keyless, by the release workflow's GitHub identity) and has a SLSA build provenance attestation and an SPDX SBOM per platform. Verify an image before you deploy it (cosign v3+ and the GitHub CLI; repeat for `nomus-dashboard`):
+
+```bash
+cosign verify ghcr.io/babbguy/nomus-engine:1.2.0 \
+  --certificate-identity https://github.com/babbguy/Nomus/.github/workflows/publish.yml@refs/tags/v1.2.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+gh attestation verify oci://ghcr.io/babbguy/nomus-engine:1.2.0 -R babbguy/Nomus
+docker buildx imagetools inspect ghcr.io/babbguy/nomus-engine:1.2.0 \
+  --format '{{ json (index .SBOM "linux/amd64").SPDX }}'   # the SBOM
+```
+
+To run exactly what you verified, pin the digest that `cosign verify` prints (`ghcr.io/babbguy/nomus-engine@sha256:...`). [SECURITY.md](../../SECURITY.md#verifying-releases) has the details.
+
 The repository's `docker-compose.yml` runs both images. The repository also has their build files (`Dockerfile` for the engine, `Dockerfile.dashboard` for the dashboard), so you can build the images from a checkout instead.
 
 ```bash

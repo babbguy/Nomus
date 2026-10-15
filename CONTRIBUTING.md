@@ -120,7 +120,7 @@ package versions:
 | Workflow | Publishes |
 |----------|-----------|
 | `release.yml` | The GitHub release, with the `CHANGELOG.md` section as its notes and the VS Code extension `.vsix` attached |
-| `publish.yml` | The `nomus-engine` and `nomus-dashboard` images to `ghcr.io` |
+| `publish.yml` | The `nomus-engine` and `nomus-dashboard` images to `ghcr.io`, signed with cosign, with SBOMs and a build provenance attestation (see [SECURITY.md](SECURITY.md#verifying-releases)) |
 | `publish-npm.yml` | `nomus-scan` and `nomus-mcp` to npm, with provenance (trusted publishing, no token) |
 | `publish-vscode.yml` | The extension `babbguy.nomus` to the Visual Studio Marketplace (`VSCE_PAT`) and Open VSX (`OVSX_PAT`) |
 | `publish-action.yml` | `packages/github-action` to `babbguy/nomus-action`, tagged `vX.Y.Z` with `vX` moved to it (`ACTION_REPO_TOKEN`) |

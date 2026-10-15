@@ -1,5 +1,11 @@
 # Nomus
 
+[![CI](https://github.com/babbguy/Nomus/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/babbguy/Nomus/actions/workflows/ci.yml?query=branch%3Adevelop)
+[![Release](https://img.shields.io/github/v/release/babbguy/Nomus)](https://github.com/babbguy/Nomus/releases/latest)
+[![npm](https://img.shields.io/npm/v/nomus-scan)](https://www.npmjs.com/package/nomus-scan)
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/babbguy/Nomus/badge)](https://scorecard.dev/viewer/?uri=github.com/babbguy/Nomus)
+
 **An AI regulatory applicability engine.**
 
 Nomus answers one question: *which AI regulations apply to this system?* It keeps a
@@ -15,6 +21,37 @@ that may apply, with citations back to the source text.
 
 This is a portfolio project, licensed under FSL-1.1-ALv2 from v1.2.0 (see [License](#license)).
 It is not offered as a hosted service. Run it yourself with Docker or from source.
+
+## Quick start
+
+Nomus is an engine you run (API and dashboard) and clients that ask it which rules apply to
+your code.
+
+**1. Start the engine and dashboard:**
+
+```bash
+git clone https://github.com/babbguy/Nomus.git && cd Nomus
+cp engine/.env.example engine/.env    # replace the placeholder secrets before real use
+docker compose up
+```
+
+Open http://localhost:8080, sign in with `NOMUS_ADMIN_EMAIL` and `NOMUS_ADMIN_PASSWORD` from
+`engine/.env`, and create an API key under Settings, API Keys.
+
+**2. Scan code** with any client. Each one uses the engine at `http://localhost:3100` by default
+and the API key from step 1:
+
+| Client | Start with | Setup |
+|--------|------------|-------|
+| CLI | `npx nomus-scan .` | `NOMUS_API_KEY` and a [`.nomus.yml`](packages/scanner/README.md#configuration) |
+| VS Code | `code --install-extension babbguy.nomus` | [Extension README](packages/vscode-extension/README.md) |
+| GitHub Actions | `uses: babbguy/nomus-action@v1` | [Clients](#clients) (the engine must be reachable from the runner) |
+| MCP server for AI coding agents | `npx -y nomus-mcp` | [Clients](#clients) |
+
+> The images, the npm packages, the extension and the Action's `v1` tag are first published by
+> the v1.2.0 release. Until then, `docker compose up --build` builds the images from the
+> checkout, and the clients run from source (see [From source](#from-source) and each package
+> README).
 
 ## What it does
 
@@ -74,18 +111,14 @@ on the same origin under `/api/v1`. The scanner, GitHub Action, VS Code extensio
 server are clients of a running engine: they detect capabilities locally and ask the
 engine which rules apply.
 
-## Install
+## Clients
 
-Each release is published to these channels (the engine itself runs from the Docker images or
-from source, see [Quick start](#quick-start)):
-
-| Channel | Install |
-|---------|---------|
-| Scanner CLI ([npm](https://www.npmjs.com/package/nomus-scan)) | `npx nomus-scan .` |
-| MCP server ([npm](https://www.npmjs.com/package/nomus-mcp)) | `npx -y nomus-mcp`, configured in your MCP client as below |
-| VS Code extension | Install `babbguy.nomus` from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=babbguy.nomus) or [Open VSX](https://open-vsx.org/extension/babbguy/nomus) (`code --install-extension babbguy.nomus`) |
-| GitHub Action | `uses: babbguy/nomus-action@v1` ([babbguy/nomus-action](https://github.com/babbguy/nomus-action)) |
-| Docker | `docker pull ghcr.io/babbguy/nomus-engine` and `docker pull ghcr.io/babbguy/nomus-dashboard` |
+Each release publishes the scanner CLI ([`nomus-scan`](https://www.npmjs.com/package/nomus-scan))
+and the MCP server ([`nomus-mcp`](https://www.npmjs.com/package/nomus-mcp)) to npm, the VS Code
+extension `babbguy.nomus` to the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=babbguy.nomus) and
+[Open VSX](https://open-vsx.org/extension/babbguy/nomus), and the GitHub Action to
+[babbguy/nomus-action](https://github.com/babbguy/nomus-action).
 
 The scanner, the MCP server and the extension need Node.js 20.19 or later and talk to a Nomus
 engine you run, with an API key from the dashboard (Settings, API Keys). The scanner reads the
@@ -120,24 +153,20 @@ GitHub Action:
     api-url: https://nomus.example.com
 ```
 
-## Quick start
+## Running the engine
 
 ### Docker
 
-```bash
-git clone https://github.com/babbguy/Nomus.git
-cd Nomus
-cp engine/.env.example engine/.env     # then edit the secrets (see Configuration)
-docker compose pull                    # images from ghcr.io; or build them: docker compose up --build
-docker compose up
-```
+The [Quick start](#quick-start) runs the published images with `docker compose up`
+(`docker compose up --build` builds them from the checkout instead):
 
 - Dashboard: http://localhost:8080
 - Engine API: http://localhost:3100 (`GET /health`)
 
 Each release publishes `ghcr.io/babbguy/nomus-engine` and `ghcr.io/babbguy/nomus-dashboard`
-(linux/amd64 and linux/arm64). Set `NOMUS_VERSION` (for example `NOMUS_VERSION=1.2.0`) to pin
-a release; the default is `latest`.
+(linux/amd64 and linux/arm64), signed with cosign and with SBOMs and build provenance (see
+[Verifying releases](SECURITY.md#verifying-releases)). Set `NOMUS_VERSION` (for example
+`NOMUS_VERSION=1.2.0`) to pin a release; the default is `latest`.
 
 `engine/.env.example` sets `NOMUS_ENV=development` and ships placeholder secrets so you can
 look around. The engine image also sets `NODE_ENV=production`, which turns on the production

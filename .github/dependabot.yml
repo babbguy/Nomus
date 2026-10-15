@@ -1,0 +1,63 @@
+version: 2
+
+updates:
+  # Base images of Dockerfile (engine) and Dockerfile.dashboard, both at the
+  # repository root. They are pinned by digest; Dependabot refreshes the digest
+  # of each tag and proposes new tags.
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    # One pull request per month for all base images.
+    groups:
+      docker:
+        patterns: ["*"]
+    labels:
+      - "dependencies"
+    # These rules only filter version updates: with target-branch set, options
+    # in this block do not apply to security updates (GitHub's Dependabot
+    # options reference, "target-branch").
+    ignore:
+      # Node.js majors are moved deliberately (the images, CI and the engines
+      # fields move together).
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      # Nginx stable lines have even minor numbers (1.30) and mainline odd ones
+      # (1.31): stay on the stable line and move to the next one deliberately.
+      - dependency-name: "nginxinc/nginx-unprivileged"
+        update-types: ["version-update:semver-minor"]
+
+  # Third-party images in docker-compose.yml (the optional TLS proxy and
+  # Certbot), pinned by digest.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    # One pull request per month for all Compose images.
+    groups:
+      docker-compose:
+        patterns: ["*"]
+    labels:
+      - "dependencies"
+    ignore:
+      # Stay on the Nginx stable line (see above).
+      - dependency-name: "nginx"
+        update-types: ["version-update:semver-minor"]
+
+  # GitHub Actions, pinned by commit SHA.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    # One pull request per month for all GitHub Actions.
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels:
+      - "dependencies"
