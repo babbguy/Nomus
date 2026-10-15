@@ -44,15 +44,15 @@
     "compliance"
   ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@nomus/scanner": "*",
     "@nomus/shared": "*",
-    "@modelcontextprotocol/sdk": "1.29.0",
     "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",
-    "tsx": "^4.20.3",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   }
 }
