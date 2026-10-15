@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Corporate policy governance, standing exceptions: **Propose a standing exception** on a case
+  finding opens the propose form with the finding's policy, repository and file filled in and
+  records the case. The form gains the "snippet matches" condition (a regular expression, optionally
+  ignoring case) that the API already accepted. Case details report `viewer.proposeException`.
 - **Container images.** Each release publishes `ghcr.io/babbguy/nomus-engine` and
   `ghcr.io/babbguy/nomus-dashboard` for linux/amd64 and linux/arm64, tagged with the version
   (`1.2.0`), the minor line (`1.2`) and `latest`. Each image is signed with cosign (keyless, by
@@ -327,6 +331,10 @@ All notable changes to this project are documented here. The format follows
   while the user has a temporary password.
 
 ### Fixed
+- Corporate policy governance: the exceptions page showed **Revoke** to anyone holding
+  `decision.revoke` in any scope, and the server then refused those without it on every
+  repository the exception covers. Each listed exception now carries `viewer.revoke`, the server's
+  own check, and the button shows only when it is true.
 - Regulation uploads: re-uploading a document identical to the one a source last promoted ran
   extraction again, and with the current default models, which sample instead of using
   temperature 0, could rewrite rules from unchanged law. It is now answered "No changes detected"

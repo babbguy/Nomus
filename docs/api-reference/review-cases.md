@@ -69,9 +69,9 @@ none) while `nextCursor` is set; keep paging until `nextCursor` is `null`.
 
 `GET /api/v1/cpg/cases/:id` answers `{ "case": CaseStatus, "openedAt", "openedBy", "closure",
 "viewer", "revisions", "justifications", "comments" }`. `viewer` is
-`{ "comment", "review", "close", "withdraw", "revoke", "selfApproval" }`: what the caller's
-permissions allow on the case's repository (request changes also needs membership of the lane's
-board; `revoke` is `decision.revoke`), and whether the caller opened, justified or revised the case,
+`{ "comment", "review", "close", "withdraw", "revoke", "proposeException", "selfApproval" }`: what
+the caller's permissions allow on the case's repository (request changes also needs membership of
+the lane's board; `revoke` is `decision.revoke`, `proposeException` is `exception.propose`), and whether the caller opened, justified or revised the case,
 so may never propose or vote on its decisions. `closure` is `null` until
 the case closes, then `{ "reason", "note", "closedAt", "closedBy", "record", "signature",
 "signatureValid" }`, where `record` is the signed closure record and `signatureValid` the result of

@@ -146,8 +146,10 @@ blocks and beats any exception; an unexpired approval passes), then a matching s
 
 `GET /exceptions` answers `{ "items": [{ "id", "proposalId", "caseId", "policyId", "policyKey",
 "policyVersion", "pattern", "expiresAt", "finalizedAt", "approverUserIds", "status" ("active",
-"expired", "revoked" or "lapsed": its policy version is no longer the active one), "revocation" }] }`,
-listing only exceptions whose repositories you can read. `?active=true` leaves out lapsed exceptions.
+"expired", "revoked" or "lapsed": its policy version is no longer the active one), "revocation",
+"viewer" }] }`, listing only exceptions whose repositories you can read. `viewer` is `{ "revoke" }`:
+whether you hold `decision.revoke` on every repository the pattern can touch, the check a revocation
+makes. `?active=true` leaves out lapsed exceptions.
 
 ## Revocation
 

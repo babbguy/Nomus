@@ -335,8 +335,13 @@ expiry, proposer, votes and revocations. Filter by status (**Pending**, **Active
 listed whether or not they were proposed from a case.
 
 With `exception.propose`, **Propose an exception**: pick the policy (its active version), give
-repository patterns or teams and path globs, optional branches, languages and a maximum finding
-size, an expiry within the configured maximum (90 days by default) and a rationale. The form states
+repository patterns or teams and path globs, optional branches, languages, a maximum finding size
+and a regular expression the snippet must match (optionally ignoring case), an expiry within the
+configured maximum (90 days by default) and a rationale. On a case, **Propose a standing
+exception** on a finding opens this form with the finding's policy, repository and file filled in
+(widen the path to a glob to cover more files); the exception then links back to the case.
+**Revoke** is shown on an active exception only if you hold `decision.revoke` on every repository
+its pattern can touch. The form states
 what approval it needs, for example two approvals covering every owning board, one of them by an
 Exception Approver, for a prohibited policy. You do not vote on your own proposal. An exception
 covers one policy version: when a new version is approved it **lapses**, and the new-version page

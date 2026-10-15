@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FileSignature, Gavel } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
@@ -12,7 +12,7 @@ import {
 } from '../../../api/cpg';
 import { formatUtc, policyErrorMessage } from '../../../lib/cpg-policy';
 import {
-  OPEN_FOR_PROPOSAL, bulkGroups, decideBlocked, isoInDays, ownsFinding, parseDays, progressText, quorumProgress, scopeRule,
+  OPEN_FOR_PROPOSAL, bulkGroups, decideBlocked, isoInDays, ownsFinding, parseDays, progressText, quorumProgress, scopeRule, standingPrefill,
 } from '../../../lib/cpg-approvals';
 import { Blocked, ExpiryField, ProposalCard, RationaleField, RevokeModal } from '../decisions/parts';
 
@@ -39,12 +39,19 @@ function proposable(ctx: DecisionContext, findings: CaseFinding[]): Set<string> 
     && !pendingFor(ctx.proposals, f.fingerprint) && ownsFinding(ctx.me, f)).map((f) => f.fingerprint));
 }
 
-/** The decision state of one blocking finding of the latest revision, and what the caller may do about it. */
+/**
+ * The decision state of one blocking finding of the latest revision, and what
+ * the caller may do about it: propose a decision, or a standing exception
+ * (on the exceptions page, prefilled with the finding's policy, repository and file).
+ */
 export function FindingDecision({ ctx, finding: f, resolution: r }: { ctx: DecisionContext; finding: CaseFinding; resolution: FindingResolution }) {
+  const navigate = useNavigate();
   const [proposing, setProposing] = useState<'approve' | 'reject' | null>(null);
   const pending = pendingFor(ctx.proposals, f.fingerprint);
   const blocked = ctx.readOnly ?? decideBlocked(ctx.detail, ctx.me)
     ?? (ownsFinding(ctx.me, f) ? null : 'Only members of a board that owns this policy can propose a decision on it.');
+  const decide = !pending && OPEN_FOR_PROPOSAL.has(r.status);
+  const standing = ctx.detail.viewer.proposeException && !ctx.readOnly && !r.exceptionDecisionId;
   return (
     <div className="border-t border-border pt-3 space-y-2" data-testid="finding-decision">
       <p className="text-xs text-text-muted flex items-center gap-1"><Gavel size={12} /> Decision</p>
@@ -62,12 +69,22 @@ export function FindingDecision({ ctx, finding: f, resolution: r }: { ctx: Decis
         </p>
       )}
       {!r.decisionId && !r.exceptionDecisionId && !pending && r.status !== 'expired' && <p className="text-xs text-text-secondary">No decision yet.</p>}
-      {!pending && OPEN_FOR_PROPOSAL.has(r.status) && (blocked ? <Blocked text={blocked} /> : (
+      {decide && blocked && <Blocked text={blocked} />}
+      {((decide && !blocked) || standing) && (
         <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="secondary" onClick={() => setProposing('approve')}>Propose approval</Button>
-          <Button size="sm" variant="ghost" onClick={() => setProposing('reject')}>Propose rejection</Button>
+          {decide && !blocked && (
+            <>
+              <Button size="sm" variant="secondary" onClick={() => setProposing('approve')}>Propose approval</Button>
+              <Button size="sm" variant="ghost" onClick={() => setProposing('reject')}>Propose rejection</Button>
+            </>
+          )}
+          {standing && (
+            <Button size="sm" variant="ghost" onClick={() => navigate('/governance/exceptions', { state: { propose: standingPrefill(ctx.detail, f) } })}>
+              Propose a standing exception
+            </Button>
+          )}
         </div>
-      ))}
+      )}
       {proposing && <ProposeModal ctx={ctx} scope="snippet" outcome={proposing} candidates={[f]} onClose={() => setProposing(null)} />}
     </div>
   );

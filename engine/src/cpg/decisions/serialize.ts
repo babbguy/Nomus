@@ -9,7 +9,7 @@ import { cpgVerify } from '../policies/signing.js';
 import type { CpgActor } from '../rbac/can.js';
 import type { DecisionRow } from './resolve.js';
 import type { RevocationRow } from './revoke.js';
-import type { StandingException as Exception } from './standing.js';
+import { canOnPattern, type StandingException as Exception } from './standing.js';
 import { fingerprintsOf, requiredOf, type ProposalView, type VoteRow } from './status.js';
 import { eligibleBallot } from './votes.js';
 
@@ -67,12 +67,13 @@ export function revocationOf(r: RevocationRow): RevocationResponse {
   return { id: r.id, decisionId: r.decisionId, revokedByUserId: r.revokedByUserId, reason: r.reason, revokedAt: r.revokedAt, signedPayload: r.signedPayload, signature: r.signature };
 }
 
-export function exceptionOf(x: Exception, now: string): StandingException {
+export function exceptionOf(x: Exception, now: string, actor: CpgActor): StandingException {
   const d = x.decision;
   const revoked = x.revocation !== null && x.revocation.revokedAt <= now;
   return standingExceptionSchema.parse({
     id: d.id, proposalId: d.proposalId, caseId: d.caseId, policyId: d.policyId, policyKey: d.policyKey, policyVersion: d.policyVersion,
     pattern: x.pattern, expiresAt: d.expiresAt, finalizedAt: d.finalizedAt, approverUserIds: JSON.parse(d.approverUserIds) as string[],
     status: revoked ? 'revoked' : d.expiresAt! <= now ? 'expired' : x.activeVersion !== d.policyVersion ? 'lapsed' : 'active', revocation: x.revocation && revocationOf(x.revocation),
+    viewer: { revoke: canOnPattern(actor, 'decision.revoke', x.pattern) },
   });
 }

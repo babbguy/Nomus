@@ -1,5 +1,4 @@
 import type { CaseDetail, CaseFinding, CpgMe, Proposal, ProposalStatus, QuorumConfig, QuorumScope, StandingException, Tier } from '../api/cpg';
-import { holdsPermission } from './cpg-permissions';
 
 /** Labels and pure rules of the decision and standing-exception views. No React, no network. */
 
@@ -163,9 +162,27 @@ export function exceptionRows(proposals: Proposal[], exceptions: StandingExcepti
   }).reverse();
 }
 
-/** What the caller may do on the exceptions page (the server re-checks each write on every repository). */
-export function exceptionActions(me: CpgMe | null) {
-  return { propose: holdsPermission(me, 'exception.propose'), revoke: holdsPermission(me, 'decision.revoke') };
+/** What the propose form starts from when opened from a case finding: its policy, repository and file. */
+export interface StandingPrefill {
+  caseId: string;
+  caseRef: string;
+  policyKey: string;
+  repo: string;
+  path: string;
+}
+
+export const standingPrefill = (detail: CaseDetail, f: Pick<CaseFinding, 'policyKey' | 'filePath'>): StandingPrefill =>
+  ({ caseId: detail.case.id, caseRef: detail.case.ref, policyKey: f.policyKey, repo: detail.case.repo, path: f.filePath });
+
+/** Why a "snippet matches" pattern cannot be sent, or null (the server also refuses patterns that could run away). */
+export function snippetPatternError(source: string, flags: '' | 'i'): string | null {
+  if (source.length > 200) return 'The snippet pattern can be at most 200 characters.';
+  try {
+    new RegExp(source, flags);
+    return null;
+  } catch {
+    return 'The snippet pattern is not a valid regular expression.';
+  }
 }
 
 /** Exceptions that a new version of the policy would lapse (D11): active on its current version. */

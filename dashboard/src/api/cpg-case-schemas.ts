@@ -72,7 +72,7 @@ export const caseDetailSchema = z.object({
   openedBy: actorRefSchema,
   closure: caseClosureSchema.nullable(),
   viewer: z.object({
-    comment: z.boolean(), review: z.boolean(), close: z.boolean(), withdraw: z.boolean(), revoke: z.boolean(), selfApproval: z.boolean(),
+    comment: z.boolean(), review: z.boolean(), close: z.boolean(), withdraw: z.boolean(), revoke: z.boolean(), proposeException: z.boolean(), selfApproval: z.boolean(),
   }).strict(),
   revisions: z.array(revisionSummarySchema),
   justifications: z.array(justificationSchema),
@@ -151,6 +151,7 @@ export const standingExceptionSchema = z.object({
   id: uuid, proposalId: uuid, caseId: uuid.nullable(), policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(),
   pattern: standingPatternSchema, expiresAt: isoDate, finalizedAt: isoDate, approverUserIds: z.array(uuid),
   status: z.enum(['active', 'expired', 'revoked', 'lapsed']), revocation: revocationSchema.nullable(),
+  viewer: z.object({ revoke: z.boolean() }).strict(),
 }).strict();
 
 export const standingExceptionListSchema = z.object({ items: z.array(standingExceptionSchema) }).strict();

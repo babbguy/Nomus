@@ -570,7 +570,7 @@ export const caseDetailResponseSchema = z.object({
   closure: caseClosureResponseSchema.nullable(),
   /** What the caller may do on this case's repository (the server re-checks every write). */
   viewer: z.object({
-    comment: z.boolean(), review: z.boolean(), close: z.boolean(), withdraw: z.boolean(), revoke: z.boolean(),
+    comment: z.boolean(), review: z.boolean(), close: z.boolean(), withdraw: z.boolean(), revoke: z.boolean(), proposeException: z.boolean(),
     /** The caller opened, justified or revised this case, so they may never propose or vote on its findings. */
     selfApproval: z.boolean(),
   }).strict(),
@@ -746,6 +746,8 @@ export const standingExceptionSchema = z.object({
   id: uuid, proposalId: uuid, caseId: uuid.nullable(), policyId: uuid, policyKey: z.string(), policyVersion: z.number().int(),
   pattern: standingPatternSchema, expiresAt: isoDate, finalizedAt: isoDate, approverUserIds: z.array(uuid),
   status: z.enum(['active', 'expired', 'revoked', 'lapsed']), revocation: revocationResponseSchema.nullable(),
+  /** Whether the caller holds decision.revoke on every repository the pattern can touch (the server re-checks). */
+  viewer: z.object({ revoke: z.boolean() }).strict(),
 }).strict();
 export const exceptionListResponseSchema = z.object({ items: z.array(standingExceptionSchema) }).strict();
 

@@ -65,9 +65,10 @@ async function finalized(p: Record<string, unknown>): Promise<string> {
   return done.json.decisionIds[0] as string;
 }
 
-async function grant(user: TestUser, roleKey: string) {
+async function grant(user: TestUser, roleKey: string, repo?: string) {
   const roleId = ((await call(app, 'GET', '/api/v1/cpg/roles', { cookie: owner.cookie })).json.items as Array<{ id: string; key: string }>).find((r) => r.key === roleKey)!.id;
-  expect((await post(owner, `/users/${user.id}/grants`, { roleId, scopeType: 'org' })).status).toBe(201);
+  const scope = repo ? { scopeType: 'repo', scopeId: repo } : { scopeType: 'org' };
+  expect((await post(owner, `/users/${user.id}/grants`, { roleId, ...scope })).status).toBe(201);
 }
 
 let legalBoard: string;
@@ -116,6 +117,21 @@ describe('standing exceptions', () => {
     const list = (q: string) => call(app, 'GET', `/api/v1/cpg/exceptions${q}`, { cookie: dev.cookie }).then((r) => exceptionListResponseSchema.parse(r.json).items.map((x) => [x.id, x.status]));
     expect(await list(`?active=true&repo=${REPO}`)).toEqual([[exceptionId, 'active']]);
     expect(await list('?repo=gate.example.org/team/other')).toEqual([]);
+  });
+
+  it('each exception says whether the caller may revoke it: decision.revoke on every repository its pattern touches', async () => {
+    // A custom role of scopable permissions only, so it can be granted per repository.
+    expect((await post(owner, '/roles', { key: 'repo_revoker', name: 'Repository Revoker', permissions: ['case.read', 'decision.revoke'] })).status).toBe(201);
+    const here = makeUser(orgId);
+    const elsewhere = makeUser(orgId);
+    await grant(here, 'repo_revoker', REPO);
+    await grant(elsewhere, 'developer');
+    await grant(elsewhere, 'repo_revoker', 'gate.example.org/team/other');
+    const mayRevoke = async (user: TestUser) => exceptionListResponseSchema.parse((await call(app, 'GET', '/api/v1/cpg/exceptions', { cookie: user.cookie })).json)
+      .items.find((x) => x.id === exceptionId)?.viewer.revoke;
+    expect([await mayRevoke(approver), await mayRevoke(here), await mayRevoke(elsewhere), await mayRevoke(dev)]).toEqual([true, true, false, false]);
+    // The flag is the server's own check: the refused caller is refused on the write too.
+    expect((await post(elsewhere, `/decisions/${exceptionId}/revoke`, { reason: 'Revoking from another repository.' })).status).toBe(403);
   });
 
   it('a finding outside the pattern, or of a fingerprint the branch case does not hold, is not excepted', async () => {
