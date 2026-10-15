@@ -1,0 +1,98 @@
+# =============================================================================
+# Nomus — Publish the VS Code extension
+# =============================================================================
+# A v* tag (for example v1.2.0) packages the extension (babbguy.nomus) once and
+# publishes that .vsix to:
+#
+#   Visual Studio Marketplace   vsce, secret VSCE_PAT (Azure DevOps token,
+#                               Marketplace > Manage; the Marketplace has no OIDC)
+#   Open VSX                    ovsx, secret OVSX_PAT
+#
+# The secrets live in the "vscode-marketplace" environment. A registry whose
+# secret is not set is skipped with a notice. A version already on a registry is
+# skipped (--skip-duplicate), so a failed run can be re-run. Neither registry
+# accepts semver pre-release versions, so a pre-release tag (v1.3.0-rc.1) only
+# packages the extension.
+#
+# A manual run (workflow_dispatch) is a dry run: it packages the extension and
+# checks that each token set can publish for babbguy. Nothing is published.
+# =============================================================================
+
+name: Publish VS Code extension
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-vscode-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  extension:
+    name: Marketplace and Open VSX
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: vscode-marketplace
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Tag matches the package versions
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            node scripts/check-version.mjs "$GITHUB_REF_NAME"
+          else
+            node scripts/check-version.mjs
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package the extension
+        run: |
+          npm run build:packages
+          npm run build:vscode-extension
+          npm run package -w packages/vscode-extension
+          echo "VSIX=packages/vscode-extension/nomus-$(node scripts/check-version.mjs).vsix" >> "$GITHUB_ENV"
+
+      - name: Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::notice title=Visual Studio Marketplace::VSCE_PAT is not set; not published to the Visual Studio Marketplace."
+          elif [ "$PUBLISH" != true ]; then
+            npx --no-install vsce verify-pat babbguy
+            echo "::notice title=Visual Studio Marketplace::VSCE_PAT can publish for babbguy. Not published: manual run or pre-release tag."
+          else
+            npx --no-install vsce publish --packagePath "$VSIX" --skip-duplicate
+            echo "::notice title=Visual Studio Marketplace::Published $VSIX."
+          fi
+
+      - name: Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::notice title=Open VSX::OVSX_PAT is not set; not published to Open VSX."
+          elif [ "$PUBLISH" != true ]; then
+            npx --no-install ovsx verify-pat babbguy
+            echo "::notice title=Open VSX::OVSX_PAT can publish to the babbguy namespace. Not published: manual run or pre-release tag."
+          else
+            npx --no-install ovsx publish "$VSIX" --skip-duplicate
+            echo "::notice title=Open VSX::Published $VSIX."
+          fi

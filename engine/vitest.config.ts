@@ -7,7 +7,7 @@ export default defineConfig({
       '@nomus/shared': resolve(import.meta.dirname, '../packages/shared/src/index.ts'),
       '@nomus/chain': resolve(import.meta.dirname, '../packages/chain/src/index.ts'),
       // The corporate library is tested against its source, never a stale build.
-      '@nomus/scanner/corporate': resolve(import.meta.dirname, '../packages/scanner/src/corporate/index.ts'),
+      'nomus-scan/corporate': resolve(import.meta.dirname, '../packages/scanner/src/corporate/index.ts'),
     },
   },
   test: {

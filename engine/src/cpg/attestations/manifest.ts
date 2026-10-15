@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { z } from 'zod';
-import { canonicalJson, compileGlobList, repoInputSchema, sha256Hex } from '@nomus/scanner/corporate';
+import { canonicalJson, compileGlobList, repoInputSchema, sha256Hex } from 'nomus-scan/corporate';
 import { cpgAttestationLinks, cpgAttestationManifests, cpgCiRuns, cpgDecisions } from '../../db/schema-cpg.js';
 import { getCorporateBundle } from '../bundle/build.js';
 import { closurePayload } from '../cases/close.js';

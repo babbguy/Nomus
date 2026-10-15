@@ -102,7 +102,7 @@ where `findingsDigest` is the SHA-256 of the sorted uploaded fingerprints joined
 that signs the policy bundle). Accept a verdict only when the signature verifies, the payload is
 canonical, and its run, verdict and counts equal the response's and its organization, repository,
 branch, pull request, commit and bundle hash equal the scan that was sent. `verifyCiVerdict()` in
-`@nomus/scanner/corporate` does all of this.
+`nomus-scan/corporate` does all of this.
 
 ## Pull request closed
 

@@ -3,7 +3,7 @@ import type { Db } from '../../db/client.js';
 import {
   bundleHashOf, bundleSignedText, corporateBundleSchema, corporateRuleSchema, sortBundlePolicies, BUNDLE_KIND,
   type BundlePolicy, type CorporateBundle,
-} from '@nomus/scanner/corporate';
+} from 'nomus-scan/corporate';
 import { PolicyCache } from '../../core/policy-cache.js';
 import { cpgBoards, cpgPolicies, cpgPolicyHeads, cpgPolicyVersionEvents, cpgPolicyVersions } from '../../db/schema-cpg.js';
 import { broadcastEvent } from '../../sse/manager.js';

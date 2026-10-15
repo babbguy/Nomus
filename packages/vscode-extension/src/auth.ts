@@ -46,7 +46,7 @@ export class AuthManager implements vscode.UriHandler, vscode.Disposable {
     // Generate CSRF state
     this.pendingState = crypto.randomUUID();
 
-    const callbackUri = 'vscode://nomus.nomus/auth-callback';
+    const callbackUri = 'vscode://babbguy.nomus/auth-callback';
     const authorizeUrl = `${apiUrl}/api/v1/auth/device/authorize`
       + `?state=${encodeURIComponent(this.pendingState)}`
       + `&callback_uri=${encodeURIComponent(callbackUri)}`;

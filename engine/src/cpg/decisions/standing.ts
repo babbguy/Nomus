@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { checkRegexSafety, compileGlobList, globError, repoPatternError } from '@nomus/scanner/corporate';
+import { checkRegexSafety, compileGlobList, globError, repoPatternError } from 'nomus-scan/corporate';
 import {
   cpgCaseFindings, cpgCaseRevisions, cpgCases, cpgDecisions, cpgPolicyHeads, cpgProposals, cpgRevocations, cpgSnippets, cpgTeamRepos, cpgTeams,
 } from '../../db/schema-cpg.js';

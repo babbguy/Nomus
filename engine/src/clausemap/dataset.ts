@@ -10,7 +10,7 @@
  * is NEVER overwritten by reseeding — bump `DATASET_VERSION` to update
  * clause text or heuristics; learned weights carry forward.
  *
- * Capability vocabulary comes from the @nomus/scanner detectors:
+ * Capability vocabulary comes from the nomus-scan detectors:
  *   phi-pattern-detector : contains_phi, contains_pii, contains_financial,
  *                          phi_in_ai_call, pii_in_ai_call, handles_phi, logs_phi
  *   data-flow-detector   : processes_user_input, returns_ai_to_user,

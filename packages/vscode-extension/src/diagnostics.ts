@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { CorporateFinding } from '@nomus/scanner';
+import type { CorporateFinding } from 'nomus-scan';
 import { corporateMessage, corporateSeverity, ownersText, type CorporateSeverity, type Resolution } from './cpg/corporate-format';
 
 export interface DiagnosticFinding {

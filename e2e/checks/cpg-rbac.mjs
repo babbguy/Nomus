@@ -20,7 +20,7 @@ async function deviceSignIn(ctx, client) {
   const { webUrl } = ctx;
   const anon = new Client(webUrl);
   const state = crypto.randomUUID();
-  const authorize = await anon.get(`/api/v1/auth/device/authorize?state=${state}&callback_uri=${encodeURIComponent('vscode://nomus.nomus/auth-callback')}`, { redirect: 'manual' });
+  const authorize = await anon.get(`/api/v1/auth/device/authorize?state=${state}&callback_uri=${encodeURIComponent('vscode://babbguy.nomus/auth-callback')}`, { redirect: 'manual' });
   const callback = await client.get(`/api/v1/auth/device/callback?device_state=${state}`, { redirect: 'manual' });
   const location = callback.headers.get('location') ?? '';
   let code = null;
@@ -126,7 +126,7 @@ export async function cpgRbacChecks(ctx) {
   const devSign = await deviceSignIn(ctx, users.dev.client);
   const authorSign = await deviceSignIn(ctx, users.author.client);
   gate.check('device sign-in for dev@ then author@: authorize 302, callback 302 to vscode://, token 200',
-    [devSign, authorSign].every((s) => s.authorize === 302 && s.callback === 302 && s.location.startsWith('vscode://nomus.nomus/auth-callback?') && s.token === 200 && /^nk_live_/.test(s.apiKey ?? '')),
+    [devSign, authorSign].every((s) => s.authorize === 302 && s.callback === 302 && s.location.startsWith('vscode://babbguy.nomus/auth-callback?') && s.token === 200 && /^nk_live_/.test(s.apiKey ?? '')),
     'both flows complete', JSON.stringify([devSign, authorSign].map((s) => ({ ...s, apiKey: s.apiKey ? 'nk_live_…' : null }))));
   const devKeyMe = await api.withKey(devSign.apiKey).get('/api/v1/cpg/me');
   const authorKeyMe = await api.withKey(authorSign.apiKey).get('/api/v1/cpg/me');

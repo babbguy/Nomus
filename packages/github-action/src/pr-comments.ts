@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import type { Finding, ScanResult } from '@nomus/scanner';
+import type { Finding, ScanResult } from 'nomus-scan';
 import type { ComplianceScoreResult } from './types.js';
 import { bySeverity, commentableLines, toRepoPath } from './findings.js';
 

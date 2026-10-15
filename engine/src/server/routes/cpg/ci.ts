@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { and, desc, eq, lt, or, type SQL } from 'drizzle-orm';
-import { ciEvaluateRequestSchema, ciEvaluateResponseSchema, prClosedRequestSchema, prClosedResponseSchema } from '@nomus/scanner/corporate';
+import { ciEvaluateRequestSchema, ciEvaluateResponseSchema, prClosedRequestSchema, prClosedResponseSchema } from 'nomus-scan/corporate';
 import type { AppEnv } from '../../app.js';
 import { getDb } from '../../../db/client.js';
 import { cpgCiRuns } from '../../../db/schema-cpg.js';

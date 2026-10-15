@@ -170,11 +170,8 @@ All three call the engine's `POST /api/v1/simulate` endpoint with an API key, an
 
 ### Scanner CLI
 
-Build once, then run from a checkout (the packages are not published to npm):
-
 ```bash
-npm run build:packages
-node packages/scanner/dist/index.js ./my-project --fail-on=high
+npx nomus-scan ./my-project --fail-on=high
 ```
 
 | Symptom | Cause and fix |

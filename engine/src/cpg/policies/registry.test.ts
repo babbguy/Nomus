@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { canonicalJson, verifyCorporateBundle, bundleHashOf } from '@nomus/scanner/corporate';
+import { canonicalJson, verifyCorporateBundle, bundleHashOf } from 'nomus-scan/corporate';
 import { getDb } from '../../db/client.js';
 import { runMigrations } from '../../db/migrate.js';
 import { rawSqlite } from '../../db/migrations/runner.js';

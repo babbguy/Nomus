@@ -1,8 +1,8 @@
 // Copyright 2026 babbguy
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
-import type { CorporateFinding } from '@nomus/scanner';
-import type { CaseStatus } from '@nomus/scanner/corporate';
+import type { CorporateFinding } from 'nomus-scan';
+import type { CaseStatus } from 'nomus-scan/corporate';
 import type { BundleState } from './bundle-cache';
 
 /**

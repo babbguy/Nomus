@@ -4,7 +4,7 @@ import { isoDate, tierSchema, uuid } from './cpg-schemas';
 /**
  * Response contracts of the review-case and approvals API (/api/v1/cpg/cases,
  * /proposals, /decisions and /exceptions, E41 to E60), mirroring engine/src/cpg/contracts.ts and the shared case status of
- * @nomus/scanner/corporate. Strict like cpg-schemas.ts, and zod-only so the
+ * nomus-scan/corporate. Strict like cpg-schemas.ts, and zod-only so the
  * engine's route tests can parse real responses with it.
  */
 

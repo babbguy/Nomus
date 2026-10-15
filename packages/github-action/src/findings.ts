@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
 import { isAbsolute, relative, resolve } from 'node:path';
-import type { Finding } from '@nomus/scanner';
+import type { Finding } from 'nomus-scan';
 
 const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 

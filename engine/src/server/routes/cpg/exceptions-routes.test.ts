@@ -8,7 +8,7 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, it, expect, beforeAll } from 'vitest';
-import { fingerprintOf, findingsStatusResponseSchema, requestReviewResponseSchema } from '@nomus/scanner/corporate';
+import { fingerprintOf, findingsStatusResponseSchema, requestReviewResponseSchema } from 'nomus-scan/corporate';
 import { getDb } from '../../../db/client.js';
 import { runMigrations } from '../../../db/migrate.js';
 import { rawSqlite } from '../../../db/migrations/runner.js';

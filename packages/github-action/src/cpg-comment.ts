@@ -1,7 +1,7 @@
 // Copyright 2026 babbguy
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
-import type { CiEvaluateResponse } from '@nomus/scanner/corporate';
+import type { CiEvaluateResponse } from 'nomus-scan/corporate';
 import { policyKeyOf } from './cpg-check-run.js';
 import { upsertMarkedComment } from './pr-comments.js';
 

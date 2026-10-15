@@ -16,7 +16,7 @@ import { basename, join, resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { runScan } from '@nomus/scanner';
+import { runScan } from 'nomus-scan';
 import { postInlineComments } from '../src/pr-comments.js';
 import { createCheckRun } from '../src/check-run.js';
 import { runCorporateGate } from '../src/cpg.js';
@@ -41,7 +41,7 @@ vi.mock('@actions/github', () => ({
   getOctokit: vi.fn(),
 }));
 
-vi.mock('@nomus/scanner', async (importOriginal) => ({ ...await importOriginal<typeof import('@nomus/scanner')>(), runScan: vi.fn() }));
+vi.mock('nomus-scan', async (importOriginal) => ({ ...await importOriginal<typeof import('nomus-scan')>(), runScan: vi.fn() }));
 
 const repo = { owner: 'testorg', repo: 'testrepo' };
 

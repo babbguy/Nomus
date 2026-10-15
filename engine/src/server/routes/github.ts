@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { runScanFromContents, type Finding } from '@nomus/scanner';
+import { runScanFromContents, type Finding } from 'nomus-scan';
 import type { AppEnv } from '../app.js';
 import { getDb } from '../../db/client.js';
 import { githubAppInstallations, webhookEvents, scanFindings } from '../../db/schema.js';
@@ -315,7 +315,7 @@ async function handlePullRequest(installationId: number, payload: Record<string,
     return;
   }
 
-  // Run scan using @nomus/scanner
+  // Run scan using nomus-scan
   const result = await scanFiles(files);
   const findings = mapFindingsToSummaries(result.findings);
 
@@ -352,7 +352,7 @@ async function handlePush(installationId: number, payload: Record<string, unknow
     return;
   }
 
-  // Run scan using @nomus/scanner
+  // Run scan using nomus-scan
   const result = await scanFiles(files);
   const findings = mapFindingsToSummaries(result.findings);
 

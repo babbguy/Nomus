@@ -245,7 +245,7 @@ the version is activated in the same transaction and signed. The activation sign
 - An engine without corporate policy governance answers `404`; clients treat that as "no
   corporate policies" rather than as an error.
 
-`@nomus/scanner/corporate` exports `fetchCorporateBundle` and `verifyCorporateBundle`, which check
+`nomus-scan/corporate` exports `fetchCorporateBundle` and `verifyCorporateBundle`, which check
 the contract, the bundle signature, the bundle hash, every rule hash and every activation
 signature, and fail closed on any mismatch.
 

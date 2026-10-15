@@ -1,17 +1,30 @@
 {
-  "name": "@nomus/scanner",
+  "name": "nomus-scan",
   "version": "1.1.0",
-  "private": true,
+  "description": "Nomus scanner: find AI SDK usage and AI capabilities in a codebase and check them against the regulations that apply, from the command line or as a library",
+  "keywords": [
+    "nomus",
+    "ai",
+    "ai-compliance",
+    "ai-governance",
+    "regulatory",
+    "eu-ai-act",
+    "compliance",
+    "sarif",
+    "scanner",
+    "cli"
+  ],
   "license": "FSL-1.1-ALv2",
   "author": "babbguy",
   "repository": {
     "type": "git",
-    "url": "https://github.com/babbguy/Nomus.git",
+    "url": "git+https://github.com/babbguy/Nomus.git",
     "directory": "packages/scanner"
   },
-  "homepage": "https://github.com/babbguy/Nomus#readme",
-  "bugs": "https://github.com/babbguy/Nomus/issues",
-  "description": "AI regulatory applicability engine — detect AI SDK usage and identify applicable regulatory obligations",
+  "homepage": "https://github.com/babbguy/Nomus/tree/main/packages/scanner#readme",
+  "bugs": {
+    "url": "https://github.com/babbguy/Nomus/issues"
+  },
   "type": "module",
   "main": "dist/scan.js",
   "types": "./dist/scan.d.ts",
@@ -57,21 +70,14 @@
     "README.md",
     "LICENSE"
   ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "test": "vitest run"
   },
-  "keywords": [
-    "nomus",
-    "ai-compliance",
-    "regulatory",
-    "scanner",
-    "sarif",
-    "eu-ai-act",
-    "compliance",
-    "security"
-  ],
   "dependencies": {
     "axios": "^1.20.0",
     "glob": "^13.0.6",

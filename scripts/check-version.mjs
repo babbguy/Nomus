@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Checks that every package in the workspace carries the same version, and
 // that package-lock.json agrees. With a tag (v1.2.0), also checks that the tag
-// names that version. Prints the version; exits 1 on any mismatch.
+// names that version. A published package must pin its sibling packages to that
+// version. Prints the version; exits 1 on any mismatch.
 //
 //   node scripts/check-version.mjs          all packages agree
 //   node scripts/check-version.mjs v1.2.0   ...and the tag matches them
@@ -39,6 +40,19 @@ const found = [
 const errors = found
   .filter(([, v]) => v !== version)
   .map(([where, v]) => `${where} has version ${v ?? '(none)'}, expected ${version}`);
+
+// A published package must depend on the same release of a sibling package
+// (nomus-mcp on nomus-scan), and never on a private one.
+const manifests = workspaces.map((ws) => [ws, readJson(`${ws}/package.json`)]);
+const siblings = new Map(manifests.map(([, pkg]) => [pkg.name, pkg]));
+for (const [ws, pkg] of manifests.filter(([, p]) => !p.private)) {
+  for (const [dep, range] of Object.entries(pkg.dependencies ?? {})) {
+    const sibling = siblings.get(dep);
+    if (!sibling) continue;
+    if (sibling.private) errors.push(`${ws}/package.json depends on ${dep}, which is private and never published`);
+    else if (range !== version) errors.push(`${ws}/package.json depends on ${dep}@${range}, expected ${version}`);
+  }
+}
 
 const tag = process.argv[2];
 if (tag !== undefined && tag !== `v${version}`) {

@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { runScan, isNomusApiError, type ScanResult } from '@nomus/scanner';
+import { runScan, isNomusApiError, type ScanResult } from 'nomus-scan';
 import { uploadSarif } from './sarif-upload.js';
 import { postSummaryComment, postInlineComments } from './pr-comments.js';
 import { createCheckRun } from './check-run.js';

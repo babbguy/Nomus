@@ -287,14 +287,14 @@ nomus:
 
 ### 3. Run the CLI
 
-The scanner is a private workspace package (not on npm). From your Nomus checkout, after
-`npm run build:packages`:
+The scanner is published to npm as `nomus-scan` (Node.js 20.19 or later); `npx` downloads it on
+first use:
 
 ```bash
 export NOMUS_API_KEY=nk_live_...
-node packages/scanner/dist/index.js /path/to/your/project
-node packages/scanner/dist/index.js /path/to/your/project --json
-node packages/scanner/dist/index.js /path/to/your/project --sarif --fail-on=high
+npx nomus-scan /path/to/your/project
+npx nomus-scan /path/to/your/project --json
+npx nomus-scan /path/to/your/project --sarif --fail-on=high
 ```
 
 Exit code `0` means the findings are below the `--fail-on` threshold (default `critical`), `1` means

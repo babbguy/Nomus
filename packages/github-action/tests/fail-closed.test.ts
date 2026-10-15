@@ -5,7 +5,7 @@
  * run() must call core.setFailed with a message stating that compliance
  * status is UNKNOWN — the check must FAIL, never silently pass.
  *
- * Uses the REAL NomusApiError / isNomusApiError from @nomus/scanner
+ * Uses the REAL NomusApiError / isNomusApiError from nomus-scan
  * (only runScan is mocked) so the error-identification wiring is exercised
  * end to end. src/index.ts invokes run() at import time, so the module is
  * imported inside the test after the mocks are armed.
@@ -31,14 +31,14 @@ vi.mock('@actions/github', () => ({
   getOctokit: vi.fn(),
 }));
 
-vi.mock('@nomus/scanner', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@nomus/scanner')>();
+vi.mock('nomus-scan', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('nomus-scan')>();
   return { ...actual, runScan: vi.fn(), runCorporateScanOnDisk: vi.fn(actual.runCorporateScanOnDisk) };
 });
 
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { runScan, runCorporateScanOnDisk, NomusApiError } from '@nomus/scanner';
+import { runScan, runCorporateScanOnDisk, NomusApiError } from 'nomus-scan';
 import { runCorporateGate } from '../src/cpg.js';
 import { makeCheckout, startFakeEngine, statefulOctokit, type FakeEngine } from './fake-engine.js';
 

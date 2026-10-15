@@ -1,4 +1,4 @@
-import type { ScanResult } from '@nomus/scanner';
+import type { ScanResult } from 'nomus-scan';
 
 /**
  * Build a test ScanResult with sensible defaults.

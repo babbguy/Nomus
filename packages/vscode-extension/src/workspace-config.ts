@@ -38,7 +38,7 @@ export async function loadWorkspaceConfig(
   if (!CONFIG_FILES.some((name) => existsSync(join(rootDir, name)))) return undefined;
 
   try {
-    const { loadConfig } = await import('@nomus/scanner/config');
+    const { loadConfig } = await import('nomus-scan/config');
     const { nomus } = loadConfig(rootDir);
     return {
       jurisdictions: nomus.jurisdictions,

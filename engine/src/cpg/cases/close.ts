@@ -1,6 +1,6 @@
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { canonicalJson, sha256Hex } from '@nomus/scanner/corporate';
+import { canonicalJson, sha256Hex } from 'nomus-scan/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgCaseEvents, cpgCaseRevisions, cpgCases, cpgCiRuns, cpgDecisions } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';

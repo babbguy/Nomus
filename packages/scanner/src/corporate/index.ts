@@ -1,5 +1,5 @@
 /**
- * `@nomus/scanner/corporate`: the pure Corporate Policy Governance library
+ * `nomus-scan/corporate`: the pure Corporate Policy Governance library
  * shared by the engine, the VS Code extension and the GitHub Action (design
  * spec §0). Rule schema and vocabularies, glob and regex safety, the
  * deterministic matcher, the fingerprint, repository and language helpers,

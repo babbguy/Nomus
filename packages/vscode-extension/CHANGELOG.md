@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- Published as `babbguy.nomus` on the Visual Studio Marketplace and Open VSX. The extension ID
+  changes from `nomus.nomus`, so uninstall a `.vsix` installed earlier and sign in again; the
+  sign-in callback is now `vscode://babbguy.nomus/auth-callback`.
+
 ### Added
 - Corporate policy findings from your organization's signed policy bundle, evaluated locally on
   save, on open and with Scan Workspace. They appear as `Nomus Policy` diagnostics over the full

@@ -3,7 +3,7 @@
 #
 #   docker build -t nomus-engine .
 #
-# The engine imports @nomus/shared, @nomus/chain and @nomus/scanner at runtime,
+# The engine imports @nomus/shared, @nomus/chain and nomus-scan at runtime,
 # so all three workspace packages are built and shipped alongside it.
 # Published as ghcr.io/babbguy/nomus-engine (see .github/workflows/publish.yml).
 

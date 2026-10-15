@@ -257995,7 +257995,7 @@ const nomusConfigSchema = objectType({
         max_taint_depth: numberType().int().min(1).max(10).default(3),
     }),
 });
-//# sourceMappingURL=schema.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/config/loader.js
 
 
@@ -258067,7 +258067,7 @@ function expandEnvRefs(value, filename) {
     }
     return value;
 }
-//# sourceMappingURL=loader.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/detector.js
 /**
  * Detector Plugin Interface — Phase 2
@@ -258195,7 +258195,7 @@ function detector_mergeSignals(signals) {
         dedupedSignals,
     };
 }
-//# sourceMappingURL=detector.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/imports.js
 
 const JS_TS_PATTERNS = [
@@ -258321,7 +258321,7 @@ function detectImportsInFile(filePath) {
         return [];
     }
 }
-//# sourceMappingURL=imports.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/capabilities.js
 /**
  * Map SDK imports to AI capabilities.
@@ -258369,7 +258369,7 @@ function getAllCapabilities(caps) {
     }
     return [...all];
 }
-//# sourceMappingURL=capabilities.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/import-detector.js
 /**
  * ImportDetector — the v1 detector plugin.
@@ -258406,7 +258406,7 @@ class ImportDetector {
         }));
     }
 }
-//# sourceMappingURL=import-detector.js.map
+
 // EXTERNAL MODULE: ../../node_modules/typescript/lib/typescript.js
 var typescript = __nccwpck_require__(644);
 ;// CONCATENATED MODULE: ../scanner/dist/detect/file-content.js
@@ -258683,7 +258683,7 @@ function stripComments(file, content) {
         return stripCommentsPython(content);
     return stripCommentsCStyle(content);
 }
-//# sourceMappingURL=file-content.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/sdk-usage-detector.js
 /**
  * SdkUsageDetector — Phase 3a, v2 (AST-based).
@@ -259325,7 +259325,7 @@ const __test__ = {
     SDK_SPECS,
     REGEX_MAPPINGS,
 };
-//# sourceMappingURL=sdk-usage-detector.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/phi-pattern-detector.js
 /**
  * PhiPatternDetector — Phase 3c.
@@ -259609,7 +259609,7 @@ class PhiPatternDetector {
 }
 // Export internals for unit tests
 const phi_pattern_detector_test_ = { findHits, passesLuhn, PHI_VAR_RE, PII_VAR_RE, FIN_VAR_RE };
-//# sourceMappingURL=phi-pattern-detector.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/risk-classifier.js
 /**
  * RiskClassifier — Phase 3d.
@@ -259767,7 +259767,7 @@ class RiskClassifier {
     }
 }
 const risk_classifier_test_ = { findHits: risk_classifier_findHits, CATEGORIES };
-//# sourceMappingURL=risk-classifier.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/transparency-detector.js
 /**
  * TransparencyDetector — EU AI Act Article 50 transparency obligations.
@@ -259886,7 +259886,7 @@ class TransparencyDetector {
     }
 }
 const transparency_detector_test_ = { findHits: transparency_detector_findHits, CATEGORIES: transparency_detector_CATEGORIES };
-//# sourceMappingURL=transparency-detector.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/detect/data-flow-detector.js
 /**
  * DataFlowDetector — Phase 3b.
@@ -260043,7 +260043,7 @@ class DataFlowDetector {
     }
 }
 const data_flow_detector_test_ = { findAiCalls, findNearby, confidenceForHops, SOURCE_PATTERNS, SINK_PATTERNS };
-//# sourceMappingURL=data-flow-detector.js.map
+
 ;// CONCATENATED MODULE: ../../node_modules/axios/lib/helpers/bind.js
 
 
@@ -268922,7 +268922,7 @@ class NomusApiError extends Error {
 function isNomusApiError(err) {
     return err instanceof Error && err.name === 'NomusApiError';
 }
-//# sourceMappingURL=errors.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/match/rule-matcher.js
 
 
@@ -269096,7 +269096,7 @@ async function matchRulesToCode(imports, capabilities, config) {
     }
     return rule_matcher_matchRulesToSignals(signals, capabilities, config);
 }
-//# sourceMappingURL=rule-matcher.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/fix/suggestions.js
 /**
  * Generate auto-fix suggestions for findings. Code examples match the
@@ -269192,7 +269192,7 @@ function pythonCall(sdk) {
     };
     return examples[sdk] ?? 'ai_client.generate(**request)';
 }
-//# sourceMappingURL=suggestions.js.map
+
 // EXTERNAL MODULE: external "node:crypto"
 var external_node_crypto_ = __nccwpck_require__(7598);
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/canonical.js
@@ -269221,7 +269221,7 @@ function sortKeysDeep(value) {
 function sha256Hex(text) {
     return (0,external_node_crypto_.createHash)('sha256').update(text, 'utf8').digest('hex');
 }
-//# sourceMappingURL=canonical.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/glob.js
 /**
  * The one glob engine of Corporate Policy Governance (design spec §7.1),
@@ -269375,7 +269375,7 @@ function compileGlobList(globs) {
 function glob_toPosixPath(path) {
     return path.replace(/\\/g, '/');
 }
-//# sourceMappingURL=glob.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/regex-safety.js
 /**
  * Regex safety for author-supplied `line_regex` patterns (design spec §8.4.3).
@@ -269560,7 +269560,7 @@ function compileSafeRegex(source, flags) {
         throw new Error(`Unsafe regex /${source}/${flags}: ${result.reasons.join('; ')}`);
     return new RegExp(source, flags);
 }
-//# sourceMappingURL=regex-safety.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/vocab.js
 /**
  * The closed vocabularies a corporate rule may use (design spec §8.4.1).
@@ -269643,7 +269643,7 @@ const LANGUAGES = ['typescript', 'javascript', 'python', 'java', 'go', 'other'];
 const TIERS = ['advisory', 'review-required', 'prohibited'];
 /** Policy keys: `corp.` + lowercase letters, digits, `.`, `_`, `-`; never `:` (it separates fingerprint parts). */
 const POLICY_KEY_RE = /^corp\.[a-z0-9][a-z0-9._-]{0,84}$/;
-//# sourceMappingURL=vocab.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/rule-schema.js
 
 
@@ -269776,7 +269776,7 @@ function validateCorporateRule(input) {
         reasons.push('rule.message: must be a single line');
     return reasons.length === 0 ? { ok: true, rule, reasons: [] } : { ok: false, rule: null, reasons };
 }
-//# sourceMappingURL=rule-schema.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/fingerprint.js
 
 /**
@@ -269858,7 +269858,7 @@ function extractSnippet(lines, start, end, contextBefore = 0, contextAfter = 0) 
     }
     return { startLine: s, endLine: e, snippet: lines.slice(s - 1, e).join('\n'), truncated };
 }
-//# sourceMappingURL=fingerprint.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/repo.js
 /**
  * Repository identity (design spec §2.2): lowercase `owner/name` for
@@ -269937,7 +269937,7 @@ function canonicalRepoPattern(pattern) {
     const rest = pattern.slice('github.com/'.length);
     return rest.split('/').length === 2 && !rest.includes('**') ? rest : null;
 }
-//# sourceMappingURL=repo.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/contracts.js
 
 
@@ -270169,7 +270169,7 @@ function policyActivationPayload(orgId, p) {
         activatedAt: p.activatedAt,
     };
 }
-//# sourceMappingURL=contracts.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/bundle-client.js
 
 
@@ -270329,7 +270329,7 @@ async function fetchCorporateBundle(opts) {
     const bundle = verifyCorporateBundle(body, spki);
     return { available: true, bundle, etag: res.headers.get('etag'), notModified: false, publicKeySpki: spki };
 }
-//# sourceMappingURL=bundle-client.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/languages.js
 /**
  * File language for corporate rule scoping (`files.languages`) and for the
@@ -270349,7 +270349,7 @@ function languages_languageOf(path) {
             return lang;
     return 'other';
 }
-//# sourceMappingURL=languages.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/matcher.js
 
 
@@ -270663,7 +270663,7 @@ async function evaluateCorporateRules(files, policies) {
 async function evaluateRuleOnText(rule, path, code, policyKey = 'corp.example', version = 1) {
     return evaluateCorporateRules([[path, code]], [{ policyKey, version, rule }]);
 }
-//# sourceMappingURL=matcher.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/scan-corporate.js
 // Copyright 2026 babbguy
 // SPDX-License-Identifier: FSL-1.1-ALv2
@@ -270875,7 +270875,7 @@ function dashboardUrlFromApiUrl(apiUrl) {
         return undefined;
     }
 }
-//# sourceMappingURL=scan-corporate.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/scan.js
 
 
@@ -271145,7 +271145,7 @@ async function runScanFromContents(files, options) {
 
 
 
-//# sourceMappingURL=scan.js.map
+
 // EXTERNAL MODULE: external "node:zlib"
 var external_node_zlib_ = __nccwpck_require__(8522);
 ;// CONCATENATED MODULE: ../scanner/dist/output/reporter.js
@@ -271354,7 +271354,7 @@ function formatCorporateJson(findings, summary) {
         })),
     };
 }
-//# sourceMappingURL=reporter.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/output/sarif-corporate.js
 // Copyright 2026 babbguy
 // SPDX-License-Identifier: FSL-1.1-ALv2
@@ -271443,7 +271443,7 @@ function formatCorporateSarif(findings, options = {}) {
         runs: [formatCorporateSarifRun(findings, options)],
     };
 }
-//# sourceMappingURL=sarif-corporate.js.map
+
 ;// CONCATENATED MODULE: ../scanner/dist/output/sarif.js
 
 
@@ -271549,7 +271549,7 @@ function formatSarifReport(findings, rootDir) {
     };
 }
 
-//# sourceMappingURL=sarif.js.map
+
 ;// CONCATENATED MODULE: ./src/findings.ts
 // Copyright 2026 babbguy
 // SPDX-License-Identifier: FSL-1.1-ALv2
@@ -271952,7 +271952,7 @@ function mapSeverityToAnnotation(severity) {
 
 ;// CONCATENATED MODULE: ../scanner/dist/corporate/index.js
 /**
- * `@nomus/scanner/corporate`: the pure Corporate Policy Governance library
+ * `nomus-scan/corporate`: the pure Corporate Policy Governance library
  * shared by the engine, the VS Code extension and the GitHub Action (design
  * spec §0). Rule schema and vocabularies, glob and regex safety, the
  * deterministic matcher, the fingerprint, repository and language helpers,
@@ -271975,7 +271975,7 @@ function mapSeverityToAnnotation(severity) {
 
 /** The detectors skip test files; the compile step explains that when an example misses. */
 
-//# sourceMappingURL=index.js.map
+
 ;// CONCATENATED MODULE: ./src/cpg-check-run.ts
 // Copyright 2026 babbguy
 // SPDX-License-Identifier: FSL-1.1-ALv2

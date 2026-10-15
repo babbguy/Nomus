@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
 import * as core from '@actions/core';
-import type { CiEvaluateResponse } from '@nomus/scanner/corporate';
+import type { CiEvaluateResponse } from 'nomus-scan/corporate';
 
 type Octokit = ReturnType<typeof import('@actions/github').getOctokit>;
 

@@ -1,0 +1,148 @@
+# =============================================================================
+# Nomus — Publish the GitHub Action
+# =============================================================================
+# The GitHub Marketplace lists an action only from an action.yml at the root of
+# its own repository, so the action is published to babbguy/nomus-action. A v*
+# tag (for example v1.2.0) copies packages/github-action/{action.yml, dist,
+# README.md, LICENSE} there, commits to main, tags the commit v1.2.0, moves the
+# major tag v1 to it (so `uses: babbguy/nomus-action@v1` gets the release) and
+# creates the GitHub release. A pre-release tag (v1.3.0-rc.1) is tagged and
+# released as a pre-release, and v1 does not move.
+#
+# The push uses ACTION_REPO_TOKEN from the "nomus-action" environment: a
+# fine-grained token with Contents read and write on babbguy/nomus-action only.
+# When it is not set, the job checks the bundle and skips the push with a
+# notice. A manual run (workflow_dispatch) is a dry run: it prepares the commit
+# and shows it, and pushes nothing.
+# =============================================================================
+
+name: Publish GitHub Action
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-action-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync to babbguy/nomus-action
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: nomus-action
+    env:
+      PUBLISH: ${{ github.event_name == 'push' }}
+      HAS_TOKEN: ${{ secrets.ACTION_REPO_TOKEN != '' }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: nomus
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Tag matches the package versions
+        working-directory: nomus
+        run: |
+          if [ "$PUBLISH" = true ]; then
+            node scripts/check-version.mjs "$GITHUB_REF_NAME"
+          else
+            node scripts/check-version.mjs
+          fi
+
+      # The action runs from the committed bundle: publish it only if the source
+      # builds to exactly that bundle.
+      - name: Committed bundle matches the source
+        working-directory: nomus
+        run: |
+          npm ci
+          npm run build:scanner
+          npm run build:github-action
+          if [ -n "$(git status --porcelain -- packages/github-action/dist)" ]; then
+            echo "::error file=packages/github-action/dist/index.js::The committed GitHub Action bundle is out of date. Run npm run build:github-action and commit packages/github-action/dist."
+            git status --short -- packages/github-action/dist
+            exit 1
+          fi
+
+      - name: Token not set
+        if: env.HAS_TOKEN != 'true'
+        run: |
+          echo "::notice title=nomus-action::ACTION_REPO_TOKEN is not set; babbguy/nomus-action was not updated."
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_TOKEN == 'true'
+        with:
+          repository: babbguy/nomus-action
+          ref: main
+          token: ${{ secrets.ACTION_REPO_TOKEN }}
+          path: nomus-action
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Commit the release
+        if: env.HAS_TOKEN == 'true'
+        working-directory: nomus-action
+        run: |
+          version=$(node ../nomus/scripts/check-version.mjs)
+          src=../nomus/packages/github-action
+          # Only the committed bundle files; the build also leaves ignored .d.ts files.
+          rm -rf dist
+          mkdir dist
+          git -C ../nomus ls-files packages/github-action/dist | while read -r f; do cp "../nomus/$f" dist/; done
+          cp "$src/action.yml" "$src/README.md" "$src/LICENSE" .
+          git config user.name babbguy
+          git config user.email 73717659+babbguy@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No content change since the last sync."
+          else
+            git commit -q -m "Release v$version" -m "From babbguy/Nomus@$GITHUB_SHA."
+          fi
+          git show --stat HEAD
+
+      - name: Push main and the tags
+        if: env.HAS_TOKEN == 'true' && env.PUBLISH == 'true'
+        working-directory: nomus-action
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          existing=$(git rev-parse -q --verify "refs/tags/$tag^{commit}" || true)
+          if [ -n "$existing" ] && [ "$existing" != "$(git rev-parse HEAD)" ]; then
+            echo "::error title=nomus-action::$tag already exists on another commit ($existing); refusing to move a release tag."
+            exit 1
+          fi
+          git push origin HEAD:main
+          git tag -f "$tag"
+          git push origin "refs/tags/$tag"
+          case "$tag" in
+            *-*) prerelease=--prerelease ;;
+            *)
+              prerelease=
+              major="${tag%%.*}"
+              git tag -f "$major"
+              git push --force origin "refs/tags/$major" ;;
+          esac
+          if gh release view "$tag" --repo babbguy/nomus-action >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+          else
+            gh release create "$tag" --repo babbguy/nomus-action --verify-tag $prerelease \
+              --title "$tag" \
+              --notes "Nomus GitHub Action $tag. Release notes: https://github.com/babbguy/Nomus/releases/tag/$tag"
+          fi
+          echo "::notice title=nomus-action::Published $tag${major:+ and moved $major}."
+
+      - name: Dry run
+        if: env.HAS_TOKEN == 'true' && env.PUBLISH != 'true'
+        run: |
+          echo "::notice title=nomus-action::Dry run: the commit above was prepared and not pushed."

@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { bySeverity, toRepoPath } from './findings.js';
-import type { ScanResult } from '@nomus/scanner';
+import type { ScanResult } from 'nomus-scan';
 import type { ComplianceScoreResult } from './types.js';
 
 type Octokit = ReturnType<typeof import('@actions/github').getOctokit>;

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import {
   canonicalJson, compileGlobList, corporateRuleSchema, evaluateRuleOnText, isTestFile, ruleHashOf, toRepoRelative,
   validateCorporateRule, POLICY_KEY_RE, TIERS, type CorporateRule,
-} from '@nomus/scanner/corporate';
+} from 'nomus-scan/corporate';
 import { cpgCompileRecords } from '../../db/schema-cpg.js';
 import { generateWithFallback, isLlmProviderConfigured, type LLMResponse } from '../../llm/provider.js';
 import {

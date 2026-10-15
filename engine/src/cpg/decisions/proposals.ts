@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Db } from '../../db/client.js';
-import { canonicalJson } from '@nomus/scanner/corporate';
+import { canonicalJson } from 'nomus-scan/corporate';
 import { rawSqlite } from '../../db/migrations/runner.js';
 import { cpgProposals } from '../../db/schema-cpg.js';
 import { appendAuditEvent } from '../audit/log.js';
