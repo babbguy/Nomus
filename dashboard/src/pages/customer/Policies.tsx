@@ -34,20 +34,38 @@ export default function Policies() {
   const [industriesError, setIndustriesError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
 
-  function loadIndustries() {
-    setIndustriesError(null);
+  function fetchIndustries() {
     getIndustries()
       .then((r) => setIndustries(r.industries))
       .catch((err) => setIndustriesError(apiErrorMessage(err, 'Failed to load industry filters')));
   }
 
+  function retryIndustries() {
+    setIndustriesError(null);
+    fetchIndustries();
+  }
+
   useEffect(() => {
-    loadIndustries();
+    fetchIndustries();
   }, []);
 
-  function loadPolicies() {
+  // New filters start a new load: reset during render (not in the effect) so
+  // results or an error for the previous filters are never shown for them.
+  const filterKey = [jurisdiction, category, industry].join('\u0000');
+  const [loadedFilterKey, setLoadedFilterKey] = useState(filterKey);
+  if (loadedFilterKey !== filterKey) {
+    setLoadedFilterKey(filterKey);
     setError(null);
     setLoading(true);
+  }
+
+  function retryPolicies() {
+    setError(null);
+    setLoading(true);
+    fetchPolicies();
+  }
+
+  function fetchPolicies() {
     const params: Record<string, string> = {};
     if (jurisdiction) params.jurisdiction = jurisdiction;
     if (category) params.category = category;
@@ -66,7 +84,7 @@ export default function Policies() {
   }
 
   useEffect(() => {
-    loadPolicies();
+    fetchPolicies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jurisdiction, category, industry]);
 
@@ -88,7 +106,7 @@ export default function Policies() {
         </Badge>
       </div>
 
-      {industriesError && <ErrorState compact message={industriesError} onRetry={loadIndustries} />}
+      {industriesError && <ErrorState compact message={industriesError} onRetry={retryIndustries} />}
 
       {/* Filters */}
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -151,7 +169,7 @@ export default function Policies() {
       )}
 
       {error ? (
-        <ErrorState message={error} onRetry={loadPolicies} />
+        <ErrorState message={error} onRetry={retryPolicies} />
       ) : loading ? (
         <SkeletonTable rows={8} />
       ) : policies.length === 0 ? (

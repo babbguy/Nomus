@@ -1,5 +1,5 @@
 // Copyright 2026 babbguy
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-ALv2
 
 /**
  * The compliance score is cached for 30 s, but every surface that shows it

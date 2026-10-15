@@ -13,7 +13,7 @@ const sentry = vi.hoisted(() => ({
   withScope: vi.fn((cb: (scope: { setTag: (k: string, v: unknown) => void }) => void) =>
     cb({ setTag: vi.fn() }),
   ),
-  lastInitOptions: null as null | { beforeSend?: (e: unknown) => unknown },
+  lastInitOptions: null as null | { beforeSend?: (e: unknown) => unknown; dataCollection?: unknown; defaultIntegrations?: unknown },
 }));
 
 const envMock = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
@@ -104,6 +104,25 @@ describe('error-tracking — enabled (DSN set)', () => {
       throw new Error('sentry down');
     });
     expect(() => m.captureError(new Error('x'), { subsystem: 'api' })).not.toThrow();
+  });
+
+  it('collects no data beyond the error and installs no default integrations', async () => {
+    const m = await freshModule(enabledEnv);
+    m.initErrorTracking();
+    expect(sentry.lastInitOptions?.defaultIntegrations).toBe(false);
+    // Sentry 11 collects every category unless it is switched off.
+    expect(sentry.lastInitOptions?.dataCollection).toEqual({
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+    });
   });
 
   it('beforeSend strips request body, query string, user, and extra', async () => {

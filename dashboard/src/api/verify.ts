@@ -137,7 +137,7 @@ export async function subscribeToAttestation(
       body: JSON.stringify({ channel, target }),
     });
   } catch (e) {
-    throw new Error(e instanceof Error ? e.message : 'Network request failed');
+    throw new Error(e instanceof Error ? e.message : 'Network request failed', { cause: e });
   }
 
   let body: unknown = null;

@@ -1,5 +1,5 @@
 // Copyright 2026 babbguy
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-ALv2
 
 /**
  * The tests model a checkout rooted at the test process's cwd. On a GitHub

@@ -1,7 +1,7 @@
 # Getting Started with Nomus
 
-Nomus is an open-source (Apache-2.0) AI regulatory applicability engine. It monitors regulatory
-sources, stores them as signed rules, and tells you which obligations may apply to your AI systems
+Nomus is a source-available (FSL-1.1-ALv2) AI regulatory applicability engine. It monitors
+regulatory sources, stores them as signed rules, and tells you which obligations may apply to your AI systems
 and code. It is a Hono engine, a React dashboard, and a SQLite database. You run it yourself.
 
 Nomus output is regulatory applicability information. It is not legal advice and not a compliance

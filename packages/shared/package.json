@@ -2,7 +2,7 @@
   "name": "@nomus/shared",
   "version": "1.1.0",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "author": "babbguy",
   "repository": {
     "type": "git",
@@ -23,9 +23,9 @@
     "build": "tsc"
   },
   "dependencies": {
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "typescript": "~5.9.3"
+    "typescript": "~6.0.3"
   }
 }

@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+- Dependencies upgraded to clear every high and critical `npm audit` advisory (1 critical, 14 high
+  before). Fixed in production code: the MCP server's SDK (1.29.0 -> 1.32.1, with its express,
+  proxy-addr, ip-address, qs and fast-uri dependencies), hono (CORS ReDoS and other advisories),
+  axios (also inlined in the GitHub Action bundle), undici, react-router and Sentry's
+  OpenTelemetry dependencies. Six moderate advisories remain, none reachable: `uuid` under
+  node-cron 3 (the advisory needs a caller-supplied buffer; node-cron only calls `uuid.v4()`),
+  and esbuild 0.18 under drizzle-kit's config loader (a development-only CLI that never starts
+  esbuild's dev server).
+
 ### Added
 - Corporate policy governance, review: Auditors (`audit.export`) download a signed governance audit
   export from the audit page (`GET /api/v1/cpg/audit/export`): the whole hash-chained audit log and
@@ -197,6 +207,33 @@ All notable changes to this project are documented here. The format follows
   migration stops the engine at startup instead of drifting.
 
 ### Changed
+- **Dependencies.** Patch and minor updates across the workspace, plus these majors:
+  TypeScript 6.0, ESLint 10, Vitest 5, Sentry 11, `@anthropic-ai/sdk` 0.134,
+  `@hono/node-server` 2, pino 10, glob 13, lucide-react 1, esbuild 0.28 (VS Code extension),
+  `@vercel/ncc` 0.45 (GitHub Action) and `@vscode/vsce` 4. Sentry 11 collects request data, user
+  info and local variables unless told not to; error tracking now switches every
+  `dataCollection` category off explicitly and still stays off unless a DSN is set. Held back,
+  each needing its own change: TypeScript 7 (no compiler API, which the scanner uses at
+  runtime), zod 4 (changes the documented `details` of 400 responses
+  and the MCP tool schemas), pdf-parse 2 (different PDF text extraction would mark every PDF
+  source as changed), node-cron 4 (refuses impossible dates such as `0 0 30 2 *` and stops the
+  engine at startup), better-sqlite3 13 and openai 7 (require Node 22; Nomus supports Node 20),
+  `@types/node` 26 (newer than the supported Node versions) and drizzle 1.0 (release candidates
+  only).
+- **License.** Starting with v1.2.0, Nomus is licensed under the Functional Source License,
+  Version 1.1, ALv2 Future License (FSL-1.1-ALv2) instead of the Apache License 2.0. You may use,
+  copy, modify and redistribute it for any purpose other than a Competing Use, which the license
+  defines as making the software available to others in a commercial product or service that
+  substitutes for it, substitutes for any other product or service we offer using it that exists
+  as of the date we make it available, or offers the same or substantially similar functionality
+  (see `LICENSE` for the exact terms). Each version also becomes available under the Apache
+  License 2.0 on the second anniversary of the date it is made available. Versions up to and
+  including v1.1.0 remain under the Apache License 2.0. For a commercial license, open a
+  discussion titled "Commercial license" in the repository's Discussions
+  (https://github.com/babbguy/Nomus/discussions). The SPDX identifier in every `package.json`
+  (including the VS Code extension manifest), the extension's bundled `LICENSE` and source file
+  headers is now `FSL-1.1-ALv2`. The scanner, MCP server and GitHub Action packages now ship their
+  own copy of the license text.
 - Scanner CLI: exit codes are now set with `process.exitCode` instead of `process.exit()`, so the
   process ends after its output is flushed and its connections are closed (the codes themselves are
   unchanged). `.nomus.yml` `ignore` and detector settings apply to regulatory scanning only; corporate
@@ -248,7 +285,6 @@ All notable changes to this project are documented here. The format follows
 - Corporate policy governance: the review case list checked repository permissions after taking a
   page, so a reader limited to some repositories could get short or empty pages while more of
   their cases existed. Pages are now filled before they are returned.
-### Fixed
 - Scanner: two scans of the same repository could list findings in a different order, because the
   file walk returns files in no guaranteed order. Files are now sorted before detection, so the
   console, JSON and SARIF output of identical trees is identical.

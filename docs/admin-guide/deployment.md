@@ -1,6 +1,6 @@
 # Nomus Deployment Guide
 
-How to run Nomus on your own machine or server. Nomus is self-hosted open-source software.
+How to run Nomus on your own machine or server. Nomus is self-hosted, source-available software.
 
 > Nomus is a regulatory applicability tool, not a compliance certification. Its output is not legal advice.
 

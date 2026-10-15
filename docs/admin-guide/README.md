@@ -1,6 +1,6 @@
 # Nomus Admin Guide
 
-How to run your own Nomus instance. Nomus is self-hosted open-source software.
+How to run your own Nomus instance. Nomus is self-hosted, source-available software.
 
 > Nomus is a regulatory applicability tool, not a compliance certification. Its output is not legal advice.
 
@@ -115,4 +115,4 @@ See `CHANGELOG.md` and the GitHub releases page: https://github.com/babbguy/Nomu
 
 ## Getting help
 
-Open an issue: https://github.com/babbguy/Nomus/issues. This is a personal open-source project maintained on a best-effort basis; there is no support contract.
+Open an issue: https://github.com/babbguy/Nomus/issues. This is a personal source-available project maintained on a best-effort basis; there is no support contract.
