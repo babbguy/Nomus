@@ -30,6 +30,24 @@ export type Subsystem =
 
 let initialized = false;
 
+/**
+ * Collect nothing beyond the error itself. Sentry 11 collects user info,
+ * cookies, headers, bodies, query data and local variables unless told not
+ * to; every category is switched off explicitly (beforeSend still scrubs).
+ */
+const NO_DATA_COLLECTION: Sentry.NodeOptions['dataCollection'] = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+};
+
 /** True only when a DSN was configured and init succeeded. Test/inspection use. */
 export function isErrorTrackingEnabled(): boolean {
   return initialized;
@@ -54,6 +72,7 @@ export function initErrorTracking(): void {
       // Do not auto-instrument HTTP/Express/etc — we report explicitly so we
       // control exactly what leaves the process.
       defaultIntegrations: false,
+      dataCollection: NO_DATA_COLLECTION,
       beforeSend: scrubEvent,
     });
     initialized = true;
