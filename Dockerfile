@@ -12,7 +12,7 @@
 # Stages 1-2 produce platform-independent JavaScript, so they run on the build
 # host's platform even when building for another one; only the production
 # dependencies (native modules) are installed for the target platform.
-FROM --platform=$BUILDPLATFORM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS deps
+FROM --platform=$BUILDPLATFORM node:22-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -43,7 +43,7 @@ RUN npm run build -w packages/shared && \
     npm run build -w engine
 
 # ─── Stage 3: Production-only dependencies ────────────────────────────────
-FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS prod-deps
+FROM node:22-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS prod-deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -60,7 +60,7 @@ RUN npm ci --omit=dev \
     --include-workspace-root
 
 # ─── Stage 4: Runtime ─────────────────────────────────────────────────────
-FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
+FROM node:22-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS runtime
 
 # The engine needs only the node binary at runtime: drop the package managers
 # (and their dependency trees) and create the data directory for SQLite
